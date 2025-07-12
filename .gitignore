@@ -1,0 +1,42 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+uploads/
+
+# dotenv environment variables
+.env
+
+# Logs
+logs
+*.log
+logs/**/*.log
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Nodemon
+nodemon-debug.log
+
+# Sequelize CLI files
+*.sqlite
+*.sqlite3
+
+# Build or dist directories (optional, if generated)
+dist/
+build/
+
+# Coverage files (if you use a test coverage tool later)
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# VS Code settings (if you use VS Code)
+.vscode/
+
+# Mac trash folder
+.Trashes
