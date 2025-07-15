@@ -17,17 +17,22 @@ app.get('/', (req, res) => {
   res.send('🚀 API is running...');
 });
 app.use(errorMiddleware);
+sequelize.authenticate().then(() => {
+  console.log('✅ Database connected.');
+}).catch((error) => {
+  console.error('❌ DB Connection error:', error);
+});
+
 async function startServer() {
   try {
-    await sequelize.authenticate();
-    console.log('✅ Database connected.');
 
     app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error('❌ DB Connection error:', error);
+    // console.error('❌ DB Connection error:', error);
   }
 }
 
 startServer();
+module.exports = app;
