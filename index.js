@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const router = require('./routes/index');
+const serverless = require("serverless-http");
+
 const { sequelize } = require('./models'); // Assuming your sequelize export is CommonJS
 const errorMiddleware = require('./utils/default/globalErrorHandler')
 dotenv.config();
@@ -36,3 +38,4 @@ async function startServer() {
 
 startServer();
 module.exports = app;
+module.exports.handler = serverless(app);
