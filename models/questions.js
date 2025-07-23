@@ -6,8 +6,14 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class Questions extends Model {
     static associate(models) {
-        
-     
+      Questions.belongsTo(models.Test, {
+        foreignKey: 'test_id',
+        as: 'test'
+      });
+      Questions.hasMany(models.User_Answers, {
+        foreignKey: 'question_id',
+        as: 'userAnswers'
+      });
     }
   }
   Questions.init({
@@ -20,41 +26,84 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
         references: {
-            model: 'test', // name of the target table
-            key: 'id' // key in the target table that we're referencing
+            model: 'test',
+            key: 'id'
         },
     },
-    question_title: {
-        type: DataTypes.STRING,
+    question_text: {
+        type: DataTypes.TEXT,
         allowNull: false,
+    },
+    question_text_gujarati: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     option_a: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: false,
+    },
+    option_a_gujarati: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     option_b: {
-        type: DataTypes.STRING,
+        type: DataTypes.TEXT,
         allowNull: false,
     },
+    option_b_gujarati: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
     option_c: {
-        type: DataTypes.STRING,
-        allowNull: true, // optional
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    option_c_gujarati: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     option_d: {
-        type: DataTypes.STRING,
-        allowNull: true, // optional
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    option_d_gujarati: {
+        type: DataTypes.TEXT,
+        allowNull: true,
     },
     correct_answer: {
-        type: DataTypes.STRING,
-        allowNull: false, // required field
+        type: DataTypes.ENUM('A', 'B', 'C', 'D'),
+        allowNull: false,
     },
     explanation: {
         type: DataTypes.TEXT,
-        allowNull: true, // optional field for explanation of the answer
+        allowNull: true,
+    },
+    explanation_gujarati: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
+    difficulty: {
+        type: DataTypes.ENUM('easy', 'medium', 'hard'),
+        defaultValue: 'medium',
+        allowNull: false,
+    },
+    subject: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    topic: {
+        type: DataTypes.STRING,
+        allowNull: true,
     },
     marks: {
         type: DataTypes.INTEGER,
-        allowNull: false, // required field for marks assigned to the question
+        defaultValue: 1,
+        allowNull: false,
+    },
+    negative_marks: {
+        type: DataTypes.DOUBLE,
+        defaultValue: 0,
+        allowNull: false,
     },
 
     }, {

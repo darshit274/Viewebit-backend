@@ -6,7 +6,14 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class Test_Series extends Model {
     static associate(models) {
-     
+      Test_Series.hasMany(models.Test, {
+        foreignKey: 'test_series_id',
+        as: 'tests'
+      });
+      Test_Series.hasMany(models.Subscription, {
+        foreignKey: 'test_series_id',
+        as: 'subscriptions'
+      });
     }
   }
   Test_Series.init({
@@ -18,31 +25,59 @@ module.exports = (sequelize, DataTypes) => {
     },
     title: {
       type: DataTypes.STRING,
-        allowNull: false,
-    },
-    course_id: {
-      type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'courses', // name of the target table
-            key: 'id' // key in the target table that we're referencing
-        },
-    },
-    total_tests: {
-      type: DataTypes.INTEGER,
-        allowNull: false,   
-    },
-    price: { 
-        type: DataTypes.DOUBLE,
-        allowNull: false,
+      allowNull: false,
     },
     description: {
       type: DataTypes.TEXT,
-        allowNull: true // optional
+      allowNull: true,
+    },
+    category: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    exam_type: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    price: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+    },
+    original_price: {
+      type: DataTypes.DOUBLE,
+      allowNull: true,
+    },
+    total_tests: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    free_tests: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+    duration_months: {
+      type: DataTypes.INTEGER,
+      defaultValue: 3,
+    },
+    negative_marking: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    negative_marks: {
+      type: DataTypes.DOUBLE,
+      defaultValue: 0.25,
+    },
+    pass_percentage: {
+      type: DataTypes.INTEGER,
+      defaultValue: 40,
     },
     instructions: {
       type: DataTypes.TEXT,
-        allowNull: true // optional 
+      allowNull: true,
+    },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
     },
         
 

@@ -6,7 +6,18 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     static associate(models) {
-      // Define associations here (e.g., User.hasMany(Post))
+      User.hasMany(models.User_Answers, {
+        foreignKey: 'user_id',
+        as: 'userAnswers'
+      });
+      User.hasMany(models.User_Score, {
+        foreignKey: 'user_id',
+        as: 'userScores'
+      });
+      User.hasMany(models.Subscription, {
+        foreignKey: 'user_id',
+        as: 'subscriptions'
+      });
     }
   }
 
@@ -52,7 +63,30 @@ module.exports = (sequelize, DataTypes) => {
     },
     phone: {
       type: DataTypes.STRING,
-      allowNull: true // optional, if you want to store phone numbers
+      allowNull: true
+    },
+    lastLogin: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+    subscription_status: {
+      type: DataTypes.ENUM('none', 'active', 'expired'),
+      defaultValue: 'none',
+      allowNull: false
+    },
+    total_subscriptions: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false
+    },
+    subscription_expiry_reminder_sent: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
     }
   }, {
     sequelize,

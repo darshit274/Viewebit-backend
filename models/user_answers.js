@@ -6,7 +6,18 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class User_Answers extends Model {
     static associate(models) {
-     
+      User_Answers.belongsTo(models.User, {
+        foreignKey: 'user_id',
+        as: 'user'
+      });
+      User_Answers.belongsTo(models.Test, {
+        foreignKey: 'test_id',
+        as: 'test'
+      });
+      User_Answers.belongsTo(models.Questions, {
+        foreignKey: 'question_id',
+        as: 'question'
+      });
     }
   }
   User_Answers.init({
@@ -16,28 +27,44 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true
     },
     user_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'users', // name of the target table
-            key: 'id' // key in the target table that we're referencing
-        },
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'uuid'
+      },
+    },
+    test_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'test',
+        key: 'id'
+      },
     },
     question_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'questions', // name of the target table
-            key: 'id' // key in the target table that we're referencing
-        },
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'questions',
+        key: 'id'
+      },
     },
     selected_option: {
-        type: DataTypes.STRING,
-        allowNull: false, // required field for the selected option
+      type: DataTypes.ENUM('A', 'B', 'C', 'D'),
+      allowNull: true,
     },
     is_correct: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false, // required field to indicate if the answer is correct
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+    },
+    time_taken: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    marks_obtained: {
+      type: DataTypes.DOUBLE,
+      defaultValue: 0,
     },
 
     }, {

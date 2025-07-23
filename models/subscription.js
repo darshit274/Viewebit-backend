@@ -6,7 +6,14 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class Subscription extends Model {
     static associate(models) {
-     
+      Subscription.belongsTo(models.User, {
+        foreignKey: 'user_id',
+        as: 'user'
+      });
+      Subscription.belongsTo(models.Test_Series, {
+        foreignKey: 'test_series_id',
+        as: 'testSeries'
+      });
     }
   }
   Subscription.init({
@@ -16,30 +23,50 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true
     },
     user_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'users', // name of the target table
-            key: 'id' // key in the target table that we're referencing
-        },
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'uuid'
+      },
     },
     test_series_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'test_series', // name of the target table
-            key: 'id' // key in the target table that we're referencing
-
-        },
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'test_series',
+        key: 'id'
+      },
     },
     transaction_id: {
-        type: DataTypes.STRING,
-        allowNull: false, // required field for the transaction ID
-
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
     },
-    purchase_on: {
-        type: DataTypes.DATE,
-        allowNull: false, // required field for the purchase date
+    payment_method: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    amount_paid: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
+    },
+    currency: {
+      type: DataTypes.STRING,
+      defaultValue: 'INR',
+    },
+    status: {
+      type: DataTypes.ENUM('pending', 'completed', 'failed', 'refunded'),
+      defaultValue: 'pending',
+    },
+    purchase_date: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    expiry_date: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
 
     }, {

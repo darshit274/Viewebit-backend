@@ -6,7 +6,14 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class User_Score extends Model {
     static associate(models) {
-     
+      User_Score.belongsTo(models.User, {
+        foreignKey: 'user_id',
+        as: 'user'
+      });
+      User_Score.belongsTo(models.Test, {
+        foreignKey: 'test_id',
+        as: 'test'
+      });
     }
   }
   User_Score.init({
@@ -17,40 +24,56 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true
     },
     user_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'users', // name of the target table
-            key: 'id' // key in the target table that we're referencing
-        },
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'uuid'
+      },
     },
     test_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'test', // name of the target table
-            key: 'id' // key in the target table that we're referencing
-        },
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'test',
+        key: 'id'
+      },
     },
-    score: {
-        type: DataTypes.INTEGER,
-        allowNull: false, // required field for the score
+    total_score: {
+      type: DataTypes.DOUBLE,
+      allowNull: false,
     },
-    correct_answers_count: {
-        type: DataTypes.INTEGER,
-        allowNull: false, // required field for the count of correct answers
+    correct_answers: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
     },
-    wrong_answers_count: {
-        type: DataTypes.INTEGER,
-        allowNull: false, // required field for the count of wrong answers
+    wrong_answers: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    unanswered: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
     },
     percentage: {
-        type: DataTypes.FLOAT,
-        allowNull: false, // required field for the percentage score
+      type: DataTypes.DOUBLE,
+      allowNull: false,
     },
     time_taken: {
-        type: DataTypes.INTEGER,
-        allowNull: true, // optional field for the time taken in seconds    
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    rank: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    is_passed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    attempt_number: {
+      type: DataTypes.INTEGER,
+      defaultValue: 1,
     },
     }, {
     sequelize,
