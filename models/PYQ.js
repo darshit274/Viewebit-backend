@@ -130,7 +130,7 @@ const PYQ = sequelize.define('PYQ', {
     
     // Admin Information
     created_by: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true,
         references: {
             model: 'admins',
@@ -164,6 +164,10 @@ PYQ.associate = function(models) {
         as: 'questions',
         constraints: false,
         scope: { test_type: 'pyq' }
+    });
+    PYQ.belongsTo(models.Admin, { 
+        foreignKey: 'created_by', 
+        as: 'creator' 
     });
 };
 

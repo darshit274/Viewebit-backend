@@ -77,6 +77,14 @@ router.post('/subscriptions/manual', adminAuth, subscriptionController.createMan
 const pdfUploadRoutes = require('./pdfUploadRoutes');
 router.use('/pdf', pdfUploadRoutes);
 
+// PYQ management routes
+const pyqRoutes = require('./pyqRoutes');
+router.use('/pyqs', pyqRoutes);
+
+// Translation management routes
+const translationRoutes = require('./translationRoutes');
+router.use('/translations', translationRoutes);
+
 // Admin management routes (super admin only)
 router.post('/create', adminAuth, requireRole(['super_admin']), adminController.createAdmin);
 

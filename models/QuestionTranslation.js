@@ -75,7 +75,7 @@ const QuestionTranslation = sequelize.define('QuestionTranslation', {
     
     // Translator Information
     translated_by: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true,
         references: {
             model: 'admins',
@@ -85,7 +85,7 @@ const QuestionTranslation = sequelize.define('QuestionTranslation', {
     },
     
     reviewed_by: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true,
         references: {
             model: 'admins',
@@ -131,6 +131,14 @@ QuestionTranslation.associate = function(models) {
     QuestionTranslation.belongsTo(models.NewQuestion, { 
         foreignKey: 'question_id', 
         as: 'question' 
+    });
+    QuestionTranslation.belongsTo(models.Admin, { 
+        foreignKey: 'translated_by', 
+        as: 'translator' 
+    });
+    QuestionTranslation.belongsTo(models.Admin, { 
+        foreignKey: 'reviewed_by', 
+        as: 'reviewer' 
     });
 };
 
