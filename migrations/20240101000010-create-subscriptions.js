@@ -70,9 +70,7 @@ module.exports = {
       }
     });
 
-    // Add indexes
-    await queryInterface.addIndex('subscription', ['user_id']);
-    await queryInterface.addIndex('subscription', ['test_series_id']);
+    // Add additional indexes (foreign-key columns already indexed automatically by MySQL)
     await queryInterface.addIndex('subscription', ['status']);
     await queryInterface.addIndex('subscription', ['transaction_id']);
   },

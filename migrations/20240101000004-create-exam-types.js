@@ -40,33 +40,39 @@ module.exports = {
       }
     });
 
-    // Add some default exam types
-    await queryInterface.bulkInsert('exam_types', [
-      {
-        name: 'Police Sub Inspector',
-        code: 'PSI',
-        description: 'Gujarat Police Sub Inspector recruitment exam',
-        is_active: true,
-        created_at: new Date(),
-        updated_at: new Date()
-      },
-      {
-        name: 'Gujarat Public Service Commission',
-        code: 'GPSC',
-        description: 'Gujarat Public Service Commission various posts',
-        is_active: true,
-        created_at: new Date(),
-        updated_at: new Date()
-      },
-      {
-        name: 'Deputy Section Officer',
-        code: 'DSO',
-        description: 'Deputy Section Officer recruitment exam',
-        is_active: true,
-        created_at: new Date(),
-        updated_at: new Date()
-      }
-    ]);
+    // Add default exam types only if the table is still empty (keeps the migration idempotent)
+    const [existing] = await queryInterface.sequelize.query(
+      'SELECT COUNT(*) AS cnt FROM exam_types'
+    );
+
+    if (existing[0].cnt === 0) {
+      await queryInterface.bulkInsert('exam_types', [
+        {
+          name: 'Police Sub Inspector',
+          code: 'PSI',
+          description: 'Gujarat Police Sub Inspector recruitment exam',
+          is_active: true,
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+        {
+          name: 'Gujarat Public Service Commission',
+          code: 'GPSC',
+          description: 'Gujarat Public Service Commission various posts',
+          is_active: true,
+          created_at: new Date(),
+          updated_at: new Date()
+        },
+        {
+          name: 'Deputy Section Officer',
+          code: 'DSO',
+          description: 'Deputy Section Officer recruitment exam',
+          is_active: true,
+          created_at: new Date(),
+          updated_at: new Date()
+        }
+      ]);
+    }
   },
 
   async down(queryInterface, Sequelize) {
