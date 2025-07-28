@@ -84,3 +84,44 @@ exports.optionalAuth = async (req, res, next) => {
     next();
   }
 };
+
+// Admin authorization middleware
+exports.isAdmin = async (req, res, next) => {
+  try {
+    // Check if user is authenticated first
+    if (!req.user && !req.admin) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Check if user has admin privileges
+    if (req.admin) {
+      // Already verified as admin
+      return next();
+    }
+
+    // For regular users, check if they have admin role
+    const { Admin } = require('../models');
+    const admin = await Admin.findOne({ 
+      where: { email: req.user.email, is_active: true } 
+    });
+
+    if (!admin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
+    req.admin = admin;
+    next();
+  } catch (error) {
+    console.error('Admin authorization error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Authorization failed'
+    });
+  }
+};

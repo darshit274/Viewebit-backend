@@ -578,6 +578,117 @@ exports.getRecentActivity = async (req, res, next) => {
     }
 };
 
+// Additional user management methods
+exports.getUserStats = async (req, res, next) => {
+    try {
+        const totalStudents = await User.count();
+        const activeStudents = await User.count({ where: { is_active: true } });
+        const verifiedStudents = await User.count({ where: { isEmailVerified: true } });
+        const premiumStudents = await User.count({ where: { is_premium: true } });
+        
+        // Recent registrations (last week)
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        const recentRegistrations = await User.count({
+            where: {
+                created_at: {
+                    [Op.gte]: weekAgo
+                }
+            }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                total_students: totalStudents,
+                active_students: activeStudents,
+                verified_students: verifiedStudents,
+                premium_students: premiumStudents,
+                new_students_this_week: recentRegistrations,
+                unverified_students: totalStudents - verifiedStudents,
+                total_test_attempts: 0, // Would need to be calculated from test attempts
+                average_performance: 0 // Would need to be calculated from scores
+            }
+        });
+    } catch (err) {
+        console.error('User stats error:', err);
+        const error = new ErrorHandler('Failed to fetch user statistics', 500);
+        return next(error);
+    }
+};
+
+exports.toggleUserStatus = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        
+        const user = await User.findByPk(id);
+        if (!user) {
+            return next(new ErrorHandler('User not found', 404));
+        }
+
+        user.is_active = !user.is_active;
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: `User ${user.is_active ? 'activated' : 'deactivated'} successfully`,
+            data: user
+        });
+    } catch (err) {
+        console.error('Toggle user status error:', err);
+        const error = new ErrorHandler('Failed to toggle user status', 500);
+        return next(error);
+    }
+};
+
+exports.verifyUser = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        
+        const user = await User.findByPk(id);
+        if (!user) {
+            return next(new ErrorHandler('User not found', 404));
+        }
+
+        user.isEmailVerified = true;
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'User verified successfully',
+            data: user
+        });
+    } catch (err) {
+        console.error('Verify user error:', err);
+        const error = new ErrorHandler('Failed to verify user', 500);
+        return next(error);
+    }
+};
+
+exports.toggleUserPremium = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        
+        const user = await User.findByPk(id);
+        if (!user) {
+            return next(new ErrorHandler('User not found', 404));
+        }
+
+        user.is_premium = !user.is_premium;
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: `User premium status ${user.is_premium ? 'granted' : 'revoked'} successfully`,
+            data: user
+        });
+    } catch (err) {
+        console.error('Toggle user premium error:', err);
+        const error = new ErrorHandler('Failed to toggle user premium status', 500);
+        return next(error);
+    }
+};
+
 // Helper function for relative time
 const getRelativeTime = (date) => {
     const now = new Date();

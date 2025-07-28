@@ -1,6 +1,7 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { Test_Series, Test, Questions, User } = require('../../models');
 const { Op } = require('sequelize');
+const NotificationTriggers = require('../../services/NotificationTriggers');
 
 // Get all test series with pagination and filters
 exports.getTestSeries = async (req, res, next) => {
@@ -136,6 +137,25 @@ exports.createTestSeries = async (req, res, next) => {
             created_by: req.admin.id
         });
 
+        // Send notification to users about new test series (only if active)
+        if (is_active) {
+            try {
+                await NotificationTriggers.onNewTestSeriesCreated({
+                    uuid: testSeries.id,
+                    title: testSeries.title,
+                    description: testSeries.description,
+                    category: testSeries.category,
+                    total_tests: testSeries.total_tests,
+                    price: testSeries.price,
+                    is_free: testSeries.price === 0
+                });
+                console.log('✅ Notification sent for new test series:', testSeries.title);
+            } catch (notificationError) {
+                console.error('⚠️  Failed to send notification for new test series:', notificationError);
+                // Don't fail the test series creation if notification fails
+            }
+        }
+
         res.status(201).json({
             success: true,
             message: 'Test series created successfully',
@@ -225,7 +245,26 @@ exports.toggleTestSeriesStatus = async (req, res, next) => {
             return next(new ErrorHandler('Test series not found', 404));
         }
 
+        const oldStatus = testSeries.is_active;
         await testSeries.update({ is_active: !testSeries.is_active });
+
+        // Send notification when test series is activated (from inactive to active)
+        if (!oldStatus && testSeries.is_active) {
+            try {
+                await NotificationTriggers.onNewTestSeriesCreated({
+                    uuid: testSeries.id,
+                    title: testSeries.title,
+                    description: testSeries.description,
+                    category: testSeries.category,
+                    total_tests: testSeries.total_tests,
+                    price: testSeries.price,
+                    is_free: testSeries.price === 0
+                });
+                console.log('✅ Notification sent for activated test series:', testSeries.title);
+            } catch (notificationError) {
+                console.error('⚠️  Failed to send notification for activated test series:', notificationError);
+            }
+        }
 
         res.status(200).json({
             success: true,
@@ -270,6 +309,117 @@ exports.getTestSeriesStats = async (req, res, next) => {
     } catch (err) {
         console.error('Get test series stats error:', err);
         const error = new ErrorHandler('Failed to fetch test series statistics', 500);
+        return next(error);
+    }
+};
+
+// Get questions for a specific test series
+exports.getTestSeriesQuestions = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        
+        const testSeries = await Test_Series.findByPk(id, {
+            include: [
+                {
+                    model: Questions,
+                    as: 'questions',
+                    attributes: ['id', 'question_text', 'question_type', 'difficulty_level', 'marks', 'explanation', 'order_index'],
+                    include: [
+                        {
+                            model: require('../../models').QuestionOption, // Assuming this model exists
+                            as: 'options',
+                            attributes: ['id', 'option_text', 'is_correct'],
+                            required: false
+                        }
+                    ],
+                    order: [['order_index', 'ASC']]
+                }
+            ]
+        });
+
+        if (!testSeries) {
+            return next(new ErrorHandler('Test series not found', 404));
+        }
+
+        res.status(200).json({
+            success: true,
+            data: testSeries.questions || []
+        });
+    } catch (err) {
+        console.error('Get test series questions error:', err);
+        const error = new ErrorHandler('Failed to fetch test series questions', 500);
+        return next(error);
+    }
+};
+
+// Add questions to test series
+exports.addQuestionsToTestSeries = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { question_ids } = req.body;
+
+        if (!question_ids || !Array.isArray(question_ids)) {
+            return next(new ErrorHandler('Question IDs array is required', 400));
+        }
+
+        const testSeries = await Test_Series.findByPk(id);
+        if (!testSeries) {
+            return next(new ErrorHandler('Test series not found', 404));
+        }
+
+        // Verify questions exist
+        const questions = await Questions.findAll({
+            where: { id: { [Op.in]: question_ids } }
+        });
+
+        if (questions.length !== question_ids.length) {
+            return next(new ErrorHandler('One or more questions not found', 404));
+        }
+
+        // Add questions to test series (this would depend on your association table structure)
+        // For now, assuming there's a test_questions junction table
+        await testSeries.addQuestions(questions);
+
+        res.status(200).json({
+            success: true,
+            message: `${questions.length} questions added to test series successfully`
+        });
+    } catch (err) {
+        console.error('Add questions to test series error:', err);
+        const error = new ErrorHandler('Failed to add questions to test series', 500);
+        return next(error);
+    }
+};
+
+// Remove questions from test series
+exports.removeQuestionsFromTestSeries = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { question_ids } = req.body;
+
+        if (!question_ids || !Array.isArray(question_ids)) {
+            return next(new ErrorHandler('Question IDs array is required', 400));
+        }
+
+        const testSeries = await Test_Series.findByPk(id);
+        if (!testSeries) {
+            return next(new ErrorHandler('Test series not found', 404));
+        }
+
+        // Remove questions from test series
+        const questions = await Questions.findAll({
+            where: { id: { [Op.in]: question_ids } }
+        });
+
+        await testSeries.removeQuestions(questions);
+
+        res.status(200).json({
+            success: true,
+            message: `${questions.length} questions removed from test series successfully`
+        });
+    } catch (err) {
+        console.error('Remove questions from test series error:', err);
+        const error = new ErrorHandler('Failed to remove questions from test series', 500);
         return next(error);
     }
 };

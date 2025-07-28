@@ -5,7 +5,9 @@ const router = require('./routes/index');
 const serverless = require("serverless-http");
 
 const { sequelize } = require('./models'); // Assuming your sequelize export is CommonJS
-const errorMiddleware = require('./utils/default/globalErrorHandler')
+const errorMiddleware = require('./utils/default/globalErrorHandler');
+const { initializeFirebase } = require('./config/firebase');
+const NotificationScheduler = require('./services/NotificationScheduler');
 dotenv.config();
 
 const app = express();
@@ -27,12 +29,18 @@ sequelize.authenticate().then(() => {
 
 async function startServer() {
   try {
+    // Initialize Firebase Admin SDK
+    initializeFirebase();
+
+    // Initialize Notification Scheduler
+    NotificationScheduler.initialize();
 
     app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`🔔 Notification system initialized with automated triggers`);
     });
   } catch (error) {
-    // console.error('❌ DB Connection error:', error);
+    console.error('❌ Server startup error:', error);
   }
 }
 

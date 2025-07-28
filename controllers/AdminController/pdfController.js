@@ -3,6 +3,7 @@ const { Pdfs, User } = require('../../models');
 const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs');
+const NotificationTriggers = require('../../services/NotificationTriggers');
 
 // Get all PDFs with pagination and filters
 exports.getPdfs = async (req, res, next) => {
@@ -113,6 +114,22 @@ exports.createPdf = async (req, res, next) => {
             download_count: 0,
             uploaded_by: req.admin.id
         });
+
+        // Send notification to users about new PDF
+        try {
+            await NotificationTriggers.onNewPdfCreated({
+                uuid: pdf.id,
+                title: pdf.title,
+                description: pdf.description,
+                category: pdf.category,
+                subject: pdf.subject,
+                is_free: pdf.is_free
+            });
+            console.log('✅ Notification sent for new PDF:', pdf.title);
+        } catch (notificationError) {
+            console.error('⚠️  Failed to send notification for new PDF:', notificationError);
+            // Don't fail the PDF creation if notification fails
+        }
 
         res.status(201).json({
             success: true,

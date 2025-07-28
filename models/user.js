@@ -18,6 +18,14 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'user_id',
         as: 'subscriptions'
       });
+      User.hasMany(models.Notification, {
+        foreignKey: 'user_id',
+        as: 'notifications'
+      });
+      User.hasMany(models.PushToken, {
+        foreignKey: 'user_id',
+        as: 'pushTokens'
+      });
     }
   }
 

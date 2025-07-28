@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pdfController = require('../../controllers/AdminController/pdfController');
-const { verifyToken } = require('../../utils/AuthToken');
+const { authToken } = require('../../utils/AuthToken');
 
 // Public routes (no auth required)
 router.get('/', pdfController.getPdfs);
@@ -10,8 +10,8 @@ router.get('/stats', pdfController.getPdfStats);
 router.get('/:id', pdfController.getPdfById);
 
 // Protected routes (require user authentication)
-router.get('/:id/download', verifyToken, pdfController.getPdfDownloadUrl);
-router.post('/:id/view', verifyToken, async (req, res, next) => {
+router.get('/:id/download', authToken, pdfController.getPdfDownloadUrl);
+router.post('/:id/view', authToken, async (req, res, next) => {
   try {
     const { id } = req.params;
     
