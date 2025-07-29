@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Questions, Test, Test_Series } = require('../../models');
+const { Question, Test, TestSeries } = require('../../models');
 const { Op } = require('sequelize');
 
 // Get all questions with pagination and filters
@@ -18,8 +18,8 @@ exports.getQuestions = async (req, res, next) => {
         const whereClause = {};
         if (search) {
             whereClause[Op.or] = [
-                { question_text: { [Op.iLike]: `%${search}%` } },
-                { topic: { [Op.iLike]: `%${search}%` } }
+                { question_text: { [Op.like]: `%${search}%` } },
+                { topic: { [Op.like]: `%${search}%` } }
             ];
         }
         if (subject) {
@@ -29,7 +29,7 @@ exports.getQuestions = async (req, res, next) => {
             whereClause.difficulty = difficulty;
         }
 
-        const { count, rows } = await Questions.findAndCountAll({
+        const { count, rows } = await Question.findAndCountAll({
             where: whereClause,
             limit,
             offset,
@@ -61,7 +61,7 @@ exports.getQuestionById = async (req, res, next) => {
     try {
         const { id } = req.params;
 
-        const question = await Questions.findByPk(id);
+        const question = await Question.findByPk(id);
         if (!question) {
             return next(new ErrorHandler('Question not found', 404));
         }
@@ -104,7 +104,7 @@ exports.createQuestion = async (req, res, next) => {
             return next(new ErrorHandler('Correct answer must be A, B, C, or D', 400));
         }
 
-        const question = await Questions.create({
+        const question = await Question.create({
             question_text,
             question_text_gujarati,
             option_a,
@@ -142,7 +142,7 @@ exports.updateQuestion = async (req, res, next) => {
         const { id } = req.params;
         const updateData = req.body;
 
-        const question = await Questions.findByPk(id);
+        const question = await Question.findByPk(id);
         if (!question) {
             return next(new ErrorHandler('Question not found', 404));
         }
@@ -171,7 +171,7 @@ exports.deleteQuestion = async (req, res, next) => {
     try {
         const { id } = req.params;
 
-        const question = await Questions.findByPk(id);
+        const question = await Question.findByPk(id);
         if (!question) {
             return next(new ErrorHandler('Question not found', 404));
         }
@@ -195,11 +195,11 @@ exports.bulkCreateQuestions = async (req, res, next) => {
         const { questions } = req.body;
 
         if (!Array.isArray(questions) || questions.length === 0) {
-            return next(new ErrorHandler('Questions array is required', 400));
+            return next(new ErrorHandler('Question array is required', 400));
         }
 
         // Validate each question
-        const validQuestions = [];
+        const validQuestion = [];
         const errors = [];
 
         questions.forEach((q, index) => {
@@ -213,7 +213,7 @@ exports.bulkCreateQuestions = async (req, res, next) => {
                 return;
             }
 
-            validQuestions.push({
+            validQuestion.push({
                 ...q,
                 created_by: req.admin.id
             });
@@ -227,13 +227,13 @@ exports.bulkCreateQuestions = async (req, res, next) => {
             });
         }
 
-        const createdQuestions = await Questions.bulkCreate(validQuestions);
+        const createdQuestion = await Question.bulkCreate(validQuestion);
 
         res.status(201).json({
             success: true,
-            message: `${createdQuestions.length} questions created successfully`,
+            message: `${createdQuestion.length} questions created successfully`,
             data: {
-                created_count: createdQuestions.length,
+                created_count: createdQuestion.length,
                 total_submitted: questions.length
             }
         });
@@ -247,10 +247,10 @@ exports.bulkCreateQuestions = async (req, res, next) => {
 // Get questions statistics
 exports.getQuestionsStats = async (req, res, next) => {
     try {
-        const totalQuestions = await Questions.count();
+        const totalQuestion = await Question.count();
         
         // Get difficulty-wise count
-        const difficultyStats = await Questions.findAll({
+        const difficultyStats = await Question.findAll({
             attributes: [
                 'difficulty',
                 [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
@@ -260,7 +260,7 @@ exports.getQuestionsStats = async (req, res, next) => {
         });
 
         // Get subject-wise count
-        const subjectStats = await Questions.findAll({
+        const subjectStats = await Question.findAll({
             attributes: [
                 'subject',
                 [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count']
@@ -273,7 +273,7 @@ exports.getQuestionsStats = async (req, res, next) => {
         res.status(200).json({
             success: true,
             data: {
-                total_questions: totalQuestions,
+                total_questions: totalQuestion,
                 difficulty_stats: difficultyStats,
                 subject_stats: subjectStats
             }
@@ -288,13 +288,13 @@ exports.getQuestionsStats = async (req, res, next) => {
 // Get unique subjects and topics for filters
 exports.getQuestionFilters = async (req, res, next) => {
     try {
-        const subjects = await Questions.findAll({
+        const subjects = await Question.findAll({
             attributes: ['subject'],
             group: ['subject'],
             order: [['subject', 'ASC']]
         });
 
-        const topics = await Questions.findAll({
+        const topics = await Question.findAll({
             attributes: ['topic', 'subject'],
             group: ['topic', 'subject'],
             order: [['subject', 'ASC'], ['topic', 'ASC']]

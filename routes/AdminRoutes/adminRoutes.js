@@ -2,12 +2,10 @@ const express = require('express');
 const router = express.Router();
 
 const adminController = require('../../controllers/AdminController/adminController');
-const testSeriesController = require('../../controllers/AdminController/testSeriesController');
 const questionsController = require('../../controllers/AdminController/questionsController');
 const pdfController = require('../../controllers/AdminController/pdfController');
 const examTypesController = require('../../controllers/AdminController/examTypesController');
 const categoriesController = require('../../controllers/AdminController/categoriesController');
-const freeTestController = require('../../controllers/AdminController/freeTestController');
 const notificationController = require('../../controllers/AdminController/notificationController');
 const { adminAuth, requireRole } = require('../../utils/AdminAuth');
 
@@ -43,17 +41,6 @@ router.patch('/users/:id/toggle-status', adminAuth, adminController.toggleUserSt
 router.patch('/users/:id/verify', adminAuth, adminController.verifyUser);
 router.patch('/users/:id/toggle-premium', adminAuth, adminController.toggleUserPremium);
 
-// Test Series management routes
-router.get('/test-series', adminAuth, testSeriesController.getTestSeries);
-router.get('/test-series/stats', adminAuth, testSeriesController.getTestSeriesStats);
-router.get('/test-series/:id', adminAuth, testSeriesController.getTestSeriesById);
-router.get('/test-series/:id/questions', adminAuth, testSeriesController.getTestSeriesQuestions);
-router.post('/test-series', adminAuth, testSeriesController.createTestSeries);
-router.post('/test-series/:id/questions', adminAuth, testSeriesController.addQuestionsToTestSeries);
-router.put('/test-series/:id', adminAuth, testSeriesController.updateTestSeries);
-router.delete('/test-series/:id', adminAuth, testSeriesController.deleteTestSeries);
-router.delete('/test-series/:id/questions', adminAuth, testSeriesController.removeQuestionsFromTestSeries);
-router.patch('/test-series/:id/toggle-status', adminAuth, testSeriesController.toggleTestSeriesStatus);
 
 // Questions management routes
 router.get('/questions', adminAuth, questionsController.getQuestions);
@@ -76,16 +63,9 @@ router.post('/pdfs/upload', adminAuth, pdfController.uploadPdf);
 router.put('/pdfs/:id', adminAuth, pdfController.updatePdf);
 router.delete('/pdfs/:id', adminAuth, pdfController.deletePdf);
 
-// Free Tests management routes
-router.get('/free-tests', adminAuth, freeTestController.getFreeTests);
-router.get('/free-tests/stats', adminAuth, freeTestController.getFreeTestStats);
-router.get('/free-tests/:id', adminAuth, freeTestController.getFreeTestById);
-router.post('/free-tests', adminAuth, freeTestController.createFreeTest);
-router.put('/free-tests/:id', adminAuth, freeTestController.updateFreeTest);
-router.delete('/free-tests/:id', adminAuth, freeTestController.deleteFreeTest);
-router.patch('/free-tests/:id/toggle-status', adminAuth, freeTestController.toggleFreeTestStatus);
-router.patch('/free-tests/:id/toggle-featured', adminAuth, freeTestController.toggleFeaturedStatus);
-router.post('/free-tests/bulk-update', adminAuth, freeTestController.bulkUpdateFreeTests);
+// PDF list route (backward compatibility)
+router.get('/pdf/list', adminAuth, pdfController.getPdfs);
+
 
 // Exam Types management routes
 router.get('/exam-types', adminAuth, examTypesController.getExamTypes);
@@ -132,6 +112,50 @@ router.use('/pyqs', pyqRoutes);
 // Translation management routes
 const translationRoutes = require('./translationRoutes');
 router.use('/translations', translationRoutes);
+
+// Test management routes (new system)
+const testManagementRoutes = require('./testManagementRoutes');
+router.use('/test-management', testManagementRoutes);
+
+// Test management routes (direct access - backward compatible)
+const testManagementController = require('../../controllers/AdminController/TestManagementController');
+
+// Exam Categories
+router.get('/exam-categories', adminAuth, testManagementController.getExamCategories);
+router.post('/exam-categories', adminAuth, testManagementController.createExamCategory);
+router.put('/exam-categories/:id', adminAuth, testManagementController.updateExamCategory);
+router.delete('/exam-categories/:id', adminAuth, testManagementController.deleteExamCategory);
+
+// Test Series (new system)
+router.get('/test-series-new', adminAuth, testManagementController.getTestSeries);
+router.get('/test-series-new/:id', adminAuth, testManagementController.getTestSeriesById);
+router.post('/test-series-new', adminAuth, testManagementController.createTestSeries);
+router.put('/test-series-new/:id', adminAuth, testManagementController.updateTestSeries);
+router.delete('/test-series-new/:id', adminAuth, testManagementController.deleteTestSeries);
+router.patch('/test-series-new/:id/publish', adminAuth, testManagementController.togglePublishStatus);
+
+// Test Series (backward compatibility for old frontend endpoints)
+router.get('/test-series', adminAuth, testManagementController.getTestSeries);
+router.get('/test-series/stats', adminAuth, testManagementController.getTestSeriesStats);
+router.get('/test-series/:id', adminAuth, testManagementController.getTestSeriesById);
+router.post('/test-series', adminAuth, testManagementController.createTestSeries);
+router.put('/test-series/:id', adminAuth, testManagementController.updateTestSeries);
+router.delete('/test-series/:id', adminAuth, testManagementController.deleteTestSeries);
+
+// Performance analytics
+router.get('/performance', adminAuth, testManagementController.getPerformanceAnalytics);
+
+// Tests (new system)
+router.get('/test-series-new/:seriesId/tests', adminAuth, testManagementController.getTestsForSeries);
+router.post('/test-series-new/:seriesId/tests', adminAuth, testManagementController.createTest);
+router.put('/tests-new/:testId', adminAuth, testManagementController.updateTest);
+router.delete('/tests-new/:testId', adminAuth, testManagementController.deleteTest);
+
+// Questions (new system)
+router.get('/tests-new/:testId/questions', adminAuth, testManagementController.getQuestionsForTest);
+router.post('/tests-new/:testId/questions', adminAuth, testManagementController.createQuestion);
+router.put('/questions-new/:questionId', adminAuth, testManagementController.updateQuestion);
+router.delete('/questions-new/:questionId', adminAuth, testManagementController.deleteQuestion);
 
 // Admin management routes (super admin only)
 router.post('/create', adminAuth, requireRole(['super_admin']), adminController.createAdmin);

@@ -8,12 +8,24 @@ const NotificationTriggers = require('../../services/NotificationTriggers');
 // Get all PDFs with pagination and filters
 exports.getPdfs = async (req, res, next) => {
     try {
+        console.log('📋 PDF list request received');
+        
+        // Check if table exists by doing a simple count query
+        const testQuery = await Pdfs.count().catch(err => {
+            console.error('❌ PDFs table error:', err.message);
+            throw new Error(`PDFs table issue: ${err.message}`);
+        });
+        
+        console.log('✅ PDFs table accessible, count:', testQuery);
+
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const search = req.query.search || '';
-        const category = req.query.category || '';
-        const subject = req.query.subject || '';
-        const is_free = req.query.is_free;
+        const category_id = req.query.category_id || '';
+        const exam_type_id = req.query.exam_type_id || '';
+        const access_level = req.query.access_level || '';
+        const is_active = req.query.is_active;
+        const is_featured = req.query.is_featured;
         const sortBy = req.query.sortBy || 'created_at';
         const sortOrder = req.query.sortOrder || 'DESC';
 
@@ -22,19 +34,27 @@ exports.getPdfs = async (req, res, next) => {
         const whereClause = {};
         if (search) {
             whereClause[Op.or] = [
-                { title: { [Op.iLike]: `%${search}%` } },
-                { description: { [Op.iLike]: `%${search}%` } }
+                { title: { [Op.like]: `%${search}%` } },
+                { description: { [Op.like]: `%${search}%` } }
             ];
         }
-        if (category) {
-            whereClause.category = category;
+        if (category_id) {
+            whereClause.category_id = category_id;
         }
-        if (subject) {
-            whereClause.subject = subject;
+        if (exam_type_id) {
+            whereClause.exam_type_id = exam_type_id;
         }
-        if (is_free !== undefined) {
-            whereClause.is_free = is_free === 'true';
+        if (access_level) {
+            whereClause.access_level = access_level;
         }
+        if (is_active !== undefined) {
+            whereClause.is_active = is_active === 'true';
+        }
+        if (is_featured !== undefined) {
+            whereClause.is_featured = is_featured === 'true';
+        }
+
+        console.log('🔍 Query filters:', whereClause);
 
         const { count, rows } = await Pdfs.findAndCountAll({
             where: whereClause,
@@ -42,9 +62,11 @@ exports.getPdfs = async (req, res, next) => {
             offset,
             order: [[sortBy, sortOrder]],
             attributes: {
-                exclude: ['file_url'] // Don't expose direct file URLs
+                exclude: ['file_path'] // Don't expose direct file paths
             }
         });
+
+        console.log('📊 Query results:', { count, resultsLength: rows.length });
 
         res.status(200).json({
             success: true,
@@ -57,8 +79,8 @@ exports.getPdfs = async (req, res, next) => {
             }
         });
     } catch (err) {
-        console.error('Get PDFs error:', err);
-        const error = new ErrorHandler('Failed to fetch PDFs', 500);
+        console.error('❌ Get PDFs error:', err);
+        const error = new ErrorHandler(`Failed to fetch PDFs: ${err.message}`, 500);
         return next(error);
     }
 };
@@ -90,11 +112,16 @@ exports.createPdf = async (req, res, next) => {
         const {
             title,
             description,
-            category,
-            subject,
-            is_free = true,
-            file_url,
-            file_size
+            category_id,
+            exam_type_id,
+            test_series_id,
+            access_level = 'free',
+            file_path,
+            original_filename,
+            file_size,
+            tags,
+            is_active = true,
+            is_featured = false
         } = req.body;
 
         // Check if PDF with same title exists
@@ -106,14 +133,23 @@ exports.createPdf = async (req, res, next) => {
         const pdf = await Pdfs.create({
             title,
             description,
-            file_url,
+            category_id,
+            exam_type_id,
+            test_series_id,
+            file_path,
+            original_filename,
             file_size,
-            category,
-            subject,
-            is_free,
+            access_level,
+            tags,
+            is_active,
+            is_featured,
             download_count: 0,
+            view_count: 0,
             uploaded_by: req.admin.id
         });
+
+        // Load the PDF for response (without associations for now)
+        const pdfWithAssociations = await Pdfs.findByPk(pdf.id);
 
         // Send notification to users about new PDF
         try {
@@ -121,9 +157,9 @@ exports.createPdf = async (req, res, next) => {
                 uuid: pdf.id,
                 title: pdf.title,
                 description: pdf.description,
-                category: pdf.category,
-                subject: pdf.subject,
-                is_free: pdf.is_free
+                category: pdfWithAssociations.category?.name || 'General',
+                subject: pdfWithAssociations.examType?.name || 'General',
+                is_free: access_level === 'free'
             });
             console.log('✅ Notification sent for new PDF:', pdf.title);
         } catch (notificationError) {
@@ -134,7 +170,7 @@ exports.createPdf = async (req, res, next) => {
         res.status(201).json({
             success: true,
             message: 'PDF created successfully',
-            data: pdf
+            data: pdfWithAssociations
         });
     } catch (err) {
         console.error('Create PDF error:', err);
@@ -213,28 +249,43 @@ exports.deletePdf = async (req, res, next) => {
 exports.getPdfDownloadUrl = async (req, res, next) => {
     try {
         const { id } = req.params;
+        console.log('📥 Download request for PDF ID:', id);
 
         const pdf = await Pdfs.findByPk(id);
         if (!pdf) {
+            console.log('❌ PDF not found with ID:', id);
             return next(new ErrorHandler('PDF not found', 404));
         }
+
+        console.log('✅ PDF found:', { title: pdf.title, file_path: pdf.file_path });
 
         // Increment download count
         await pdf.increment('download_count');
 
-        // Generate secure download URL or return file path
-        // In production, you might want to generate signed URLs
-        res.status(200).json({
-            success: true,
-            data: {
-                download_url: pdf.file_url,
-                filename: pdf.title,
-                size: pdf.file_size
-            }
-        });
+        // Check if file exists on disk
+        const filePath = path.resolve(pdf.file_path);
+        console.log('🔍 Checking file path:', filePath);
+        
+        if (!fs.existsSync(filePath)) {
+            console.log('❌ File not found on disk:', filePath);
+            return next(new ErrorHandler('File not found on server', 404));
+        }
+
+        // Set appropriate headers for file download
+        const filename = pdf.original_filename || `${pdf.title}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', pdf.file_size);
+
+        // Stream the file
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+
+        console.log('✅ File streaming started for:', filename);
+        
     } catch (err) {
-        console.error('Get PDF download URL error:', err);
-        const error = new ErrorHandler('Failed to get download URL', 500);
+        console.error('❌ Get PDF download error:', err);
+        const error = new ErrorHandler('Failed to download PDF', 500);
         return next(error);
     }
 };
@@ -277,31 +328,27 @@ exports.uploadPdf = async (req, res, next) => {
 // Get PDF statistics
 exports.getPdfStats = async (req, res, next) => {
     try {
-        const totalPdfs = await Pdfs.count();
-        const freePdfs = await Pdfs.count({ where: { is_free: true } });
-        const paidPdfs = await Pdfs.count({ where: { is_free: false } });
+        const totalPdfs = await Pdfs.count({ where: { is_active: true } });
+        const freePdfs = await Pdfs.count({ where: { access_level: 'free', is_active: true } });
+        const premiumPdfs = await Pdfs.count({ where: { access_level: 'premium', is_active: true } });
+        const restrictedPdfs = await Pdfs.count({ where: { access_level: 'restricted', is_active: true } });
+        const featuredPdfs = await Pdfs.count({ where: { is_featured: true, is_active: true } });
         
-        // Get total downloads
+        // Get total downloads and views
         const downloadStats = await Pdfs.findAll({
             attributes: [
-                [require('sequelize').fn('SUM', require('sequelize').col('download_count')), 'total_downloads']
+                [require('sequelize').fn('SUM', require('sequelize').col('download_count')), 'total_downloads'],
+                [require('sequelize').fn('SUM', require('sequelize').col('view_count')), 'total_views']
             ]
         });
 
-        // Get category-wise count
-        const categoryStats = await Pdfs.findAll({
-            attributes: [
-                'category',
-                [require('sequelize').fn('COUNT', require('sequelize').col('id')), 'count'],
-                [require('sequelize').fn('SUM', require('sequelize').col('download_count')), 'downloads']
-            ],
-            group: ['category'],
-            order: [[require('sequelize').fn('COUNT', require('sequelize').col('id')), 'DESC']]
-        });
+        // Get category-wise count (simplified for now)
+        const categoryStats = [];
 
         // Get most downloaded PDFs
         const topDownloads = await Pdfs.findAll({
-            attributes: ['id', 'title', 'download_count', 'category'],
+            attributes: ['id', 'title', 'download_count', 'view_count', 'category_id'],
+            where: { is_active: true },
             order: [['download_count', 'DESC']],
             limit: 10
         });
@@ -311,8 +358,11 @@ exports.getPdfStats = async (req, res, next) => {
             data: {
                 total_pdfs: totalPdfs,
                 free_pdfs: freePdfs,
-                paid_pdfs: paidPdfs,
+                premium_pdfs: premiumPdfs,
+                restricted_pdfs: restrictedPdfs,
+                featured_pdfs: featuredPdfs,
                 total_downloads: downloadStats[0]?.dataValues?.total_downloads || 0,
+                total_views: downloadStats[0]?.dataValues?.total_views || 0,
                 category_stats: categoryStats,
                 top_downloads: topDownloads
             }
@@ -327,26 +377,34 @@ exports.getPdfStats = async (req, res, next) => {
 // Get PDF categories and subjects for filters
 exports.getPdfFilters = async (req, res, next) => {
     try {
-        const categories = await Pdfs.findAll({
-            attributes: ['category'],
-            group: ['category'],
-            order: [['category', 'ASC']]
+        // Get PDF categories
+        const { PdfCategory, ExamType } = require('../../models');
+        
+        const categories = await PdfCategory.findAll({
+            attributes: ['id', 'name', 'description'],
+            where: { is_active: true },
+            order: [['name', 'ASC']]
         });
 
-        const subjects = await Pdfs.findAll({
-            attributes: ['subject'],
-            where: {
-                subject: { [Op.ne]: null }
-            },
-            group: ['subject'],
-            order: [['subject', 'ASC']]
+        const examTypes = await ExamType.findAll({
+            attributes: ['id', 'name', 'description'],
+            where: { is_active: true },
+            order: [['name', 'ASC']]
         });
+
+        // Get access levels
+        const accessLevels = [
+            { value: 'free', label: 'Free' },
+            { value: 'premium', label: 'Premium' },
+            { value: 'restricted', label: 'Restricted' }
+        ];
 
         res.status(200).json({
             success: true,
             data: {
-                categories: categories.map(c => c.category),
-                subjects: subjects.map(s => s.subject)
+                categories: categories,
+                examTypes: examTypes,
+                accessLevels: accessLevels
             }
         });
     } catch (err) {

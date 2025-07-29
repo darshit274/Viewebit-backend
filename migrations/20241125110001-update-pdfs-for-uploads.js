@@ -65,14 +65,10 @@ module.exports = {
         comment: 'Who can access this PDF'
       },
       
-      // Test series linking (optional)
+      // Test series linking (optional) - will add foreign key later
       test_series_id: {
         type: Sequelize.UUID,
         allowNull: true,
-        references: {
-          model: 'test_series',
-          key: 'id'
-        },
         comment: 'Link to specific test series if applicable'
       },
       
@@ -114,14 +110,10 @@ module.exports = {
         defaultValue: false
       },
       
-      // Admin information
+      // Admin information - will add foreign key later
       uploaded_by: {
         type: Sequelize.UUID,
         allowNull: true,
-        references: {
-          model: 'admins',
-          key: 'id'
-        },
         comment: 'Admin who uploaded this PDF'
       },
       

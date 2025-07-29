@@ -13,10 +13,12 @@ module.exports = (sequelize, DataTypes) => {
       });
       
       // Test series relationship
-      Pdfs.belongsTo(models.Test_Series, {
-        foreignKey: 'test_series_id',
-        as: 'testSeries'
-      });
+      if (models.TestSeries) {
+        Pdfs.belongsTo(models.TestSeries, {
+          foreignKey: 'test_series_id',
+          as: 'testSeries'
+        });
+      }
       
       // Exam type relationship
       Pdfs.belongsTo(models.ExamType, {
@@ -140,12 +142,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false
     },
     
-    // Test relationship (optional)
-    test_id: {
-      type: DataTypes.UUID,
-      allowNull: true
-      // references will be added when Test model is properly implemented
-    },
+    // Test relationship (optional) - disabled for now
+    // test_id: {
+    //   type: DataTypes.UUID,
+    //   allowNull: true
+    //   // references will be added when Test model is properly implemented
+    // },
     
     // Admin information
     uploaded_by: {

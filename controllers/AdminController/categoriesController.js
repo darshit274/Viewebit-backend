@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { TestSeriesCategory } = require('../../models');
+const { ExamCategory } = require('../../models');
 const { Op } = require('sequelize');
 
 // Get all categories with pagination and filters
@@ -17,12 +17,12 @@ exports.getCategories = async (req, res, next) => {
         const whereClause = {};
         if (search) {
             whereClause[Op.or] = [
-                { name: { [Op.iLike]: `%${search}%` } },
-                { description: { [Op.iLike]: `%${search}%` } }
+                { name: { [Op.like]: `%${search}%` } },
+                { description: { [Op.like]: `%${search}%` } }
             ];
         }
 
-        const { count, rows } = await TestSeriesCategory.findAndCountAll({
+        const { count, rows } = await ExamCategory.findAndCountAll({
             where: whereClause,
             limit,
             offset,
@@ -49,7 +49,7 @@ exports.getCategoryById = async (req, res, next) => {
     try {
         const { id } = req.params;
         
-        const category = await TestSeriesCategory.findByPk(id);
+        const category = await ExamCategory.findByPk(id);
         
         if (!category) {
             return next(new ErrorHandler('Category not found', 404));
@@ -73,7 +73,7 @@ exports.createCategory = async (req, res, next) => {
             return next(new ErrorHandler('Category name is required', 400));
         }
 
-        const category = await TestSeriesCategory.create({
+        const category = await ExamCategory.create({
             name,
             type,
             description,
@@ -99,7 +99,7 @@ exports.updateCategory = async (req, res, next) => {
         const { id } = req.params;
         const updates = req.body;
 
-        const category = await TestSeriesCategory.findByPk(id);
+        const category = await ExamCategory.findByPk(id);
         
         if (!category) {
             return next(new ErrorHandler('Category not found', 404));
@@ -122,7 +122,7 @@ exports.deleteCategory = async (req, res, next) => {
     try {
         const { id } = req.params;
         
-        const category = await TestSeriesCategory.findByPk(id);
+        const category = await ExamCategory.findByPk(id);
         
         if (!category) {
             return next(new ErrorHandler('Category not found', 404));
@@ -144,7 +144,7 @@ exports.toggleCategoryStatus = async (req, res, next) => {
     try {
         const { id } = req.params;
         
-        const category = await TestSeriesCategory.findByPk(id);
+        const category = await ExamCategory.findByPk(id);
         
         if (!category) {
             return next(new ErrorHandler('Category not found', 404));
@@ -166,11 +166,11 @@ exports.toggleCategoryStatus = async (req, res, next) => {
 // Get category statistics
 exports.getCategoryStats = async (req, res, next) => {
     try {
-        const totalCategories = await TestSeriesCategory.count();
-        const activeCategories = await TestSeriesCategory.count({
+        const totalCategories = await ExamCategory.count();
+        const activeCategories = await ExamCategory.count({
             where: { is_active: true }
         });
-        const parentCategories = await TestSeriesCategory.count({
+        const parentCategories = await ExamCategory.count({
             where: { type: 'exam_wise' }
         });
 
@@ -191,7 +191,7 @@ exports.getCategoryStats = async (req, res, next) => {
 // Get categories for dropdown
 exports.getCategoriesForDropdown = async (req, res, next) => {
     try {
-        const categories = await TestSeriesCategory.findAll({
+        const categories = await ExamCategory.findAll({
             where: { is_active: true },
             attributes: ['id', 'name', 'type'],
             order: [['name', 'ASC']]

@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Subscription, User, Test_Series, NewTestSeries, ExamType } = require('../../models');
+const { Subscription, User, TestSeries, ExamType } = require('../../models');
 const { Op } = require('sequelize');
 const { updateUserSubscriptionStatus } = require('../../utils/subscriptionHelper');
 
@@ -21,7 +21,7 @@ exports.getUserSubscriptions = async (req, res, next) => {
         const { count, rows } = await Subscription.findAndCountAll({
             where: whereClause,
             include: [{
-                model: Test_Series,
+                model: TestSeries,
                 as: 'testSeries',
                 attributes: ['id', 'title', 'description', 'total_tests', 'price']
             }],
@@ -75,7 +75,7 @@ exports.getSubscriptionDetails = async (req, res, next) => {
                 user_id: userId 
             },
             include: [{
-                model: Test_Series,
+                model: TestSeries,
                 as: 'testSeries',
                 attributes: ['id', 'title', 'description', 'total_tests', 'price', 'duration_months']
             }]
@@ -124,7 +124,7 @@ exports.createSubscription = async (req, res, next) => {
         }
         
         // Check if test series exists
-        const testSeries = await Test_Series.findByPk(test_series_id);
+        const testSeries = await TestSeries.findByPk(test_series_id);
         if (!testSeries) {
             return next(new ErrorHandler('Test series not found', 404));
         }
@@ -178,7 +178,7 @@ exports.createSubscription = async (req, res, next) => {
         // Fetch the created subscription with test series details
         const createdSubscription = await Subscription.findByPk(subscription.id, {
             include: [{
-                model: Test_Series,
+                model: TestSeries,
                 as: 'testSeries',
                 attributes: ['id', 'title', 'description', 'total_tests', 'price']
             }]
@@ -380,7 +380,7 @@ exports.getAllSubscriptions = async (req, res, next) => {
                 required: false
             },
             {
-                model: Test_Series,
+                model: TestSeries,
                 as: 'testSeries',
                 attributes: ['id', 'title', 'price'],
                 required: false
@@ -533,7 +533,7 @@ exports.exportSubscriptions = async (req, res, next) => {
                     attributes: ['username', 'email']
                 },
                 {
-                    model: Test_Series,
+                    model: TestSeries,
                     as: 'testSeries',
                     attributes: ['title']
                 }
@@ -596,7 +596,7 @@ exports.createManualSubscription = async (req, res, next) => {
         }
         
         // Check if test series exists
-        const testSeries = await Test_Series.findByPk(test_series_id);
+        const testSeries = await TestSeries.findByPk(test_series_id);
         if (!testSeries) {
             return next(new ErrorHandler('Test series not found', 404));
         }
@@ -644,7 +644,7 @@ exports.createManualSubscription = async (req, res, next) => {
                     attributes: ['uuid', 'username', 'email']
                 },
                 {
-                    model: Test_Series,
+                    model: TestSeries,
                     as: 'testSeries',
                     attributes: ['id', 'title', 'price']
                 }
