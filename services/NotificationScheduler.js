@@ -1,7 +1,7 @@
 const NotificationService = require('./NotificationService');
 const NotificationTriggers = require('./NotificationTriggers');
 const cron = require('node-cron');
-const { User, FreeTest, NewTestSeries, Subscription } = require('../models');
+const { User, Test, TestSeries, subscription: Subscription } = require('../models');
 const { Op } = require('sequelize');
 
 class NotificationScheduler {
@@ -70,8 +70,9 @@ class NotificationScheduler {
       if (activeUsers.length === 0) return;
 
       // Get recent content stats
-      const recentFreeTests = await FreeTest.count({
+      const recentPracticeTests = await Test.count({
         where: {
+          test_type: 'practice',
           is_active: true,
           created_at: {
             [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
@@ -79,7 +80,7 @@ class NotificationScheduler {
         }
       });
 
-      const recentTestSeries = await NewTestSeries.count({
+      const recentTestSeries = await TestSeries.count({
         where: {
           is_active: true,
           created_at: {
@@ -88,7 +89,7 @@ class NotificationScheduler {
         }
       });
 
-      if (recentFreeTests === 0 && recentTestSeries === 0) {
+      if (recentPracticeTests === 0 && recentTestSeries === 0) {
         console.log('No new content to notify about today');
         return;
       }
@@ -96,8 +97,8 @@ class NotificationScheduler {
       const userIds = activeUsers.map(user => user.uuid);
 
       let digestContent = [];
-      if (recentFreeTests > 0) {
-        digestContent.push(`${recentFreeTests} new free tests`);
+      if (recentPracticeTests > 0) {
+        digestContent.push(`${recentPracticeTests} new practice tests`);
       }
       if (recentTestSeries > 0) {
         digestContent.push(`${recentTestSeries} new test series`);
@@ -269,14 +270,15 @@ class NotificationScheduler {
       const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
       // Get content added in the last week
-      const [weeklyFreeTests, weeklyTestSeries] = await Promise.all([
-        FreeTest.count({
+      const [weeklyPracticeTests, weeklyTestSeries] = await Promise.all([
+        Test.count({
           where: {
+            test_type: 'practice',
             is_active: true,
             created_at: { [Op.gte]: oneWeekAgo }
           }
         }),
-        NewTestSeries.count({
+        TestSeries.count({
           where: {
             is_active: true,
             created_at: { [Op.gte]: oneWeekAgo }
@@ -284,19 +286,19 @@ class NotificationScheduler {
         })
       ]);
 
-      if (weeklyFreeTests === 0 && weeklyTestSeries === 0) {
+      if (weeklyPracticeTests === 0 && weeklyTestSeries === 0) {
         console.log('No new content this week to summarize');
         return;
       }
 
       const contentSummary = {
-        freeTests: weeklyFreeTests,
+        practiceTests: weeklyPracticeTests,
         testSeries: weeklyTestSeries,
         pdfs: 0 // Could be implemented
       };
 
       await NotificationTriggers.onBulkContentAdded(contentSummary);
-      console.log(`✅ Weekly content summary sent: ${weeklyFreeTests} free tests, ${weeklyTestSeries} test series`);
+      console.log(`✅ Weekly content summary sent: ${weeklyPracticeTests} practice tests, ${weeklyTestSeries} test series`);
 
     } catch (error) {
       console.error('❌ Error sending weekly content summary:', error);

@@ -2,7 +2,7 @@ const ErrorHandler = require('../../utils/default/errorHandler');
 const NotificationService = require('../../services/NotificationService');
 const NotificationTriggers = require('../../services/NotificationTriggers');
 const NotificationScheduler = require('../../services/NotificationScheduler');
-const { User, FreeTest, NewTestSeries, NewPdf, Notification, PushToken } = require('../../models');
+const { User, TestSeries, pdfs: Pdf, Notification, PushToken } = require('../../models');
 const { Op } = require('sequelize');
 
 // Send manual notification to all users
@@ -113,7 +113,7 @@ exports.triggerNewContentNotification = async (req, res, next) => {
                 break;
 
             case 'test_series':
-                const testSeries = await NewTestSeries.findByPk(contentId);
+                const testSeries = await TestSeries.findByPk(contentId);
                 if (!testSeries) {
                     return next(new ErrorHandler('Test series not found', 404));
                 }
@@ -129,7 +129,7 @@ exports.triggerNewContentNotification = async (req, res, next) => {
                 break;
 
             case 'pdf':
-                const pdf = await NewPdf.findByPk(contentId);
+                const pdf = await Pdf.findByPk(contentId);
                 if (!pdf) {
                     return next(new ErrorHandler('PDF not found', 404));
                 }

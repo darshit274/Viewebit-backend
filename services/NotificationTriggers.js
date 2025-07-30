@@ -1,5 +1,5 @@
 const NotificationService = require('./NotificationService');
-const { User, FreeTest, NewTestSeries, NewPdf } = require('../models');
+const { User, TestSeries, pdfs: Pdf } = require('../models');
 const { Op } = require('sequelize');
 
 class NotificationTriggers {
@@ -7,9 +7,9 @@ class NotificationTriggers {
   /**
    * Send notification when a new free test is created
    */
-  async onNewFreeTestCreated(freeTest) {
+  async onNewPracticeTestCreated(practiceTest) {
     try {
-      console.log('🔔 Triggering notification for new free test:', freeTest.title);
+      console.log('🔔 Triggering notification for new practice test:', practiceTest.title);
 
       // Get all active users who should receive notifications
       const users = await this.getNotificationEligibleUsers();
@@ -23,17 +23,17 @@ class NotificationTriggers {
 
       const notificationData = {
         title: '🆕 New Free Test Available!',
-        body: `"${freeTest.title}" is now available. Start practicing for free!`,
+        body: `"${practiceTest.title}" is now available. Start practicing for free!`,
         type: 'new_content',
         data: {
           content_type: 'free_test',
-          content_id: freeTest.uuid,
-          test_title: freeTest.title,
-          test_category: freeTest.category,
+          content_id: practiceTest.uuid,
+          test_title: practiceTest.title,
+          test_category: practiceTest.test_type,
           navigation: 'free-tests',
           navigationData: {
-            testId: freeTest.uuid,
-            category: freeTest.category
+            testId: practiceTest.uuid,
+            category: practiceTest.test_type
           }
         },
         priority: 'high'

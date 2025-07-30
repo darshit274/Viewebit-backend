@@ -56,13 +56,7 @@ module.exports = {
       },
       test_id: {
         type: Sequelize.UUID,
-        allowNull: true,
-        references: {
-          model: 'test',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL'
+        allowNull: true
       },
       created_at: {
         type: Sequelize.DATE,

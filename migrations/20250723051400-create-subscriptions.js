@@ -20,13 +20,7 @@ module.exports = {
       },
       test_series_id: {
         type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: 'test_series',
-          key: 'id'
-        },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        allowNull: false
       },
       transaction_id: {
         type: Sequelize.STRING,

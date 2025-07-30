@@ -10,7 +10,7 @@ module.exports = {
         autoIncrement: true
       },
       user_id: {
-        type: Sequelize.STRING,
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
           model: 'users',
@@ -20,7 +20,7 @@ module.exports = {
         onDelete: 'CASCADE'
       },
       push_token: {
-        type: Sequelize.TEXT,
+        type: Sequelize.STRING(512),
         allowNull: false,
         unique: true
       },

@@ -1,13 +1,19 @@
 'use strict';
 
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('exam_categories', {
       id: {
-        type: Sequelize.INTEGER,
+        allowNull: false,
+        autoIncrement: true,
         primaryKey: true,
-        autoIncrement: true
+        type: Sequelize.INTEGER
+      },
+      uuid: {
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
+        unique: true,
+        allowNull: false
       },
       name: {
         type: Sequelize.STRING(100),
@@ -21,16 +27,6 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
-      description_gujarati: {
-        type: Sequelize.TEXT,
-        allowNull: true
-      },
-      hierarchy_level: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        defaultValue: 0,
-        comment: '0=Root(Exam-wise), 1=Subject(Topic-wise), 2=Chapter(Chapter-wise)'
-      },
       parent_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
@@ -41,45 +37,44 @@ module.exports = {
         onUpdate: 'CASCADE',
         onDelete: 'SET NULL'
       },
+      hierarchy_level: {
+        type: Sequelize.INTEGER,
+        defaultValue: 0,
+        allowNull: false
+      },
       hierarchy_path: {
         type: Sequelize.STRING(500),
-        allowNull: true,
-        comment: 'Materialized path for efficient queries: /1/5/12'
+        allowNull: true
       },
       display_order: {
         type: Sequelize.INTEGER,
         defaultValue: 0
       },
-      icon_url: {
-        type: Sequelize.STRING(500),
-        allowNull: true
-      },
-      color_code: {
-        type: Sequelize.STRING(7),
-        allowNull: true
-      },
       is_active: {
         type: Sequelize.BOOLEAN,
         defaultValue: true
       },
+      created_by: {
+        type: Sequelize.STRING(36),
+        allowNull: true
+      },
       created_at: {
-        type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.NOW
+        type: Sequelize.DATE,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       },
       updated_at: {
-        type: Sequelize.DATE,
         allowNull: false,
-        defaultValue: Sequelize.NOW
+        type: Sequelize.DATE,
+        defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
       }
     });
 
-    // Add indexes for efficient queries
-    await queryInterface.addIndex('exam_categories', ['hierarchy_level']);
+    // Add indexes
     await queryInterface.addIndex('exam_categories', ['parent_id']);
-    await queryInterface.addIndex('exam_categories', ['hierarchy_path']);
+    await queryInterface.addIndex('exam_categories', ['hierarchy_level']);
     await queryInterface.addIndex('exam_categories', ['is_active']);
-    await queryInterface.addIndex('exam_categories', ['display_order']);
+    await queryInterface.addIndex('exam_categories', ['uuid']);
   },
 
   async down(queryInterface, Sequelize) {

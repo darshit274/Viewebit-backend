@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-  const TestSeries = sequelize.define('TestSeries', {
+  const SubCategory = sequelize.define('SubCategory', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
@@ -10,6 +10,10 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
       unique: true
+    },
+    category_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     name: {
       type: DataTypes.STRING,
@@ -24,17 +28,21 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: true
     }
   }, {
-    tableName: 'new_test_series',
+    tableName: 'sub_categories',
     underscored: true,
     timestamps: true
   });
 
-  TestSeries.associate = function(models) {
-    TestSeries.hasMany(models.Category, { 
-      foreignKey: 'test_series_id', 
-      as: 'categories' 
+  SubCategory.associate = function(models) {
+    SubCategory.belongsTo(models.Category, { 
+      foreignKey: 'category_id', 
+      as: 'category' 
+    });
+    SubCategory.hasMany(models.Test, { 
+      foreignKey: 'sub_category_id', 
+      as: 'tests' 
     });
   };
 
-  return TestSeries;
+  return SubCategory;
 };
