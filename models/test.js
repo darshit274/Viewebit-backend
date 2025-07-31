@@ -19,7 +19,15 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false
     },
+    title_gujarati: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     description: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    description_gujarati: {
       type: DataTypes.TEXT,
       allowNull: true
     },
@@ -36,6 +44,51 @@ module.exports = (sequelize, DataTypes) => {
     is_active: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
+    },
+    is_demo: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    is_free_in_paid_series: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    negative_marking_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    negative_marks_per_wrong: {
+      type: DataTypes.DECIMAL(3, 2),
+      defaultValue: 0.25,
+      allowNull: false
+    },
+    is_one_time_only: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    max_duration_minutes: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    attempt_restrictions: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    passing_marks: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    instructions: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    instructions_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
     }
   }, {
     tableName: 'tests',

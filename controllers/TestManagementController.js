@@ -37,7 +37,11 @@ class TestManagementController {
 
       // Get paginated data
       const { count, rows: testSeries } = await TestSeries.findAndCountAll({
-        attributes: ['id', 'uuid', 'name', 'description', 'is_active', 'created_at', 'updated_at'],
+        attributes: [
+          'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 'is_active', 'created_at', 'updated_at',
+          'pricing_type', 'price', 'currency', 'demo_tests_count', 'subscription_duration_days',
+          'features', 'discount_percentage', 'is_featured'
+        ],
         where,
         order: [[sortBy, sortOrder]],
         limit: parseInt(limit),
@@ -69,8 +73,18 @@ class TestManagementController {
         id: series.id,
         uuid: series.uuid,
         title: series.name, // Map name to title for frontend
+        title_gujarati: series.name_gujarati,
         description: series.description,
+        description_gujarati: series.description_gujarati,
         is_active: series.is_active,
+        pricing_type: series.pricing_type,
+        price: series.price,
+        currency: series.currency,
+        demo_tests_count: series.demo_tests_count,
+        subscription_duration_days: series.subscription_duration_days,
+        features: series.features,
+        discount_percentage: series.discount_percentage,
+        is_featured: series.is_featured,
         created_at: series.created_at,
         updated_at: series.updated_at,
         categories_count: series.categories ? series.categories.length : 0
@@ -99,11 +113,36 @@ class TestManagementController {
   // Create new test series
   async createTestSeries(req, res) {
     try {
-      const { title, description } = req.body;
+      const { 
+        title, 
+        description, 
+        title_gujarati, 
+        description_gujarati, 
+        is_active,
+        pricing_type,
+        price,
+        currency,
+        demo_tests_count,
+        subscription_duration_days,
+        features,
+        discount_percentage,
+        is_featured
+      } = req.body;
 
       const testSeries = await TestSeries.create({
         name: title,
-        description
+        description,
+        name_gujarati: title_gujarati,
+        description_gujarati,
+        is_active: is_active !== undefined ? is_active : true,
+        pricing_type: pricing_type || 'free',
+        price: price || 0.00,
+        currency: currency || 'INR',
+        demo_tests_count: demo_tests_count || 0,
+        subscription_duration_days: subscription_duration_days || 365,
+        features: features || null,
+        discount_percentage: discount_percentage || 0.00,
+        is_featured: is_featured || false
       });
 
       // Transform response to match frontend expectations
@@ -113,8 +152,18 @@ class TestManagementController {
           id: testSeries.id,
           uuid: testSeries.uuid,
           title: testSeries.name,
+          title_gujarati: testSeries.name_gujarati,
           description: testSeries.description,
+          description_gujarati: testSeries.description_gujarati,
           is_active: testSeries.is_active,
+          pricing_type: testSeries.pricing_type,
+          price: testSeries.price,
+          currency: testSeries.currency,
+          demo_tests_count: testSeries.demo_tests_count,
+          subscription_duration_days: testSeries.subscription_duration_days,
+          features: testSeries.features,
+          discount_percentage: testSeries.discount_percentage,
+          is_featured: testSeries.is_featured,
           created_at: testSeries.created_at,
           updated_at: testSeries.updated_at
         },
@@ -129,11 +178,82 @@ class TestManagementController {
     }
   }
 
+  // Bulk operations for test series
+  async bulkOperationsTestSeries(req, res) {
+    try {
+      const { action, testSeriesIds } = req.body;
+      
+      if (!action || !testSeriesIds || !Array.isArray(testSeriesIds)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Action and testSeriesIds array are required'
+        });
+      }
+
+      let message = '';
+      let updateData = {};
+
+      switch (action) {
+        case 'delete':
+          await TestSeries.destroy({
+            where: { uuid: { [Op.in]: testSeriesIds } }
+          });
+          message = `${testSeriesIds.length} test series deleted successfully`;
+          break;
+        case 'activate':
+          updateData = { is_active: true };
+          await TestSeries.update(updateData, {
+            where: { uuid: { [Op.in]: testSeriesIds } }
+          });
+          message = `${testSeriesIds.length} test series activated successfully`;
+          break;
+        case 'deactivate':
+          updateData = { is_active: false };
+          await TestSeries.update(updateData, {
+            where: { uuid: { [Op.in]: testSeriesIds } }
+          });
+          message = `${testSeriesIds.length} test series deactivated successfully`;
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid action. Supported actions: delete, activate, deactivate'
+          });
+      }
+
+      res.json({
+        success: true,
+        message,
+        data: { action, count: testSeriesIds.length }
+      });
+    } catch (error) {
+      console.error('Error in bulk operations for test series:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to perform bulk operations'
+      });
+    }
+  }
+
   // Update test series
   async updateTestSeries(req, res) {
     try {
       const { uuid } = req.params;
-      const { title, description } = req.body;
+      const { 
+        title, 
+        description, 
+        title_gujarati, 
+        description_gujarati, 
+        is_active,
+        pricing_type,
+        price,
+        currency,
+        demo_tests_count,
+        subscription_duration_days,
+        features,
+        discount_percentage,
+        is_featured
+      } = req.body;
 
       const testSeries = await TestSeries.findOne({ 
         attributes: ['id', 'uuid', 'name', 'description', 'is_active'],
@@ -146,7 +266,25 @@ class TestManagementController {
         });
       }
 
-      await testSeries.update({ name: title, description });
+      const updateData = { 
+        name: title, 
+        description, 
+        name_gujarati: title_gujarati, 
+        description_gujarati, 
+        is_active 
+      };
+
+      // Add pricing fields if provided
+      if (pricing_type !== undefined) updateData.pricing_type = pricing_type;
+      if (price !== undefined) updateData.price = price;
+      if (currency !== undefined) updateData.currency = currency;
+      if (demo_tests_count !== undefined) updateData.demo_tests_count = demo_tests_count;
+      if (subscription_duration_days !== undefined) updateData.subscription_duration_days = subscription_duration_days;
+      if (features !== undefined) updateData.features = features;
+      if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
+      if (is_featured !== undefined) updateData.is_featured = is_featured;
+
+      await testSeries.update(updateData);
 
       res.json({
         success: true,
@@ -312,7 +450,7 @@ class TestManagementController {
   async createCategory(req, res) {
     try {
       const { testSeriesUuid } = req.params;
-      const { name, description } = req.body;
+      const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
 
       const testSeries = await TestSeries.findOne({ 
         attributes: ['id', 'uuid', 'name', 'description', 'is_active'],
@@ -329,7 +467,10 @@ class TestManagementController {
       const category = await Category.create({
         test_series_id: testSeries.id,
         name,
-        description
+        description,
+        name_gujarati,
+        description_gujarati,
+        is_active: is_active !== undefined ? is_active : true
       });
 
       res.status(201).json({
@@ -346,11 +487,68 @@ class TestManagementController {
     }
   }
 
+  // Bulk operations for categories
+  async bulkOperationsCategories(req, res) {
+    try {
+      const { action, categoryIds } = req.body;
+      
+      if (!action || !categoryIds || !Array.isArray(categoryIds)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Action and categoryIds array are required'
+        });
+      }
+
+      let message = '';
+      let updateData = {};
+
+      switch (action) {
+        case 'delete':
+          await Category.destroy({
+            where: { uuid: { [Op.in]: categoryIds } }
+          });
+          message = `${categoryIds.length} categories deleted successfully`;
+          break;
+        case 'activate':
+          updateData = { is_active: true };
+          await Category.update(updateData, {
+            where: { uuid: { [Op.in]: categoryIds } }
+          });
+          message = `${categoryIds.length} categories activated successfully`;
+          break;
+        case 'deactivate':
+          updateData = { is_active: false };
+          await Category.update(updateData, {
+            where: { uuid: { [Op.in]: categoryIds } }
+          });
+          message = `${categoryIds.length} categories deactivated successfully`;
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid action. Supported actions: delete, activate, deactivate'
+          });
+      }
+
+      res.json({
+        success: true,
+        message,
+        data: { action, count: categoryIds.length }
+      });
+    } catch (error) {
+      console.error('Error in bulk operations for categories:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to perform bulk operations'
+      });
+    }
+  }
+
   // Update category
   async updateCategory(req, res) {
     try {
       const { uuid } = req.params;
-      const { name, description } = req.body;
+      const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
 
       const category = await Category.findOne({ where: { uuid } });
       if (!category) {
@@ -360,7 +558,7 @@ class TestManagementController {
         });
       }
 
-      await category.update({ name, description });
+      await category.update({ name, description, name_gujarati, description_gujarati, is_active });
 
       res.json({
         success: true,
@@ -512,7 +710,7 @@ class TestManagementController {
   async createSubCategory(req, res) {
     try {
       const { categoryUuid } = req.params;
-      const { name, description } = req.body;
+      const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
 
       const category = await Category.findOne({ 
         where: { uuid: categoryUuid, is_active: true } 
@@ -528,7 +726,10 @@ class TestManagementController {
       const subCategory = await SubCategory.create({
         category_id: category.id,
         name,
-        description
+        description,
+        name_gujarati,
+        description_gujarati,
+        is_active: is_active !== undefined ? is_active : true
       });
 
       res.status(201).json({
@@ -545,11 +746,68 @@ class TestManagementController {
     }
   }
 
+  // Bulk operations for sub-categories
+  async bulkOperationsSubCategories(req, res) {
+    try {
+      const { action, subCategoryIds } = req.body;
+      
+      if (!action || !subCategoryIds || !Array.isArray(subCategoryIds)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Action and subCategoryIds array are required'
+        });
+      }
+
+      let message = '';
+      let updateData = {};
+
+      switch (action) {
+        case 'delete':
+          await SubCategory.destroy({
+            where: { uuid: { [Op.in]: subCategoryIds } }
+          });
+          message = `${subCategoryIds.length} sub-categories deleted successfully`;
+          break;
+        case 'activate':
+          updateData = { is_active: true };
+          await SubCategory.update(updateData, {
+            where: { uuid: { [Op.in]: subCategoryIds } }
+          });
+          message = `${subCategoryIds.length} sub-categories activated successfully`;
+          break;
+        case 'deactivate':
+          updateData = { is_active: false };
+          await SubCategory.update(updateData, {
+            where: { uuid: { [Op.in]: subCategoryIds } }
+          });
+          message = `${subCategoryIds.length} sub-categories deactivated successfully`;
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid action. Supported actions: delete, activate, deactivate'
+          });
+      }
+
+      res.json({
+        success: true,
+        message,
+        data: { action, count: subCategoryIds.length }
+      });
+    } catch (error) {
+      console.error('Error in bulk operations for sub-categories:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to perform bulk operations'
+      });
+    }
+  }
+
   // Update sub-category
   async updateSubCategory(req, res) {
     try {
       const { uuid } = req.params;
-      const { name, description } = req.body;
+      const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
 
       const subCategory = await SubCategory.findOne({ where: { uuid } });
       if (!subCategory) {
@@ -559,7 +817,7 @@ class TestManagementController {
         });
       }
 
-      await subCategory.update({ name, description });
+      await subCategory.update({ name, description, name_gujarati, description_gujarati, is_active });
 
       res.json({
         success: true,
@@ -711,7 +969,25 @@ class TestManagementController {
   async createTest(req, res) {
     try {
       const { subCategoryUuid } = req.params;
-      const { title, description, duration_minutes, total_marks } = req.body;
+      const { 
+        title, 
+        description, 
+        duration_minutes, 
+        total_marks, 
+        title_gujarati, 
+        description_gujarati, 
+        is_active,
+        is_demo,
+        is_free_in_paid_series,
+        negative_marking_enabled,
+        negative_marks_per_wrong,
+        is_one_time_only,
+        max_duration_minutes,
+        attempt_restrictions,
+        passing_marks,
+        instructions,
+        instructions_gujarati
+      } = req.body;
 
       const subCategory = await SubCategory.findOne({ 
         where: { uuid: subCategoryUuid, is_active: true } 
@@ -729,7 +1005,20 @@ class TestManagementController {
         title,
         description,
         duration_minutes: duration_minutes || 60,
-        total_marks: total_marks || 0
+        total_marks: total_marks || 0,
+        title_gujarati,
+        description_gujarati,
+        is_active: is_active !== undefined ? is_active : true,
+        is_demo: is_demo || false,
+        is_free_in_paid_series: is_free_in_paid_series || false,
+        negative_marking_enabled: negative_marking_enabled || false,
+        negative_marks_per_wrong: negative_marks_per_wrong || 0.25,
+        is_one_time_only: is_one_time_only || false,
+        max_duration_minutes: max_duration_minutes || null,
+        attempt_restrictions: attempt_restrictions || null,
+        passing_marks: passing_marks || null,
+        instructions: instructions || null,
+        instructions_gujarati: instructions_gujarati || null
       });
 
       res.status(201).json({
@@ -746,11 +1035,68 @@ class TestManagementController {
     }
   }
 
+  // Bulk operations for tests
+  async bulkOperationsTests(req, res) {
+    try {
+      const { action, testIds } = req.body;
+      
+      if (!action || !testIds || !Array.isArray(testIds)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Action and testIds array are required'
+        });
+      }
+
+      let message = '';
+      let updateData = {};
+
+      switch (action) {
+        case 'delete':
+          await Test.destroy({
+            where: { uuid: { [Op.in]: testIds } }
+          });
+          message = `${testIds.length} tests deleted successfully`;
+          break;
+        case 'activate':
+          updateData = { is_active: true };
+          await Test.update(updateData, {
+            where: { uuid: { [Op.in]: testIds } }
+          });
+          message = `${testIds.length} tests activated successfully`;
+          break;
+        case 'deactivate':
+          updateData = { is_active: false };
+          await Test.update(updateData, {
+            where: { uuid: { [Op.in]: testIds } }
+          });
+          message = `${testIds.length} tests deactivated successfully`;
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid action. Supported actions: delete, activate, deactivate'
+          });
+      }
+
+      res.json({
+        success: true,
+        message,
+        data: { action, count: testIds.length }
+      });
+    } catch (error) {
+      console.error('Error in bulk operations for tests:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to perform bulk operations'
+      });
+    }
+  }
+
   // Update test
   async updateTest(req, res) {
     try {
       const { uuid } = req.params;
-      const { title, description, duration_minutes, total_marks } = req.body;
+      const { title, description, duration_minutes, total_marks, title_gujarati, description_gujarati, is_active } = req.body;
 
       const test = await Test.findOne({ where: { uuid } });
       if (!test) {
@@ -764,7 +1110,10 @@ class TestManagementController {
         title, 
         description, 
         duration_minutes, 
-        total_marks 
+        total_marks,
+        title_gujarati,
+        description_gujarati,
+        is_active
       });
 
       res.json({
@@ -909,7 +1258,14 @@ class TestManagementController {
         option_d, 
         correct_answer, 
         explanation, 
-        marks 
+        marks,
+        question_text_gujarati,
+        option_a_gujarati,
+        option_b_gujarati,
+        option_c_gujarati,
+        option_d_gujarati,
+        explanation_gujarati,
+        is_active
       } = req.body;
 
       const test = await Test.findOne({ 
@@ -932,7 +1288,14 @@ class TestManagementController {
         option_d,
         correct_answer,
         explanation,
-        marks: marks || 1
+        marks: marks || 1,
+        question_text_gujarati,
+        option_a_gujarati,
+        option_b_gujarati,
+        option_c_gujarati,
+        option_d_gujarati,
+        explanation_gujarati,
+        is_active: is_active !== undefined ? is_active : true
       });
 
       // Update test total marks
@@ -967,7 +1330,14 @@ class TestManagementController {
         option_d, 
         correct_answer, 
         explanation, 
-        marks 
+        marks,
+        question_text_gujarati,
+        option_a_gujarati,
+        option_b_gujarati,
+        option_c_gujarati,
+        option_d_gujarati,
+        explanation_gujarati,
+        is_active
       } = req.body;
 
       const question = await Question.findOne({ 
@@ -990,7 +1360,14 @@ class TestManagementController {
         option_d,
         correct_answer,
         explanation,
-        marks
+        marks,
+        question_text_gujarati,
+        option_a_gujarati,
+        option_b_gujarati,
+        option_c_gujarati,
+        option_d_gujarati,
+        explanation_gujarati,
+        is_active
       });
 
       // Update test total marks
@@ -1047,6 +1424,89 @@ class TestManagementController {
       res.status(500).json({
         success: false,
         message: 'Failed to delete question'
+      });
+    }
+  }
+
+  // Bulk operations for questions
+  async bulkOperationsQuestions(req, res) {
+    try {
+      const { action, questionIds } = req.body;
+
+      if (!action || !questionIds || !Array.isArray(questionIds) || questionIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Action and questionIds array are required'
+        });
+      }
+
+      let updateData = {};
+      let message = '';
+
+      switch (action) {
+        case 'delete':
+          updateData = { is_active: false };
+          message = `${questionIds.length} questions deleted successfully`;
+          break;
+        case 'activate':
+          updateData = { is_active: true };
+          message = `${questionIds.length} questions activated successfully`;
+          break;
+        case 'deactivate':
+          updateData = { is_active: false };
+          message = `${questionIds.length} questions deactivated successfully`;
+          break;
+        default:
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid action. Use: delete, activate, or deactivate'
+          });
+      }
+
+      // Update questions
+      const [updatedCount] = await Question.update(updateData, {
+        where: {
+          uuid: {
+            [Op.in]: questionIds
+          }
+        }
+      });
+
+      if (updatedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'No questions found to update'
+        });
+      }
+
+      // Update test total marks for affected tests
+      const affectedQuestions = await Question.findAll({
+        where: {
+          uuid: {
+            [Op.in]: questionIds
+          }
+        },
+        include: [{ model: Test, as: 'test' }]
+      });
+
+      const testIds = [...new Set(affectedQuestions.map(q => q.test_id))];
+      for (const testId of testIds) {
+        const totalMarks = await Question.sum('marks', {
+          where: { test_id: testId, is_active: true }
+        });
+        await Test.update({ total_marks: totalMarks || 0 }, { where: { id: testId } });
+      }
+
+      res.json({
+        success: true,
+        message,
+        updatedCount
+      });
+    } catch (error) {
+      console.error('Error in bulk operations:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to perform bulk operation'
       });
     }
   }

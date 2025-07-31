@@ -548,7 +548,7 @@ exports.exportSubscriptions = async (req, res, next) => {
                 sub.id,
                 sub.user.username,
                 sub.user.email,
-                sub.testSeries.title,
+                sub.testSeries.name,
                 sub.transaction_id,
                 sub.amount_paid,
                 sub.currency,
