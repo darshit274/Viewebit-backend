@@ -69,6 +69,55 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       allowNull: false
+    },
+    // New advanced test features
+    is_free: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Whether the test series is free or paid'
+    },
+    free_tests_count: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Number of free tests in paid series'
+    },
+    requires_subscription: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether series requires subscription to access'
+    },
+    negative_marking_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether negative marking is enabled for this series'
+    },
+    negative_marking_value: {
+      type: DataTypes.DECIMAL(3, 2),
+      defaultValue: 0.25,
+      allowNull: true,
+      comment: 'Negative marking value (e.g., 0.25, 0.20, 0.33)'
+    },
+    one_time_completion: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether tests can be taken only once'
+    },
+    max_attempts: {
+      type: DataTypes.INTEGER,
+      defaultValue: 1,
+      allowNull: false,
+      comment: 'Maximum attempts allowed per test'
+    },
+    auto_submit_on_expire: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Auto submit test when time expires'
     }
   }, {
     tableName: 'new_test_series',

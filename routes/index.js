@@ -6,11 +6,13 @@ const AdminRoutes = require("./AdminRoutes/adminRoutes");
 const SubscriptionRoutes = require("./SubscriptionRoutes/subscriptionRoutes");
 const PDFRoutes = require("./PDFRoutes/pdfRoutes");
 const NotificationRoutes = require("./notificationRoutes");
+const StudentTestRoutes = require("./TestRoutes/studentTestRoutes");
 
 router.use("/users", UserRoutes);
 router.use("/admin", AdminRoutes);
 router.use("/subscriptions", SubscriptionRoutes);
 router.use("/pdfs", PDFRoutes);
 router.use("/notifications", NotificationRoutes);
+router.use("/", StudentTestRoutes); // Student-facing test APIs at root level
 
 module.exports = router;

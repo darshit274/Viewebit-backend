@@ -89,6 +89,49 @@ module.exports = (sequelize, DataTypes) => {
     instructions_gujarati: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    // Additional advanced test features
+    difficulty_level: {
+      type: DataTypes.ENUM('easy', 'medium', 'hard'),
+      defaultValue: 'medium',
+      allowNull: false,
+      comment: 'Difficulty level of the test'
+    },
+    randomize_questions: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether to randomize question order'
+    },
+    show_results_immediately: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Whether to show results immediately after test completion'
+    },
+    pass_percentage: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 60.00,
+      allowNull: false,
+      comment: 'Minimum percentage required to pass'
+    },
+    allow_review: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Whether students can review answers after test'
+    },
+    total_questions: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Total number of questions in the test'
+    },
+    display_order: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Display order for sorting tests'
     }
   }, {
     tableName: 'tests',
