@@ -23,7 +23,7 @@ exports.getUserSubscriptions = async (req, res, next) => {
             include: [{
                 model: TestSeries,
                 as: 'testSeries',
-                attributes: ['id', 'title', 'description', 'total_tests', 'price']
+                attributes: ['id', 'name', 'description', 'price']
             }],
             limit,
             offset,
@@ -77,7 +77,7 @@ exports.getSubscriptionDetails = async (req, res, next) => {
             include: [{
                 model: TestSeries,
                 as: 'testSeries',
-                attributes: ['id', 'title', 'description', 'total_tests', 'price', 'duration_months']
+                attributes: ['id', 'name', 'description', 'price', 'subscription_duration_days']
             }]
         });
         
@@ -157,9 +157,9 @@ exports.createSubscription = async (req, res, next) => {
         
         // Calculate expiry date based on test series duration
         let expiryDate = null;
-        if (testSeries.duration_months) {
+        if (testSeries.subscription_duration_days) {
             expiryDate = new Date();
-            expiryDate.setMonth(expiryDate.getMonth() + testSeries.duration_months);
+            expiryDate.setDate(expiryDate.getDate() + testSeries.subscription_duration_days);
         }
         
         // Create subscription
@@ -180,7 +180,7 @@ exports.createSubscription = async (req, res, next) => {
             include: [{
                 model: TestSeries,
                 as: 'testSeries',
-                attributes: ['id', 'title', 'description', 'total_tests', 'price']
+                attributes: ['id', 'name', 'description', 'price']
             }]
         });
         
@@ -382,7 +382,7 @@ exports.getAllSubscriptions = async (req, res, next) => {
             {
                 model: TestSeries,
                 as: 'testSeries',
-                attributes: ['id', 'title', 'price'],
+                attributes: ['id', 'name', 'price'],
                 required: false
             }
         ];
@@ -535,7 +535,7 @@ exports.exportSubscriptions = async (req, res, next) => {
                 {
                     model: TestSeries,
                     as: 'testSeries',
-                    attributes: ['title']
+                    attributes: ['name']
                 }
             ],
             order: [['purchase_date', 'DESC']]
@@ -548,7 +548,7 @@ exports.exportSubscriptions = async (req, res, next) => {
                 sub.id,
                 sub.user.username,
                 sub.user.email,
-                sub.testSeries.name,
+                sub.testSeries?.name || 'N/A',
                 sub.transaction_id,
                 sub.amount_paid,
                 sub.currency,
@@ -590,7 +590,7 @@ exports.createManualSubscription = async (req, res, next) => {
         }
         
         // Check if user exists
-        const user = await User.findByPk(user_id);
+        const user = await User.findOne({ where: { uuid: user_id } });
         if (!user) {
             return next(new ErrorHandler('User not found', 404));
         }
@@ -614,9 +614,9 @@ exports.createManualSubscription = async (req, res, next) => {
         let finalExpiryDate = null;
         if (expiry_date) {
             finalExpiryDate = new Date(expiry_date);
-        } else if (testSeries.duration_months) {
+        } else if (testSeries.subscription_duration_days) {
             finalExpiryDate = new Date();
-            finalExpiryDate.setMonth(finalExpiryDate.getMonth() + testSeries.duration_months);
+            finalExpiryDate.setDate(finalExpiryDate.getDate() + testSeries.subscription_duration_days);
         }
         
         // Create subscription
@@ -646,7 +646,7 @@ exports.createManualSubscription = async (req, res, next) => {
                 {
                     model: TestSeries,
                     as: 'testSeries',
-                    attributes: ['id', 'title', 'price']
+                    attributes: ['id', 'name', 'price']
                 }
             ]
         });

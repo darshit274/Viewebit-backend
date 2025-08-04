@@ -30,7 +30,7 @@ exports.authToken = async (req, res, next) => {
     req.user = {
       id: decoded.id,
       email: decoded.email,
-      uuid: decoded.uuid
+      uuid: decoded.id // decoded.id contains the uuid from login payload
     };
     
     next();
@@ -73,7 +73,7 @@ exports.optionalAuth = async (req, res, next) => {
         req.user = {
           id: decoded.id,
           email: decoded.email,
-          uuid: decoded.uuid
+          uuid: decoded.id // decoded.id contains the uuid from login payload
         };
       }
     }

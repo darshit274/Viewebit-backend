@@ -267,7 +267,7 @@ exports.getProfile = async (req, res, next) => {
         
         res.status(200).json({
             success: true,
-            user: user
+            data: user
         });
     } catch (err) {
         const error = new ErrorHandler(

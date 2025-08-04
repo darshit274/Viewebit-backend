@@ -5,6 +5,12 @@ module.exports = (sequelize, DataTypes) => {
       primaryKey: true,
       autoIncrement: true
     },
+    uuid: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      allowNull: false,
+      unique: true
+    },
     name: {
       type: DataTypes.STRING(100),
       allowNull: false
@@ -38,25 +44,13 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       defaultValue: 0
     },
-    icon_url: {
-      type: DataTypes.STRING(500),
-      allowNull: true
-    },
-    color_code: {
-      type: DataTypes.STRING(7),
-      allowNull: true
-    },
     is_active: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
-    created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW
+    created_by: {
+      type: DataTypes.UUID,
+      allowNull: true
     }
   }, {
     tableName: 'exam_categories',
@@ -78,11 +72,11 @@ module.exports = (sequelize, DataTypes) => {
       as: 'children'
     });
 
-    // Test series in this category
-    ExamCategory.hasMany(models.TestSeries, {
-      foreignKey: 'category_id',
-      as: 'testSeries'
-    });
+    // Test series in this category - commented out as new_test_series doesn't have category_id
+    // ExamCategory.hasMany(models.TestSeries, {
+    //   foreignKey: 'category_id',
+    //   as: 'testSeries'
+    // });
   };
 
   return ExamCategory;

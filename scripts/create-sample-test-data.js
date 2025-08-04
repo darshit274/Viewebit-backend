@@ -6,11 +6,11 @@ async function createSampleData() {
 
     // Create Test Series
     const testSeries = await TestSeries.create({
-      title: 'GPSC Mock Test Series',
+      name: 'GPSC Mock Test Series',
       description: 'Comprehensive mock test series for GPSC examination preparation'
     });
 
-    console.log('✅ Created test series:', testSeries.title);
+    console.log('✅ Created test series:', testSeries.name);
 
     // Create Categories
     const mathCategory = await Category.create({
@@ -115,7 +115,7 @@ async function createSampleData() {
     console.log('🎉 Sample data created successfully!');
     console.log(`
     Created structure:
-    📚 Test Series: "${testSeries.title}"
+    📚 Test Series: "${testSeries.name}"
     ├── 📂 Category: "${mathCategory.name}"
     │   ├── 📁 Sub-category: "${algebraSubCategory.name}"
     │   │   └── 📝 Test: "${algebraTest.title}" (2 questions)

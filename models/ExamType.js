@@ -41,11 +41,11 @@ const ExamType = sequelize.define('ExamType', {
 
 // Define associations
 ExamType.associate = function(models) {
-    // Association with TestSeries
-    ExamType.hasMany(models.TestSeries, { 
-        foreignKey: 'exam_type_id', 
-        as: 'testSeries' 
-    });
+    // Association with TestSeries - commented out as new_test_series doesn't have exam_type_id
+    // ExamType.hasMany(models.TestSeries, { 
+    //     foreignKey: 'exam_type_id', 
+    //     as: 'testSeries' 
+    // });
     
     // Association with PDFs (if the model exists)
     if (models.Pdfs) {

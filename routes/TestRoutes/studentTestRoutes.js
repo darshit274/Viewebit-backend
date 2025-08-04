@@ -9,6 +9,7 @@ const {
   TestSession,
   UserAnswer,
   User,
+  Subscription,
   sequelize 
 } = require('../../models');
 const AuthToken = require('../../utils/AuthToken');
@@ -50,6 +51,98 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
+// Middleware to check if user has access to a test
+const checkTestAccess = async (req, res, next) => {
+  try {
+    const test = await Test.findOne({
+      where: { uuid: req.params.uuid, is_active: true },
+      include: [{
+        model: SubCategory,
+        include: [{
+          model: Category,
+          include: [{
+            model: TestSeries
+          }]
+        }]
+      }]
+    });
+
+    if (!test) {
+      return res.status(404).json({ success: false, message: 'Test not found' });
+    }
+
+    const testSeries = test.SubCategory.Category.TestSeries;
+    
+    // If it's a free test series, allow access
+    if (testSeries.pricing_type === 'free' || testSeries.is_free) {
+      req.test = test;
+      req.testSeries = testSeries;
+      return next();
+    }
+
+    // Check if user has subscription
+    const subscription = await Subscription.findOne({
+      where: {
+        user_id: req.user.uuid,
+        test_series_id: testSeries.id,
+        status: 'completed',
+        [sequelize.Op.or]: [
+          { expiry_date: null },
+          { expiry_date: { [sequelize.Op.gt]: new Date() } }
+        ]
+      }
+    });
+
+    if (subscription) {
+      req.test = test;
+      req.testSeries = testSeries;
+      req.subscription = subscription;
+      return next();
+    }
+
+    // Check if this is a demo test access
+    const demoTestsUsed = await TestSession.count({
+      where: {
+        user_id: req.user.id,
+        test_id: {
+          [sequelize.Op.in]: sequelize.literal(`(
+            SELECT t.id FROM tests t
+            JOIN sub_categories sc ON t.sub_category_id = sc.id
+            JOIN categories c ON sc.category_id = c.id
+            WHERE c.test_series_id = ${testSeries.id}
+          )`)
+        },
+        is_demo: true
+      }
+    });
+
+    const demoTestsRemaining = Math.max(0, (testSeries.demo_tests_count || 0) - demoTestsUsed);
+
+    if (demoTestsRemaining > 0) {
+      req.test = test;
+      req.testSeries = testSeries;
+      req.isDemo = true;
+      return next();
+    }
+
+    return res.status(403).json({
+      success: false,
+      message: 'Subscription required to access this test',
+      data: {
+        requires_subscription: true,
+        test_series_id: testSeries.uuid,
+        test_series_name: testSeries.name,
+        price: testSeries.price,
+        demo_tests_used: demoTestsUsed,
+        demo_tests_available: testSeries.demo_tests_count || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error checking test access:', error);
+    return res.status(500).json({ success: false, message: 'Failed to check test access' });
+  }
+};
+
 // Get all test series (with pagination and filters)
 router.get('/test-series', optionalAuth, async (req, res) => {
   try {
@@ -66,8 +159,8 @@ router.get('/test-series', optionalAuth, async (req, res) => {
 
     if (search) {
       where[sequelize.Op.or] = [
-        { title: { [sequelize.Op.like]: `%${search}%` } },
-        { title_gujarati: { [sequelize.Op.like]: `%${search}%` } },
+        { name: { [sequelize.Op.like]: `%${search}%` } },
+        { name_gujarati: { [sequelize.Op.like]: `%${search}%` } },
         { description: { [sequelize.Op.like]: `%${search}%` } },
         { description_gujarati: { [sequelize.Op.like]: `%${search}%` } }
       ];
@@ -87,7 +180,7 @@ router.get('/test-series', optionalAuth, async (req, res) => {
       offset: parseInt(offset),
       order: [['created_at', 'DESC']],
       attributes: [
-        'id', 'uuid', 'title', 'description', 'title_gujarati', 'description_gujarati',
+        'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
         'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
         'subscription_duration_days', 'discount_percentage', 'is_featured',
         'created_at', 'updated_at'
@@ -114,8 +207,18 @@ router.get('/test-series', optionalAuth, async (req, res) => {
         // Check subscription status if user is authenticated
         let is_subscribed = false;
         if (req.user && series.pricing_type === 'paid') {
-          // Add subscription check logic here
-          is_subscribed = false; // Placeholder
+          const subscription = await Subscription.findOne({
+            where: {
+              user_id: req.user.uuid,
+              test_series_id: series.id,
+              status: 'completed',
+              [sequelize.Op.or]: [
+                { expiry_date: null },
+                { expiry_date: { [sequelize.Op.gt]: new Date() } }
+              ]
+            }
+          });
+          is_subscribed = !!subscription;
         }
 
         return {
@@ -455,19 +558,10 @@ router.get('/tests/:uuid', optionalAuth, async (req, res) => {
   }
 });
 
-// Get questions for a test (requires authentication)
-router.get('/tests/:uuid/questions', requireAuth, async (req, res) => {
+// Get questions for a test (requires authentication and subscription)
+router.get('/tests/:uuid/questions', requireAuth, checkTestAccess, async (req, res) => {
   try {
-    const test = await Test.findOne({
-      where: { uuid: req.params.uuid, is_active: true }
-    });
-
-    if (!test) {
-      return res.status(404).json({
-        success: false,
-        message: 'Test not found'
-      });
-    }
+    const test = req.test; // From checkTestAccess middleware
 
     const questions = await Question.findAll({
       where: { 
@@ -486,7 +580,17 @@ router.get('/tests/:uuid/questions', requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      data: questions
+      data: {
+        questions,
+        test_info: {
+          id: test.id,
+          uuid: test.uuid,
+          title: test.title,
+          duration_minutes: test.duration_minutes,
+          total_marks: test.total_marks,
+          is_demo: req.isDemo || false
+        }
+      }
     });
   } catch (error) {
     console.error('Error fetching questions:', error);
@@ -526,16 +630,59 @@ router.get('/test-series/:uuid/subscription-access', requireAuth, async (req, re
     }
 
     // For paid test series, check subscription
-    // TODO: Implement actual subscription checking logic
-    // For now, returning demo access
+    const subscription = await Subscription.findOne({
+      where: {
+        user_id: req.user.uuid,
+        test_series_id: testSeries.id,
+        status: 'completed',
+        [sequelize.Op.or]: [
+          { expiry_date: null },
+          { expiry_date: { [sequelize.Op.gt]: new Date() } }
+        ]
+      }
+    });
+
+    if (subscription) {
+      return res.json({
+        success: true,
+        data: {
+          has_access: true,
+          subscription_type: 'paid',
+          expires_at: subscription.expiry_date,
+          purchase_date: subscription.purchase_date,
+          can_access_demo: true,
+          demo_tests_remaining: 0
+        }
+      });
+    }
+
+    // Check if user has already used demo tests
+    const demoTestsUsed = await TestSession.count({
+      where: {
+        user_id: req.user.id,
+        test_id: {
+          [sequelize.Op.in]: sequelize.literal(`(
+            SELECT t.id FROM tests t
+            JOIN sub_categories sc ON t.sub_category_id = sc.id
+            JOIN categories c ON sc.category_id = c.id
+            WHERE c.test_series_id = ${testSeries.id}
+          )`)
+        },
+        is_demo: true
+      }
+    });
+
+    const demoTestsRemaining = Math.max(0, (testSeries.demo_tests_count || 0) - demoTestsUsed);
+
     res.json({
       success: true,
       data: {
         has_access: false,
         subscription_type: null,
         expires_at: null,
-        can_access_demo: true,
-        demo_tests_remaining: testSeries.demo_tests_count || 0
+        can_access_demo: demoTestsRemaining > 0,
+        demo_tests_remaining: demoTestsRemaining,
+        demo_tests_used: demoTestsUsed
       }
     });
   } catch (error) {
@@ -543,6 +690,63 @@ router.get('/test-series/:uuid/subscription-access', requireAuth, async (req, re
     res.status(500).json({
       success: false,
       message: 'Failed to check subscription access',
+      error: error.message
+    });
+  }
+});
+
+// Start a test session
+router.post('/tests/:uuid/start', requireAuth, checkTestAccess, async (req, res) => {
+  try {
+    const test = req.test;
+
+    // Check if user already has an active session for this test
+    const existingSession = await TestSession.findOne({
+      where: {
+        user_id: req.user.id,
+        test_id: test.id,
+        status: ['in_progress', 'paused']
+      }
+    });
+
+    if (existingSession) {
+      return res.json({
+        success: true,
+        data: {
+          session_id: existingSession.uuid,
+          status: existingSession.status,
+          started_at: existingSession.start_time,
+          time_remaining: existingSession.time_remaining,
+          is_resuming: true
+        }
+      });
+    }
+
+    // Create new test session
+    const session = await TestSession.create({
+      user_id: req.user.id,
+      test_id: test.id,
+      start_time: new Date(),
+      status: 'in_progress',
+      is_demo: req.isDemo || false,
+      time_remaining: test.duration_minutes * 60 // Convert to seconds
+    });
+
+    res.json({
+      success: true,
+      data: {
+        session_id: session.uuid,
+        status: session.status,
+        started_at: session.start_time,
+        time_remaining: session.time_remaining,
+        is_demo: session.is_demo
+      }
+    });
+  } catch (error) {
+    console.error('Error starting test session:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to start test session',
       error: error.message
     });
   }

@@ -70,54 +70,41 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false,
       allowNull: false
     },
-    // New advanced test features
-    is_free: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-      allowNull: false,
-      comment: 'Whether the test series is free or paid'
+    // Additional fields that exist in the table
+    difficulty_level: {
+      type: DataTypes.ENUM('beginner', 'intermediate', 'advanced'),
+      defaultValue: 'beginner',
+      allowNull: false
     },
-    free_tests_count: {
+    free_test_count: {
       type: DataTypes.INTEGER,
       defaultValue: 0,
-      allowNull: false,
-      comment: 'Number of free tests in paid series'
+      allowNull: false
     },
-    requires_subscription: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-      comment: 'Whether series requires subscription to access'
-    },
-    negative_marking_enabled: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-      comment: 'Whether negative marking is enabled for this series'
-    },
-    negative_marking_value: {
-      type: DataTypes.DECIMAL(3, 2),
-      defaultValue: 0.25,
-      allowNull: true,
-      comment: 'Negative marking value (e.g., 0.25, 0.20, 0.33)'
-    },
-    one_time_completion: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-      comment: 'Whether tests can be taken only once'
-    },
-    max_attempts: {
+    max_attempts_per_test: {
       type: DataTypes.INTEGER,
       defaultValue: 1,
-      allowNull: false,
-      comment: 'Maximum attempts allowed per test'
+      allowNull: false
     },
-    auto_submit_on_expire: {
+    has_negative_marking: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    negative_marks: {
+      type: DataTypes.DECIMAL(3, 2),
+      defaultValue: 0.25,
+      allowNull: true
+    },
+    supports_pause_resume: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
-      allowNull: false,
-      comment: 'Auto submit test when time expires'
+      allowNull: false
+    },
+    supports_multilanguage: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false
     }
   }, {
     tableName: 'new_test_series',

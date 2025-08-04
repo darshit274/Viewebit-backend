@@ -119,7 +119,7 @@ exports.triggerNewContentNotification = async (req, res, next) => {
                 }
                 result = await NotificationTriggers.onNewTestSeriesCreated({
                     uuid: testSeries.uuid,
-                    title: testSeries.title,
+                    title: testSeries.name,
                     description: testSeries.description,
                     category: testSeries.category,
                     total_tests: testSeries.total_tests,

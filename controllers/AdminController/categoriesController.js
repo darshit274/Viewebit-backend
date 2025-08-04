@@ -40,6 +40,7 @@ exports.getCategories = async (req, res, next) => {
             }
         });
     } catch (error) {
+        console.error('Get categories error:', error);
         next(new ErrorHandler('Error fetching categories', 500));
     }
 };
@@ -67,7 +68,16 @@ exports.getCategoryById = async (req, res, next) => {
 // Create new category
 exports.createCategory = async (req, res, next) => {
     try {
-        const { name, type = 'topic_wise', description, is_active = true } = req.body;
+        const { 
+            name, 
+            name_gujarati,
+            description, 
+            description_gujarati,
+            hierarchy_level = 0,
+            parent_id = null,
+            display_order = 0,
+            is_active = true 
+        } = req.body;
 
         if (!name) {
             return next(new ErrorHandler('Category name is required', 400));
@@ -75,8 +85,12 @@ exports.createCategory = async (req, res, next) => {
 
         const category = await ExamCategory.create({
             name,
-            type,
+            name_gujarati,
             description,
+            description_gujarati,
+            hierarchy_level,
+            parent_id,
+            display_order,
             is_active
         });
 
@@ -86,6 +100,7 @@ exports.createCategory = async (req, res, next) => {
             data: category
         });
     } catch (error) {
+        console.error('Create category error:', error);
         if (error.name === 'SequelizeUniqueConstraintError') {
             return next(new ErrorHandler('Category name already exists', 400));
         }
@@ -171,7 +186,7 @@ exports.getCategoryStats = async (req, res, next) => {
             where: { is_active: true }
         });
         const parentCategories = await ExamCategory.count({
-            where: { type: 'exam_wise' }
+            where: { parent_id: null }
         });
 
         res.status(200).json({
@@ -180,10 +195,11 @@ exports.getCategoryStats = async (req, res, next) => {
                 total_categories: totalCategories,
                 active_categories: activeCategories,
                 parent_categories: parentCategories,
-                total_items: 0 // This would need to be calculated based on related test series
+                inactive_categories: totalCategories - activeCategories
             }
         });
     } catch (error) {
+        console.error('Get category stats error:', error);
         next(new ErrorHandler('Error fetching category statistics', 500));
     }
 };
@@ -193,8 +209,8 @@ exports.getCategoriesForDropdown = async (req, res, next) => {
     try {
         const categories = await ExamCategory.findAll({
             where: { is_active: true },
-            attributes: ['id', 'name', 'type'],
-            order: [['name', 'ASC']]
+            attributes: ['id', 'name', 'hierarchy_level', 'parent_id'],
+            order: [['hierarchy_level', 'ASC'], ['name', 'ASC']]
         });
 
         res.status(200).json({
@@ -202,6 +218,7 @@ exports.getCategoriesForDropdown = async (req, res, next) => {
             data: categories
         });
     } catch (error) {
+        console.error('Get categories dropdown error:', error);
         next(new ErrorHandler('Error fetching categories for dropdown', 500));
     }
 };

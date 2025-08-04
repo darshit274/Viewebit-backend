@@ -126,7 +126,15 @@ class TestManagementController {
         subscription_duration_days,
         features,
         discount_percentage,
-        is_featured
+        is_featured,
+        is_free,
+        free_tests_count,
+        requires_subscription,
+        negative_marking_enabled,
+        negative_marking_value,
+        one_time_completion,
+        max_attempts,
+        auto_submit_on_expire
       } = req.body;
 
       const testSeries = await TestSeries.create({
@@ -140,9 +148,17 @@ class TestManagementController {
         currency: currency || 'INR',
         demo_tests_count: demo_tests_count || 0,
         subscription_duration_days: subscription_duration_days || 365,
-        features: features || null,
+        features: features || [],
         discount_percentage: discount_percentage || 0.00,
-        is_featured: is_featured || false
+        is_featured: is_featured || false,
+        // Additional fields that match the existing table structure
+        difficulty_level: 'beginner', // Required field
+        free_test_count: free_tests_count || 0, // Use existing field name
+        max_attempts_per_test: max_attempts || 1, // Use existing field name
+        has_negative_marking: negative_marking_enabled || false, // Use existing field name
+        negative_marks: negative_marking_value || 0.25, // Use existing field name
+        supports_pause_resume: true,
+        supports_multilanguage: true
       });
 
       // Transform response to match frontend expectations
@@ -164,6 +180,14 @@ class TestManagementController {
           features: testSeries.features,
           discount_percentage: testSeries.discount_percentage,
           is_featured: testSeries.is_featured,
+          is_free: testSeries.is_free,
+          free_tests_count: testSeries.free_tests_count,
+          requires_subscription: testSeries.requires_subscription,
+          negative_marking_enabled: testSeries.negative_marking_enabled,
+          negative_marking_value: testSeries.negative_marking_value,
+          one_time_completion: testSeries.one_time_completion,
+          max_attempts: testSeries.max_attempts,
+          auto_submit_on_expire: testSeries.auto_submit_on_expire,
           created_at: testSeries.created_at,
           updated_at: testSeries.updated_at
         },
@@ -171,10 +195,25 @@ class TestManagementController {
       });
     } catch (error) {
       console.error('Error creating test series:', error);
-      res.status(500).json({
+      console.error('Error stack:', error.stack);
+      console.error('Request body:', req.body);
+      
+      // More detailed error response
+      const errorResponse = {
         success: false,
         message: 'Failed to create test series'
-      });
+      };
+      
+      if (process.env.NODE_ENV === 'development' || true) { // Always show error in dev
+        errorResponse.error = error.message;
+        errorResponse.details = error.errors ? error.errors.map(e => ({
+          field: e.path,
+          message: e.message,
+          type: e.type
+        })) : undefined;
+      }
+      
+      res.status(500).json(errorResponse);
     }
   }
 
