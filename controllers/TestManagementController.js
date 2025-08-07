@@ -295,7 +295,6 @@ class TestManagementController {
       } = req.body;
 
       const testSeries = await TestSeries.findOne({ 
-        attributes: ['id', 'uuid', 'name', 'description', 'is_active'],
         where: { uuid } 
       });
       if (!testSeries) {
@@ -325,9 +324,30 @@ class TestManagementController {
 
       await testSeries.update(updateData);
 
+      // Return the updated test series with proper field mapping
+      const updatedData = {
+        id: testSeries.id,
+        uuid: testSeries.uuid,
+        title: testSeries.name,
+        title_gujarati: testSeries.name_gujarati,
+        description: testSeries.description,
+        description_gujarati: testSeries.description_gujarati,
+        is_active: testSeries.is_active,
+        pricing_type: testSeries.pricing_type,
+        price: testSeries.price,
+        currency: testSeries.currency,
+        demo_tests_count: testSeries.demo_tests_count,
+        subscription_duration_days: testSeries.subscription_duration_days,
+        features: testSeries.features,
+        discount_percentage: testSeries.discount_percentage,
+        is_featured: testSeries.is_featured,
+        created_at: testSeries.created_at,
+        updated_at: testSeries.updated_at
+      };
+
       res.json({
         success: true,
-        data: testSeries,
+        data: updatedData,
         message: 'Test series updated successfully'
       });
     } catch (error) {

@@ -236,7 +236,7 @@ exports.getStudents = async (req, res, next) => {
 
         const { count, rows } = await User.findAndCountAll({
             where: whereClause,
-            attributes: ['uuid', 'username', 'email', 'phone', 'profileImage', 'created_at'],
+            attributes: ['uuid', 'username', 'email', 'phone', 'profileImage', 'isEmailVerified', 'isActive', 'created_at'],
             limit,
             offset,
             order: [[sortBy, sortOrder]]
@@ -288,7 +288,7 @@ exports.getStudentById = async (req, res, next) => {
 exports.updateStudent = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { username, email, phone } = req.body;
+        const { username, email, phone, isEmailVerified } = req.body;
 
         const student = await User.findOne({ where: { uuid: id } });
         if (!student) {
@@ -325,7 +325,8 @@ exports.updateStudent = async (req, res, next) => {
         await student.update({
             ...(username && { username }),
             ...(email && { email }),
-            ...(phone !== undefined && { phone })
+            ...(phone !== undefined && { phone }),
+            ...(isEmailVerified !== undefined && { isEmailVerified })
         });
 
         res.status(200).json({
@@ -336,6 +337,8 @@ exports.updateStudent = async (req, res, next) => {
                 username: student.username,
                 email: student.email,
                 phone: student.phone,
+                isEmailVerified: student.isEmailVerified,
+                isActive: student.isActive,
                 created_at: student.created_at
             }
         });
@@ -760,12 +763,13 @@ exports.verifyUser = async (req, res, next) => {
             return next(new ErrorHandler('User not found', 404));
         }
 
-        user.isEmailVerified = true;
+        // Toggle verification status
+        user.isEmailVerified = !user.isEmailVerified;
         await user.save();
 
         res.status(200).json({
             success: true,
-            message: 'User verified successfully',
+            message: `User ${user.isEmailVerified ? 'verified' : 'unverified'} successfully`,
             data: user
         });
     } catch (err) {

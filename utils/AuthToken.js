@@ -85,6 +85,11 @@ exports.optionalAuth = async (req, res, next) => {
   }
 };
 
+// Helper method to verify token without middleware wrapper
+exports.verifyToken = (token) => {
+  return jwt.verify(token, process.env.JWT_SECRET);
+};
+
 // Admin authorization middleware
 exports.isAdmin = async (req, res, next) => {
   try {
