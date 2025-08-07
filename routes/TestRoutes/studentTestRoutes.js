@@ -58,10 +58,13 @@ const checkTestAccess = async (req, res, next) => {
       where: { uuid: req.params.uuid, is_active: true },
       include: [{
         model: SubCategory,
+        as: 'subCategory',
         include: [{
           model: Category,
+          as: 'category',
           include: [{
-            model: TestSeries
+            model: TestSeries,
+            as: 'testSeries'
           }]
         }]
       }]
@@ -71,7 +74,7 @@ const checkTestAccess = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Test not found' });
     }
 
-    const testSeries = test.SubCategory.Category.TestSeries;
+    const testSeries = test.subCategory.category.testSeries;
     
     // If it's a free test series, allow access
     if (testSeries.pricing_type === 'free' || testSeries.is_free) {
@@ -197,8 +200,10 @@ router.get('/test-series', optionalAuth, async (req, res) => {
         const tests_count = await Test.count({
           include: [{
             model: SubCategory,
+            as: 'subCategory',
             include: [{
               model: Category,
+              as: 'category',
               where: { test_series_id: series.id }
             }]
           }]
@@ -272,8 +277,10 @@ router.get('/test-series/:uuid', optionalAuth, async (req, res) => {
     const tests_count = await Test.count({
       include: [{
         model: SubCategory,
+        as: 'subCategory',
         include: [{
           model: Category,
+          as: 'category',
           where: { test_series_id: testSeries.id }
         }]
       }]
@@ -292,6 +299,289 @@ router.get('/test-series/:uuid', optionalAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch test series',
+      error: error.message
+    });
+  }
+});
+
+// Get single test series by ID (for mobile app compatibility)
+router.get('/test-series/by-id/:id', optionalAuth, async (req, res) => {
+  try {
+    const testSeries = await TestSeries.findOne({
+      where: { id: req.params.id, is_active: true }
+    });
+
+    if (!testSeries) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test series not found'
+      });
+    }
+
+    // Add counts
+    const categories_count = await Category.count({
+      where: { test_series_id: testSeries.id, is_active: true }
+    });
+
+    const tests_count = await Test.count({
+      include: [{
+        model: SubCategory,
+        as: 'subCategory',
+        include: [{
+          model: Category,
+          as: 'category',
+          where: { test_series_id: testSeries.id }
+        }]
+      }]
+    });
+
+    // Check subscription status if user is authenticated
+    let is_subscribed = false;
+    if (req.user && testSeries.pricing_type === 'paid') {
+      const subscription = await Subscription.findOne({
+        where: {
+          user_id: req.user.uuid,
+          test_series_id: testSeries.id,
+          status: 'completed',
+          [sequelize.Op.or]: [
+            { expiry_date: null },
+            { expiry_date: { [sequelize.Op.gt]: new Date() } }
+          ]
+        }
+      });
+      is_subscribed = !!subscription;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...testSeries.toJSON(),
+        categories_count,
+        tests_count,
+        is_subscribed
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching test series by ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch test series',
+      error: error.message
+    });
+  }
+});
+
+// Get all tests for a test series by ID (for mobile app compatibility)
+router.get('/test-series/by-id/:id/tests', optionalAuth, async (req, res) => {
+  try {
+    const testSeries = await TestSeries.findOne({
+      where: { id: req.params.id, is_active: true }
+    });
+
+    if (!testSeries) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test series not found'
+      });
+    }
+
+    // Get all tests in this test series through the hierarchy
+    const tests = await Test.findAll({
+      include: [{
+        model: SubCategory,
+        as: 'subCategory',
+        include: [{
+          model: Category,
+          as: 'category',
+          where: { test_series_id: testSeries.id }
+        }]
+      }],
+      where: { is_active: true },
+      order: [['created_at', 'ASC']]
+    });
+
+    // Add metadata and user-specific information
+    const testsWithMeta = await Promise.all(
+      tests.map(async (test) => {
+        const questions_count = await Question.count({
+          where: { test_id: test.id, is_active: true }
+        });
+
+        let user_attempts = 0;
+        let best_score = null;
+        if (req.user) {
+          const completedSessions = await TestSession.findAll({
+            where: { 
+              user_id: req.user.id,
+              test_id: test.id,
+              status: 'completed'
+            }
+          });
+          user_attempts = completedSessions.length;
+          
+          // Calculate best score if there are attempts
+          if (completedSessions.length > 0) {
+            // This would need actual score calculation logic
+            // For now, just use a placeholder
+            best_score = 85; // Placeholder
+          }
+        }
+
+        // Check if test is locked based on test series subscription
+        let is_locked = false;
+        if (testSeries.pricing_type === 'paid' && req.user) {
+          const subscription = await Subscription.findOne({
+            where: {
+              user_id: req.user.uuid,
+              test_series_id: testSeries.id,
+              status: 'completed',
+              [sequelize.Op.or]: [
+                { expiry_date: null },
+                { expiry_date: { [sequelize.Op.gt]: new Date() } }
+              ]
+            }
+          });
+          is_locked = !subscription && !test.is_free;
+        }
+
+        return {
+          id: test.id,
+          uuid: test.uuid,
+          title: test.title,
+          description: test.description,
+          duration: test.duration_minutes,
+          total_questions: questions_count,
+          marks_per_question: test.marks_per_question || 1,
+          negative_marks: test.negative_marks || 0,
+          difficulty: test.difficulty_level,
+          is_free: test.is_free || false,
+          is_active: test.is_active,
+          user_attempts: user_attempts,
+          best_score: best_score,
+          is_locked: is_locked,
+          category: test.subCategory?.category?.name || 'General',
+          sub_category: test.subCategory?.name || 'General'
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: testsWithMeta
+    });
+  } catch (error) {
+    console.error('Error fetching tests for test series by ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch tests',
+      error: error.message
+    });
+  }
+});
+
+// Get all tests for a test series (flattened structure)
+router.get('/test-series/:uuid/tests', optionalAuth, async (req, res) => {
+  try {
+    const testSeries = await TestSeries.findOne({
+      where: { uuid: req.params.uuid, is_active: true }
+    });
+
+    if (!testSeries) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test series not found'
+      });
+    }
+
+    // Get all tests in this test series through the hierarchy
+    const tests = await Test.findAll({
+      include: [{
+        model: SubCategory,
+        as: 'subCategory',
+        include: [{
+          model: Category,
+          as: 'category',
+          where: { test_series_id: testSeries.id }
+        }]
+      }],
+      where: { is_active: true },
+      order: [['created_at', 'ASC']]
+    });
+
+    // Add metadata and user-specific information
+    const testsWithMeta = await Promise.all(
+      tests.map(async (test) => {
+        const questions_count = await Question.count({
+          where: { test_id: test.id, is_active: true }
+        });
+
+        let user_attempts = 0;
+        let best_score = null;
+        if (req.user) {
+          const completedSessions = await TestSession.findAll({
+            where: { 
+              user_id: req.user.id,
+              test_id: test.id,
+              status: 'completed'
+            }
+          });
+          user_attempts = completedSessions.length;
+          
+          // Calculate best score if there are attempts
+          if (completedSessions.length > 0) {
+            // This would need actual score calculation logic
+            // For now, just use a placeholder
+            best_score = 85; // Placeholder
+          }
+        }
+
+        // Check if test is locked based on test series subscription
+        let is_locked = false;
+        if (testSeries.pricing_type === 'paid' && req.user) {
+          const subscription = await Subscription.findOne({
+            where: {
+              user_id: req.user.uuid,
+              test_series_id: testSeries.id,
+              status: 'completed',
+              [sequelize.Op.or]: [
+                { expiry_date: null },
+                { expiry_date: { [sequelize.Op.gt]: new Date() } }
+              ]
+            }
+          });
+          is_locked = !subscription && !test.is_free;
+        }
+
+        return {
+          id: test.id,
+          uuid: test.uuid,
+          title: test.title,
+          description: test.description,
+          duration: test.duration_minutes,
+          total_questions: questions_count,
+          marks_per_question: test.marks_per_question || 1,
+          negative_marks: test.negative_marks || 0,
+          difficulty: test.difficulty_level,
+          is_free: test.is_free || false,
+          is_active: test.is_active,
+          user_attempts: user_attempts,
+          best_score: best_score,
+          is_locked: is_locked,
+          category: test.subCategory?.category?.name || 'General',
+          sub_category: test.subCategory?.name || 'General'
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: testsWithMeta
+    });
+  } catch (error) {
+    console.error('Error fetching tests for test series:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch tests',
       error: error.message
     });
   }
@@ -329,6 +619,7 @@ router.get('/test-series/:uuid/categories', optionalAuth, async (req, res) => {
         const tests_count = await Test.count({
           include: [{
             model: SubCategory,
+            as: 'subCategory',
             where: { category_id: category.id }
           }]
         });
@@ -747,6 +1038,280 @@ router.post('/tests/:uuid/start', requireAuth, checkTestAccess, async (req, res)
     res.status(500).json({
       success: false,
       message: 'Failed to start test session',
+      error: error.message
+    });
+  }
+});
+
+// Save answer for a test session
+router.post('/test-sessions/:sessionUuid/answers', requireAuth, async (req, res) => {
+  try {
+    const { sessionUuid } = req.params;
+    const { question_id, selected_option, time_spent, is_flagged } = req.body;
+
+    // Find the session and verify it belongs to the user
+    const session = await TestSession.findOne({
+      where: {
+        uuid: sessionUuid,
+        user_id: req.user.id,
+        status: ['in_progress', 'paused']
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test session not found or inactive'
+      });
+    }
+
+    // Create or update user answer
+    const [userAnswer] = await UserAnswer.findOrCreate({
+      where: {
+        session_id: session.id,
+        question_id: question_id
+      },
+      defaults: {
+        user_id: req.user.id,
+        session_id: session.id,
+        question_id: question_id,
+        selected_option: selected_option,
+        time_spent: time_spent || 0,
+        is_flagged: is_flagged || false
+      }
+    });
+
+    // If already exists, update it
+    if (userAnswer) {
+      await userAnswer.update({
+        selected_option: selected_option,
+        time_spent: time_spent || 0,
+        is_flagged: is_flagged || false
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Answer saved successfully'
+    });
+  } catch (error) {
+    console.error('Error saving answer:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to save answer',
+      error: error.message
+    });
+  }
+});
+
+// Pause test session
+router.post('/test-sessions/:sessionUuid/pause', requireAuth, async (req, res) => {
+  try {
+    const { sessionUuid } = req.params;
+
+    const session = await TestSession.findOne({
+      where: {
+        uuid: sessionUuid,
+        user_id: req.user.id,
+        status: 'in_progress'
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: 'Active test session not found'
+      });
+    }
+
+    await session.update({
+      status: 'paused',
+      updated_at: new Date()
+    });
+
+    res.json({
+      success: true,
+      data: {
+        status: 'paused',
+        time_remaining: session.time_remaining,
+        paused_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error pausing test session:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to pause test session',
+      error: error.message
+    });
+  }
+});
+
+// Resume test session
+router.post('/test-sessions/:sessionUuid/resume', requireAuth, async (req, res) => {
+  try {
+    const { sessionUuid } = req.params;
+
+    const session = await TestSession.findOne({
+      where: {
+        uuid: sessionUuid,
+        user_id: req.user.id,
+        status: 'paused'
+      }
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: 'Paused test session not found'
+      });
+    }
+
+    await session.update({
+      status: 'in_progress',
+      updated_at: new Date()
+    });
+
+    res.json({
+      success: true,
+      data: {
+        status: 'in_progress',
+        time_remaining: session.time_remaining,
+        resumed_at: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    console.error('Error resuming test session:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resume test session',
+      error: error.message
+    });
+  }
+});
+
+// Submit test session
+router.post('/test-sessions/:sessionUuid/submit', requireAuth, async (req, res) => {
+  try {
+    const { sessionUuid } = req.params;
+    const { answers, submitted_at, time_taken } = req.body;
+
+    const session = await TestSession.findOne({
+      where: {
+        uuid: sessionUuid,
+        user_id: req.user.id,
+        status: ['in_progress', 'paused']
+      },
+      include: [{
+        model: Test,
+        as: 'test',
+        include: [{
+          model: SubCategory,
+          as: 'subCategory',
+          include: [{
+            model: Category,
+            as: 'category',
+            include: [{
+              model: TestSeries,
+              as: 'testSeries'
+            }]
+          }]
+        }]
+      }]
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test session not found or already submitted'
+      });
+    }
+
+    const test = session.test;
+    
+    // Save all answers
+    for (const answer of answers) {
+      await UserAnswer.findOrCreate({
+        where: {
+          session_id: session.id,
+          question_id: answer.question_id
+        },
+        defaults: {
+          user_id: req.user.id,
+          session_id: session.id,
+          question_id: answer.question_id,
+          selected_option: answer.selected_option,
+          time_spent: answer.time_spent || 0,
+          is_flagged: answer.is_flagged || false
+        }
+      });
+    }
+
+    // Get all questions for this test to calculate results
+    const questions = await Question.findAll({
+      where: { test_id: test.id, is_active: true },
+      attributes: ['id', 'correct_answer', 'marks']
+    });
+
+    // Get user's answers
+    const userAnswers = await UserAnswer.findAll({
+      where: { session_id: session.id }
+    });
+
+    // Calculate results
+    let totalScore = 0;
+    let correctAnswers = 0;
+    let wrongAnswers = 0;
+    let unanswered = 0;
+
+    questions.forEach(question => {
+      const userAnswer = userAnswers.find(ua => ua.question_id === question.id);
+      
+      if (!userAnswer || !userAnswer.selected_option) {
+        unanswered++;
+      } else if (userAnswer.selected_option === question.correct_answer) {
+        correctAnswers++;
+        totalScore += question.marks;
+      } else {
+        wrongAnswers++;
+        // Apply negative marking if configured
+        if (test.negative_marking) {
+          totalScore -= (question.marks * test.negative_marks_percentage / 100);
+        }
+      }
+    });
+
+    const totalQuestions = questions.length;
+    const maxPossibleScore = questions.reduce((sum, q) => sum + q.marks, 0);
+    const percentage = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
+    const passed = percentage >= test.passing_marks;
+
+    // Update session
+    await session.update({
+      status: 'completed',
+      end_time: new Date(submitted_at),
+      total_time_spent: time_taken,
+      updated_at: new Date()
+    });
+
+    res.json({
+      success: true,
+      data: {
+        session_id: sessionUuid,
+        total_score: Math.max(0, totalScore), // Don't allow negative scores
+        correct_answers: correctAnswers,
+        wrong_answers: wrongAnswers,
+        unanswered: unanswered,
+        percentage: Math.round(percentage * 100) / 100,
+        passed: passed,
+        time_taken: time_taken
+      }
+    });
+  } catch (error) {
+    console.error('Error submitting test session:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit test session',
       error: error.message
     });
   }
