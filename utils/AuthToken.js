@@ -26,11 +26,24 @@ exports.authToken = async (req, res, next) => {
     // Verify token using the same secret as auth controller
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Add user info to request object
+    // Get the user from database to ensure complete user data
+    const { User } = require('../models');
+    const user = await User.findOne({ where: { uuid: decoded.id } });
+    
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not found. Please login again.' 
+      });
+    }
+
+    // Add complete user info to request object
     req.user = {
-      id: decoded.id,
-      email: decoded.email,
-      uuid: decoded.id // decoded.id contains the uuid from login payload
+      id: user.id,         // Database primary key
+      uuid: user.uuid,     // User UUID for foreign key relations
+      email: user.email,
+      username: user.username,
+      isEmailVerified: user.isEmailVerified
     };
     
     next();
@@ -70,11 +83,18 @@ exports.optionalAuth = async (req, res, next) => {
       
       if (token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = {
-          id: decoded.id,
-          email: decoded.email,
-          uuid: decoded.id // decoded.id contains the uuid from login payload
-        };
+        const { User } = require('../models');
+        const user = await User.findOne({ where: { uuid: decoded.id } });
+        
+        if (user) {
+          req.user = {
+            id: user.id,         // Database primary key
+            uuid: user.uuid,     // User UUID for foreign key relations
+            email: user.email,
+            username: user.username,
+            isEmailVerified: user.isEmailVerified
+          };
+        }
       }
     }
     

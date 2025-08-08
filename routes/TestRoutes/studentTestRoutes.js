@@ -23,7 +23,11 @@ const optionalAuth = async (req, res, next) => {
       const decoded = AuthToken.verifyToken(token);
       const user = await User.findOne({ where: { uuid: decoded.id } });
       if (user) {
-        req.user = user;
+        req.user = {
+          ...user.toJSON(),
+          id: user.id,       // Database primary key
+          uuid: user.uuid    // User UUID for foreign key relations
+        };
       }
     }
     next();
@@ -52,7 +56,13 @@ const requireAuth = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'User not found' });
     }
 
-    req.user = user;
+    // Set consistent user properties for database queries
+    req.user = {
+      ...user.toJSON(),
+      id: user.id,       // Database primary key
+      uuid: user.uuid    // User UUID for foreign key relations
+    };
+    console.log('✅ Auth Debug - User authenticated:', { id: req.user.id, uuid: req.user.uuid });
     next();
   } catch (error) {
     console.log('❌ Auth Debug - Error:', error.message);
