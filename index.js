@@ -13,8 +13,28 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Configure CORS with more specific options
+app.use(cors({
+}));
+// Trust proxy for devtunnels/ngrok
+app.set('trust proxy', true);
+
+// Request logging middleware for debugging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.get('origin') || 'No origin'}`);
+  if (req.path.includes('/api/profile')) {
+    console.log('Headers:', req.headers);
+  }
+  next();
+});
+
+// Parse JSON bodies
 app.use(express.json());
+
+// Serve static files
+app.use('/uploads', express.static('uploads'));
+
+// API routes
 app.use('/api', router);
 
 app.get('/', (req, res) => {

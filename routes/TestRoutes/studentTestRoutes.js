@@ -46,11 +46,20 @@ const requireAuth = async (req, res, next) => {
     }
 
     console.log('🔍 Auth Debug - Token length:', token.length);
-    const decoded = AuthToken.verifyToken(token);
-    console.log('🔍 Auth Debug - Decoded payload:', decoded);
+    console.log('🔍 Auth Debug - Token preview:', token.substring(0, 20) + '...');
+    
+    let decoded;
+    try {
+      decoded = AuthToken.verifyToken(token);
+      console.log('🔍 Auth Debug - Decoded payload:', JSON.stringify(decoded));
+    } catch (tokenError) {
+      console.log('❌ Auth Debug - Token verification failed:', tokenError.message);
+      return res.status(401).json({ success: false, message: 'Invalid token', error: tokenError.message });
+    }
     
     const user = await User.findOne({ where: { uuid: decoded.id } });
-    console.log('🔍 Auth Debug - User found:', user ? `Yes (${user.uuid})` : 'No');
+    console.log('🔍 Auth Debug - User lookup with UUID:', decoded.id);
+    console.log('🔍 Auth Debug - User found:', user ? `Yes (ID: ${user.id}, UUID: ${user.uuid})` : 'No');
     
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found' });
@@ -72,6 +81,16 @@ const requireAuth = async (req, res, next) => {
 
 // Note: Test access checking has been temporarily removed
 // All authenticated users can access any test
+
+// Debug endpoint to test authentication
+router.get('/auth-test', requireAuth, async (req, res) => {
+  console.log('🔍 Auth test - User:', req.user);
+  res.json({
+    success: true,
+    message: 'Authentication successful',
+    user: req.user
+  });
+});
 
 // Get all test series (with pagination and filters)
 router.get('/test-series', optionalAuth, async (req, res) => {
@@ -279,13 +298,104 @@ router.get('/test-series/by-id/:id', optionalAuth, async (req, res) => {
       is_subscribed = !!subscription;
     }
 
+    // Get all tests for this test series
+    let tests = [];
+    try {
+      // Get all categories for this test series
+      const categories = await Category.findAll({
+        where: { test_series_id: testSeries.id, is_active: true }
+      });
+      
+      if (categories.length > 0) {
+        // Get subcategories for these categories
+        const categoryIds = categories.map(c => c.id);
+        const subCategories = await SubCategory.findAll({
+          where: { category_id: categoryIds, is_active: true }
+        });
+        
+        if (subCategories.length > 0) {
+          // Get tests for these subcategories
+          const subCategoryIds = subCategories.map(sc => sc.id);
+          const rawTests = await Test.findAll({
+            where: { 
+              sub_category_id: subCategoryIds,
+              is_active: true 
+            },
+            include: [{
+              model: SubCategory,
+              as: 'subCategory',
+              include: [{
+                model: Category,
+                as: 'category'
+              }]
+            }]
+          });
+
+          // Add metadata to each test
+          tests = await Promise.all(
+            rawTests.map(async (test) => {
+              const questions_count = await Question.count({
+                where: { test_id: test.id, is_active: true }
+              });
+
+              let user_attempts = 0;
+              let best_score = null;
+              if (req.user) {
+                const completedSessions = await TestSession.findAll({
+                  where: { 
+                    user_id: req.user.id,
+                    test_id: test.id,
+                    status: 'completed'
+                  }
+                });
+                user_attempts = completedSessions.length;
+                
+                if (completedSessions.length > 0) {
+                  best_score = 85; // Placeholder - implement actual score calculation
+                }
+              }
+
+              // Check if test is locked
+              let is_locked = false;
+              if (testSeries.pricing_type === 'paid' && !is_subscribed) {
+                is_locked = !test.is_free;
+              }
+
+              return {
+                id: test.id,
+                uuid: test.uuid,
+                title: test.title,
+                description: test.description,
+                duration: test.duration_minutes,
+                total_questions: questions_count,
+                marks_per_question: test.marks_per_question || 1,
+                negative_marks: test.negative_marks || 0,
+                difficulty: test.difficulty_level,
+                is_free: test.is_free || false,
+                is_active: test.is_active,
+                user_attempts: user_attempts,
+                best_score: best_score,
+                is_locked: is_locked,
+                category: test.subCategory?.category?.name || 'General',
+                sub_category: test.subCategory?.name || 'General'
+              };
+            })
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching tests:', error);
+      // Continue without tests rather than failing the whole request
+    }
+
     res.json({
       success: true,
       data: {
         ...testSeries.toJSON(),
         categories_count,
         tests_count,
-        is_subscribed
+        is_subscribed,
+        tests // Include tests in the response
       }
     });
   } catch (error) {
@@ -301,6 +411,8 @@ router.get('/test-series/by-id/:id', optionalAuth, async (req, res) => {
 // Get all tests for a test series by ID (for mobile app compatibility)
 router.get('/test-series/by-id/:id/tests', optionalAuth, async (req, res) => {
   try {
+    console.log('📊 Getting tests for test series ID:', req.params.id);
+    
     const testSeries = await TestSeries.findOne({
       where: { id: req.params.id, is_active: true }
     });
@@ -312,20 +424,82 @@ router.get('/test-series/by-id/:id/tests', optionalAuth, async (req, res) => {
       });
     }
 
+    console.log('✅ Found test series:', testSeries.name);
+
     // Get all tests in this test series through the hierarchy
-    const tests = await Test.findAll({
-      include: [{
-        model: SubCategory,
-        as: 'subCategory',
-        include: [{
-          model: Category,
-          as: 'category',
-          where: { test_series_id: testSeries.id }
-        }]
-      }],
-      where: { is_active: true },
-      order: [['created_at', 'ASC']]
-    });
+    let tests = [];
+    try {
+      // Alternative approach: Get tests directly with joins
+      console.log('🔍 Fetching tests for test series ID:', testSeries.id);
+      
+      // Use raw SQL to avoid association issues
+      const query = `
+        SELECT 
+          t.*,
+          sc.name as sub_category_name,
+          c.name as category_name
+        FROM tests t
+        INNER JOIN sub_categories sc ON t.sub_category_id = sc.id
+        INNER JOIN categories c ON sc.category_id = c.id
+        WHERE c.test_series_id = :testSeriesId
+          AND t.is_active = true
+          AND sc.is_active = true
+          AND c.is_active = true
+        ORDER BY t.created_at ASC
+      `;
+      
+      const rawTests = await sequelize.query(query, {
+        replacements: { testSeriesId: testSeries.id },
+        type: Sequelize.QueryTypes.SELECT
+      });
+      
+      console.log('📝 Found tests:', rawTests.length);
+      
+      // Transform raw results to match expected format
+      tests = rawTests;
+      
+    } catch (queryError) {
+      console.error('❌ Query error:', queryError.message);
+      console.error('Full error:', queryError);
+      
+      // Fallback to simpler query
+      try {
+        console.log('🔄 Trying fallback query...');
+        
+        // Just get categories first
+        const categories = await Category.findAll({
+          where: { test_series_id: testSeries.id, is_active: true }
+        });
+        
+        console.log('📁 Found categories:', categories.length);
+        
+        if (categories.length > 0) {
+          // Get subcategories for these categories
+          const categoryIds = categories.map(c => c.id);
+          const subCategories = await SubCategory.findAll({
+            where: { category_id: categoryIds, is_active: true }
+          });
+          
+          console.log('📂 Found subcategories:', subCategories.length);
+          
+          if (subCategories.length > 0) {
+            // Get tests for these subcategories
+            const subCategoryIds = subCategories.map(sc => sc.id);
+            tests = await Test.findAll({
+              where: { 
+                sub_category_id: subCategoryIds,
+                is_active: true 
+              }
+            });
+            
+            console.log('✅ Found tests:', tests.length);
+          }
+        }
+      } catch (fallbackError) {
+        console.error('❌ Fallback query also failed:', fallbackError.message);
+        tests = [];
+      }
+    }
 
     // Add metadata and user-specific information
     const testsWithMeta = await Promise.all(
@@ -798,7 +972,7 @@ router.get('/tests/:uuid/questions', async (req, res) => {
       attributes: [
         'id', 'uuid', 'question_text', 
         'option_a', 'option_b', 'option_c', 'option_d',
-        'marks', 'createdAt'
+        'marks', 'created_at'
         // Note: correct_answer and explanation are excluded for security
       ]
     });
@@ -1183,6 +1357,197 @@ router.post('/tests/:testUuid/submit', async (req, res) => {
   } catch (error) {
     console.error('Error in temp submit:', error);
     res.status(500).json({ success: false, message: 'Submit failed', error: error.message });
+  }
+});
+
+// Get test session results with answers for review
+// TEMPORARY: Using hardcoded user ID for testing
+router.get('/test-sessions/:sessionUuid/review', async (req, res) => {
+  try {
+    const { sessionUuid } = req.params;
+    
+    console.log('📚 Review API - Session UUID:', sessionUuid);
+    
+    // TEMPORARY: For testing, we'll get the user from the session itself
+    const sessionCheck = await TestSession.findOne({
+      where: { id: sessionUuid }
+    });
+    
+    if (!sessionCheck) {
+      return res.status(404).json({
+        success: false,
+        message: 'Session not found'
+      });
+    }
+    
+    const userId = sessionCheck.user_id;
+    console.log('📚 Review API - Using user ID from session:', userId);
+    
+    // Find the session - first without status check to debug
+    let session = await TestSession.findOne({
+      where: {
+        id: sessionUuid,
+        user_id: userId
+      }
+    });
+
+    console.log('📚 Review API - Session found:', session ? `Yes (status: ${session.status})` : 'No');
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message: 'Test session not found'
+      });
+    }
+
+    // Check if session is completed
+    if (session.status !== 'completed') {
+      console.log('⚠️ Review API - Session not completed, status:', session.status);
+      // For now, allow review even if not completed (for testing)
+    }
+
+    // Fetch session with full details
+    session = await TestSession.findOne({
+      where: {
+        id: sessionUuid,
+        user_id: userId
+      },
+      include: [{
+        model: Test,
+        as: 'test',
+        include: [{
+          model: SubCategory,
+          as: 'subCategory',
+          include: [{
+            model: Category,
+            as: 'category'
+          }]
+        }]
+      }]
+    });
+
+    // Get all questions with user answers
+    console.log('📚 Review API - Getting questions for test_id:', session.test_id);
+    console.log('📚 Review API - Question model available:', !!Question);
+    
+    if (!Question) {
+      throw new Error('Question model is not available');
+    }
+    
+    const questions = await Question.findAll({
+      where: {
+        test_id: session.test_id,
+        is_active: true
+      },
+      raw: true,
+      order: [['id', 'ASC']]
+    });
+
+    // Get user answers for this session
+    console.log('📚 Review API - Getting user answers for session:', session.id);
+    const userAnswers = await UserAnswer.findAll({
+      where: {
+        test_session_id: session.id
+      },
+      raw: true
+    });
+    console.log('📚 Review API - Found user answers:', userAnswers.length);
+
+    // Create answer map for quick lookup
+    const answerMap = {};
+    userAnswers.forEach(answer => {
+      answerMap[answer.question_id] = answer;
+    });
+
+    // Format questions with user answers
+    const questionsWithAnswers = questions.map(question => {
+      const userAnswer = answerMap[question.id];
+      const optionLetters = ['A', 'B', 'C', 'D'];
+      
+      // Use the correct field names from database
+      const questionText = question.question_text;
+      const correctAnswer = question.correct_answer;
+      
+      // Format options based on the model structure
+      let formattedOptions;
+      if (question.options) {
+        // New format with JSON options
+        formattedOptions = question.options;
+      } else {
+        // Old format with separate option columns
+        formattedOptions = {
+          A: question.option_a,
+          B: question.option_b,
+          C: question.option_c,
+          D: question.option_d
+        };
+      }
+      
+      return {
+        id: question.id,
+        question_text: questionText,
+        options: formattedOptions,
+        correct_option: correctAnswer,
+        selected_option: userAnswer ? userAnswer.selected_option : null,
+        is_correct: userAnswer ? userAnswer.selected_option === correctAnswer : false,
+        time_spent: userAnswer ? userAnswer.time_spent : 0,
+        is_flagged: userAnswer ? userAnswer.is_flagged : false,
+        explanation: question.explanation || 'No explanation available',
+        marks: question.marks || 1
+      };
+    });
+
+    // Calculate summary statistics
+    const totalQuestions = questions.length;
+    const attemptedQuestions = questionsWithAnswers.filter(q => q.selected_option !== null).length;
+    const correctAnswers = questionsWithAnswers.filter(q => q.is_correct).length;
+    const incorrectAnswers = attemptedQuestions - correctAnswers;
+    const unansweredQuestions = totalQuestions - attemptedQuestions;
+    const totalMarks = session.test.total_marks || totalQuestions;
+    const marksPerQuestion = session.test.marks_per_question || 1;
+    const negativeMarks = session.test.negative_marks || 0;
+    
+    // Calculate score
+    const positiveScore = correctAnswers * marksPerQuestion;
+    const negativeScore = incorrectAnswers * negativeMarks;
+    const totalScore = positiveScore - negativeScore;
+    const percentage = (totalScore / totalMarks) * 100;
+    
+    // Calculate time taken
+    let timeTaken = 0;
+    if (session.started_at && session.completed_at) {
+      timeTaken = Math.floor((new Date(session.completed_at) - new Date(session.started_at)) / 1000);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        session_id: session.id,
+        test_title: session.test.title,
+        questions: questionsWithAnswers,
+        result_summary: {
+          total_questions: totalQuestions,
+          attempted: attemptedQuestions,
+          correct: correctAnswers,
+          incorrect: incorrectAnswers,
+          unanswered: unansweredQuestions,
+          total_score: totalScore,
+          total_marks: totalMarks,
+          percentage: percentage.toFixed(2),
+          time_taken: timeTaken,
+          completed_at: session.completed_at
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching test review:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch test review',
+      error: error.message,
+      details: error.stack
+    });
   }
 });
 

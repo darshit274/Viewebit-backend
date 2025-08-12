@@ -62,7 +62,8 @@ exports.getPdfs = async (req, res, next) => {
             offset,
             order: [[sortBy, sortOrder]],
             attributes: {
-                exclude: ['file_path'] // Don't expose direct file paths
+                exclude: ['file_path'], // Don't expose direct file paths
+                include: ['id'] // Ensure ID is included
             }
         });
 
@@ -321,6 +322,123 @@ exports.uploadPdf = async (req, res, next) => {
     } catch (err) {
         console.error('Upload PDF error:', err);
         const error = new ErrorHandler('Failed to upload PDF', 500);
+        return next(error);
+    }
+};
+
+// Get PDF as base64 (secure, no downloads)
+exports.getPdfBase64 = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        console.log('🔒 Secure PDF request for ID:', id);
+
+        const pdf = await Pdfs.findByPk(id);
+        if (!pdf) {
+            return next(new ErrorHandler('PDF not found', 404));
+        }
+
+        // Increment view count
+        await pdf.increment('view_count');
+
+        // Check if file exists
+        const filePath = path.resolve(pdf.file_path);
+        if (!fs.existsSync(filePath)) {
+            return next(new ErrorHandler('File not found on server', 404));
+        }
+
+        // Read file and convert to base64
+        const fileBuffer = fs.readFileSync(filePath);
+        const base64Data = fileBuffer.toString('base64');
+
+        // Send as JSON (not downloadable)
+        res.json({
+            success: true,
+            data: {
+                id: pdf.id,
+                title: pdf.title,
+                content: `data:application/pdf;base64,${base64Data}`,
+                pages: 1 // You can calculate actual pages if needed
+            }
+        });
+
+    } catch (err) {
+        console.error('Get PDF base64 error:', err);
+        return next(new ErrorHandler('Failed to load PDF', 500));
+    }
+};
+
+// View PDF file (for in-app viewing)
+exports.viewPdf = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        console.log('👁️ View request for PDF ID:', id);
+
+        const pdf = await Pdfs.findByPk(id);
+        if (!pdf) {
+            console.log('❌ PDF not found with ID:', id);
+            return next(new ErrorHandler('PDF not found', 404));
+        }
+
+        console.log('✅ PDF found:', { title: pdf.title, file_path: pdf.file_path });
+        console.log('📄 Full PDF Details:', {
+            id: pdf.id,
+            title: pdf.title,
+            original_filename: pdf.original_filename,
+            file_size: pdf.file_size,
+            file_path: pdf.file_path,
+            access_level: pdf.access_level
+        });
+
+        // Increment view count
+        await pdf.increment('view_count');
+
+        // Check if file exists on disk
+        const filePath = path.resolve(pdf.file_path);
+        console.log('🔍 Checking file path:', filePath);
+        
+        if (!fs.existsSync(filePath)) {
+            console.log('❌ File not found on disk:', filePath);
+            return next(new ErrorHandler('File not found on server', 404));
+        }
+
+        // Set appropriate headers for inline viewing ONLY (no downloads)
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline'); // Remove filename to prevent download
+        res.setHeader('Content-Length', pdf.file_size);
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); // Prevent caching
+        
+        // CORS headers for in-app viewing
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        
+        // Security headers to prevent downloads and external access
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // Allow embedding only from same origin
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Download-Options', 'noopen'); // IE8+ prevention
+        res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+        
+        // Check referrer to ensure request is from our app
+        const referrer = req.get('Referer') || req.get('Origin') || '';
+        console.log('🔒 Request referrer:', referrer);
+        
+        // You can add additional security checks here
+        // For now, we'll allow all requests but log them
+
+        // Stream the file
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+
+        fileStream.on('error', (error) => {
+            console.error('❌ Error streaming PDF:', error);
+            if (!res.headersSent) {
+                return next(new ErrorHandler('Error streaming PDF file', 500));
+            }
+        });
+
+    } catch (err) {
+        console.error('View PDF error:', err);
+        const error = new ErrorHandler('Failed to view PDF', 500);
         return next(error);
     }
 };

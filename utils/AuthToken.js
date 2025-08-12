@@ -28,7 +28,9 @@ exports.authToken = async (req, res, next) => {
     
     // Get the user from database to ensure complete user data
     const { User } = require('../models');
-    const user = await User.findOne({ where: { uuid: decoded.id } });
+    
+    // Look up user by UUID
+    const user = await User.findOne({ where: { uuid: decoded.uuid } });
     
     if (!user) {
       return res.status(401).json({ 
@@ -39,8 +41,7 @@ exports.authToken = async (req, res, next) => {
 
     // Add complete user info to request object
     req.user = {
-      id: user.id,         // Database primary key
-      uuid: user.uuid,     // User UUID for foreign key relations
+      uuid: user.uuid,     // User UUID (primary key)
       email: user.email,
       username: user.username,
       isEmailVerified: user.isEmailVerified

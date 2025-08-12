@@ -6,13 +6,8 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     static associate(models) {
-      // New test system associations
-      if (models.UserAnswer) {
-        User.hasMany(models.UserAnswer, {
-          foreignKey: 'user_id',
-          as: 'userAnswers'
-        });
-      }
+      // UserAnswer is linked through TestSession, not directly to User
+      // Removed incorrect UserAnswer association
       
       if (models.TestSession) {
         User.hasMany(models.TestSession, {
@@ -93,6 +88,34 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     phone: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    fullName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    phoneNumber: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    dateOfBirth: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    schoolName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    city: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    state: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    avatarUrl: {
       type: DataTypes.STRING,
       allowNull: true
     },

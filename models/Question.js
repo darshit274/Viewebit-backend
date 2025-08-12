@@ -19,16 +19,30 @@ module.exports = (sequelize, DataTypes) => {
     },
     
     // Question content (English - primary)
-    question: {
+    question_text: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+      field: 'question_text' // Explicitly map to database column
+    },
+    // Options as separate columns (matching database)
+    option_a: {
       type: DataTypes.TEXT,
       allowNull: false
     },
-    options: {
-      type: DataTypes.JSON,
+    option_b: {
+      type: DataTypes.TEXT,
       allowNull: false
     },
-    correct_option: {
-      type: DataTypes.STRING(1),
+    option_c: {
+      type: DataTypes.TEXT,
+      allowNull: false
+    },
+    option_d: {
+      type: DataTypes.TEXT,
+      allowNull: false
+    },
+    correct_answer: {
+      type: DataTypes.ENUM('A', 'B', 'C', 'D'),
       allowNull: false
     },
     explanation: {
@@ -36,95 +50,16 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     
-    // Question content (Gujarati)
-    question_gujarati: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
-    options_gujarati: {
-      type: DataTypes.JSON,
-      allowNull: true
-    },
-    explanation_gujarati: {
-      type: DataTypes.TEXT,
-      allowNull: true
-    },
+    // Gujarati fields removed - not in database
     
-    // Question metadata
-    subject: {
-      type: DataTypes.STRING(100),
-      allowNull: true
-    },
-    topic: {
-      type: DataTypes.STRING(100),
-      allowNull: true
-    },
-    sub_topic: {
-      type: DataTypes.STRING(100),
-      allowNull: true
-    },
-    difficulty: {
-      type: DataTypes.ENUM('easy', 'medium', 'hard', 'expert'),
-      defaultValue: 'medium'
-    },
-    
-    // Marking
+    // Basic fields that exist in database
     marks: {
       type: DataTypes.INTEGER,
       defaultValue: 1
     },
-    negative_marks: {
-      type: DataTypes.DECIMAL(3, 2),
-      defaultValue: 0
-    },
-    
-    // Media support
-    image_url: {
-      type: DataTypes.STRING(500),
-      allowNull: true
-    },
-    audio_url: {
-      type: DataTypes.STRING(500),
-      allowNull: true
-    },
-    
-    // Question behavior
-    time_limit: {
-      type: DataTypes.INTEGER
-    },
-    is_mandatory: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false
-    },
-    
-    // Display and ordering
-    display_order: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0
-    },
     is_active: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
-    },
-    
-    // Analytics (updated via triggers/jobs)
-    total_attempts: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0
-    },
-    correct_attempts: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0
-    },
-    average_time: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0
-    },
-    
-    // Admin tracking
-    created_by: {
-      type: DataTypes.INTEGER,
-      allowNull: true
     },
     
     created_at: {
@@ -150,22 +85,12 @@ module.exports = (sequelize, DataTypes) => {
       as: 'test'
     });
 
-    // Admin who created this question
-    Question.belongsTo(models.Admin, {
-      foreignKey: 'created_by',
-      as: 'creator'
-    });
+    // Removed Admin association - created_by field doesn't exist
 
     // User answers for this question
     Question.hasMany(models.UserAnswer, {
       foreignKey: 'question_id',
       as: 'userAnswers'
-    });
-
-    // Analytics
-    Question.hasMany(models.TestAnalytics, {
-      foreignKey: 'question_id',
-      as: 'analytics'
     });
   };
 

@@ -176,13 +176,7 @@ PYQ.associate = function(models) {
         });
     }
     
-    // User tracking associations - skip if models don't exist
-    if (models.UserAnswer) {
-        PYQ.hasMany(models.UserAnswer, {
-            foreignKey: 'pyq_id',
-            as: 'userAnswers'
-        });
-    }
+    // Removed UserAnswer association - pyq_id doesn't exist in user_answers table
 };
 
 return PYQ;
