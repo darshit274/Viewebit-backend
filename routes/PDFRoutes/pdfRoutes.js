@@ -13,7 +13,7 @@ router.get('/:id', pdfController.getPdfById);
 router.get('/:id/view', pdfController.viewPdf);
 
 // Secure PDF viewing - returns base64 (no downloads possible)
-router.get('/:id/secure', pdfController.getPdfBase64);
+router.get('/:id/secure', authToken, pdfController.getPdfBase64);
 
 // Protected routes (require user authentication)
 router.get('/:id/download', authToken, pdfController.getPdfDownloadUrl);
