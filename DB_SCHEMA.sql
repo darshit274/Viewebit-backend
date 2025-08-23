@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1:3306
--- Generation Time: Aug 12, 2025 at 03:04 PM
+-- Generation Time: Aug 23, 2025 at 07:00 PM
 -- Server version: 8.3.0
 -- PHP Version: 8.1.2-1ubuntu2.22
 
@@ -18,7 +18,7 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Database: `xehe123`
+-- Database: `mocktale`
 --
 
 -- --------------------------------------------------------
@@ -57,7 +57,79 @@ CREATE TABLE `categories` (
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
   `name_gujarati` varchar(255) DEFAULT NULL COMMENT 'Category name in Gujarati',
-  `description_gujarati` text COMMENT 'Category description in Gujarati'
+  `description_gujarati` text COMMENT 'Category description in Gujarati',
+  `node_type` enum('unset','container','question_holder') NOT NULL DEFAULT 'unset' COMMENT 'Type of node: unset (can become either), container (has subcategories), question_holder (has questions)',
+  `parent_category_id` int DEFAULT NULL COMMENT 'Parent category for hierarchical structure',
+  `hierarchy_level` int NOT NULL DEFAULT '0' COMMENT 'Depth level in hierarchy (0 = root, 1 = subcategory, etc.)',
+  `display_order` int NOT NULL DEFAULT '0' COMMENT 'Order for display within same parent'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `dynamic_categories`
+--
+
+CREATE TABLE `dynamic_categories` (
+  `id` int NOT NULL,
+  `uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `test_series_id` int NOT NULL,
+  `parent_category_id` int DEFAULT NULL COMMENT 'Self-referencing for hierarchy - null for root categories',
+  `name` varchar(255) NOT NULL,
+  `name_gujarati` varchar(255) DEFAULT NULL,
+  `description` text,
+  `description_gujarati` text,
+  `hierarchy_level` int NOT NULL DEFAULT '0' COMMENT '0 for root categories, 1 for level 1 subcategories, etc.',
+  `node_type` enum('container','question_holder','unset') NOT NULL DEFAULT 'unset' COMMENT 'container = has subcategories, question_holder = has questions, unset = not decided yet',
+  `has_questions` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'True if this category contains questions',
+  `has_subcategories` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'True if this category contains subcategories',
+  `questions_count` int NOT NULL DEFAULT '0' COMMENT 'Cached count of questions in this category',
+  `subcategories_count` int NOT NULL DEFAULT '0' COMMENT 'Cached count of direct subcategories',
+  `total_questions_count` int NOT NULL DEFAULT '0' COMMENT 'Cached count of all questions in this branch (recursive)',
+  `display_order` int NOT NULL DEFAULT '0' COMMENT 'Order for displaying categories at the same level',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `duration_minutes` int DEFAULT NULL COMMENT 'Test duration for this category if it becomes a question holder',
+  `total_marks` int NOT NULL DEFAULT '0',
+  `difficulty_level` enum('easy','medium','hard') NOT NULL DEFAULT 'medium',
+  `negative_marking_enabled` tinyint(1) NOT NULL DEFAULT '0',
+  `negative_marks_per_wrong` decimal(3,2) NOT NULL DEFAULT '0.25',
+  `instructions` text,
+  `instructions_gujarati` text,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `dynamic_questions`
+--
+
+CREATE TABLE `dynamic_questions` (
+  `id` int NOT NULL,
+  `uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `category_id` int NOT NULL COMMENT 'Reference to the category that contains this question',
+  `question_text` text NOT NULL,
+  `question_text_gujarati` text,
+  `option_a` text NOT NULL,
+  `option_a_gujarati` text,
+  `option_b` text NOT NULL,
+  `option_b_gujarati` text,
+  `option_c` text NOT NULL,
+  `option_c_gujarati` text,
+  `option_d` text NOT NULL,
+  `option_d_gujarati` text,
+  `correct_answer` enum('A','B','C','D') NOT NULL,
+  `explanation` text,
+  `explanation_gujarati` text,
+  `marks` int NOT NULL DEFAULT '1',
+  `difficulty_level` enum('easy','medium','hard') NOT NULL DEFAULT 'medium',
+  `subject` varchar(255) DEFAULT NULL COMMENT 'Subject area for this question',
+  `topic` varchar(255) DEFAULT NULL COMMENT 'Specific topic within subject',
+  `display_order` int NOT NULL DEFAULT '0',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -246,21 +318,15 @@ CREATE TABLE `new_tests` (
 CREATE TABLE `new_test_series` (
   `id` int NOT NULL,
   `uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
-  `name` varchar(200) NOT NULL,
-  `name_gujarati` varchar(400) DEFAULT NULL,
+  `name` varchar(255) NOT NULL,
+  `name_gujarati` text,
   `description` text,
   `description_gujarati` text,
-  `display_order` int DEFAULT '0',
-  `icon_url` varchar(500) DEFAULT NULL,
-  `color_code` varchar(7) DEFAULT NULL,
   `price` decimal(10,2) NOT NULL DEFAULT '0.00',
-  `original_price` decimal(10,2) DEFAULT NULL,
-  `currency` varchar(3) DEFAULT 'INR',
-  `is_free` tinyint(1) DEFAULT '0',
-  `free_test_count` int DEFAULT '0',
-  `difficulty_level` enum('beginner','intermediate','advanced','expert','mixed') DEFAULT 'mixed',
-  `access_duration_days` int DEFAULT NULL,
-  `max_attempts_per_test` int DEFAULT NULL,
+  `currency` varchar(10) NOT NULL DEFAULT 'INR',
+  `free_test_count` int NOT NULL DEFAULT '0',
+  `difficulty_level` enum('beginner','intermediate','advanced') NOT NULL DEFAULT 'beginner',
+  `max_attempts_per_test` int NOT NULL DEFAULT '1',
   `supports_pause_resume` tinyint(1) DEFAULT '1',
   `supports_multilanguage` tinyint(1) DEFAULT '1',
   `has_negative_marking` tinyint(1) DEFAULT '0',
@@ -379,7 +445,7 @@ CREATE TABLE `pdfs` (
   `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   `title` varchar(255) NOT NULL COMMENT 'Display title for the PDF',
   `description` text,
-  `category_id` int NOT NULL,
+  `category_id` int DEFAULT NULL,
   `file_path` varchar(255) NOT NULL COMMENT 'Server path to the PDF file',
   `original_filename` varchar(255) NOT NULL COMMENT 'Original filename when uploaded',
   `file_size` bigint NOT NULL COMMENT 'File size in bytes',
@@ -444,7 +510,7 @@ CREATE TABLE `push_tokens` (
 CREATE TABLE `questions` (
   `id` int NOT NULL,
   `uuid` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
-  `test_id` int NOT NULL,
+  `test_id` int DEFAULT NULL,
   `question_text` text NOT NULL,
   `option_a` text NOT NULL,
   `option_b` text NOT NULL,
@@ -462,7 +528,40 @@ CREATE TABLE `questions` (
   `time_to_solve_seconds` int NOT NULL DEFAULT '120' COMMENT 'Expected time to solve this question in seconds',
   `question_type` enum('single_choice','multiple_choice','true_false','fill_blank') NOT NULL DEFAULT 'single_choice' COMMENT 'Type of question',
   `negative_marks` decimal(3,2) DEFAULT NULL COMMENT 'Negative marks for wrong answer',
-  `display_order` int NOT NULL DEFAULT '0' COMMENT 'Display order for sorting questions'
+  `display_order` int NOT NULL DEFAULT '0' COMMENT 'Display order for sorting questions',
+  `category_id` int DEFAULT NULL COMMENT 'Direct link to category for simplified hierarchy',
+  `question_text_gujarati` text COMMENT 'Question text in Gujarati language',
+  `option_a_gujarati` text COMMENT 'Option A in Gujarati language',
+  `option_b_gujarati` text COMMENT 'Option B in Gujarati language',
+  `option_c_gujarati` text COMMENT 'Option C in Gujarati language',
+  `option_d_gujarati` text COMMENT 'Option D in Gujarati language',
+  `explanation_gujarati` text COMMENT 'Explanation in Gujarati language'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `question_imports`
+--
+
+CREATE TABLE `question_imports` (
+  `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `admin_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `category_id` int NOT NULL,
+  `test_series_id` int DEFAULT NULL,
+  `filename` varchar(255) NOT NULL,
+  `original_filename` varchar(255) NOT NULL,
+  `file_size` bigint NOT NULL,
+  `file_type` enum('excel','csv') NOT NULL,
+  `total_rows` int DEFAULT '0',
+  `successful_imports` int DEFAULT '0',
+  `failed_imports` int DEFAULT '0',
+  `import_status` enum('uploaded','validating','validated','importing','completed','failed') NOT NULL DEFAULT 'uploaded',
+  `validation_errors` json DEFAULT NULL COMMENT 'JSON array of validation errors with row numbers',
+  `import_errors` json DEFAULT NULL COMMENT 'JSON array of import errors with row numbers',
+  `import_summary` json DEFAULT NULL COMMENT 'Summary of imported question IDs and statistics',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -472,19 +571,7 @@ CREATE TABLE `questions` (
 --
 
 CREATE TABLE `SequelizeMeta` (
-  `name` varchar(255) NOT NULL,
-  `createdAt` datetime NOT NULL,
-  `updatedAt` datetime NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `SequelizeMetaBackup`
---
-
-CREATE TABLE `SequelizeMetaBackup` (
-  `name` varchar(255) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci NOT NULL
+  `name` varchar(255) COLLATE utf8mb3_unicode_ci NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci;
 
 -- --------------------------------------------------------
@@ -600,8 +687,6 @@ CREATE TABLE `tests` (
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL,
-  `title_gujarati` varchar(255) DEFAULT NULL COMMENT 'Test title in Gujarati language',
-  `description_gujarati` text COMMENT 'Test description in Gujarati language',
   `is_demo` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'True if this test is a demo test in a paid series',
   `is_free_in_paid_series` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'True if this test is free even in a paid test series',
   `negative_marking_enabled` tinyint(1) NOT NULL DEFAULT '0',
@@ -622,7 +707,9 @@ CREATE TABLE `tests` (
   `pass_percentage` decimal(5,2) NOT NULL DEFAULT '60.00' COMMENT 'Minimum percentage required to pass',
   `allow_review` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Whether students can review answers after test',
   `total_questions` int NOT NULL DEFAULT '0' COMMENT 'Total number of questions in the test',
-  `display_order` int NOT NULL DEFAULT '0' COMMENT 'Display order for sorting tests'
+  `display_order` int NOT NULL DEFAULT '0' COMMENT 'Display order for sorting tests',
+  `title_gujarati` varchar(255) DEFAULT NULL COMMENT 'Test title in Gujarati language',
+  `description_gujarati` text COMMENT 'Test description in Gujarati language'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -749,6 +836,7 @@ CREATE TABLE `user_answers` (
 ALTER TABLE `admins`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `email` (`email`),
+  ADD UNIQUE KEY `email_2` (`email`),
   ADD KEY `admins_email` (`email`),
   ADD KEY `admins_role` (`role`),
   ADD KEY `admins_is_active` (`isActive`);
@@ -759,7 +847,32 @@ ALTER TABLE `admins`
 ALTER TABLE `categories`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uuid` (`uuid`),
-  ADD KEY `test_series_id` (`test_series_id`);
+  ADD KEY `idx_categories_parent` (`parent_category_id`),
+  ADD KEY `idx_categories_test_series_level` (`test_series_id`,`hierarchy_level`),
+  ADD KEY `idx_categories_node_type` (`node_type`);
+
+--
+-- Indexes for table `dynamic_categories`
+--
+ALTER TABLE `dynamic_categories`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uuid` (`uuid`),
+  ADD KEY `dynamic_categories_test_series_id` (`test_series_id`),
+  ADD KEY `dynamic_categories_parent_category_id` (`parent_category_id`),
+  ADD KEY `dynamic_categories_hierarchy_level` (`hierarchy_level`),
+  ADD KEY `dynamic_categories_node_type` (`node_type`),
+  ADD KEY `dynamic_categories_display_order` (`display_order`);
+
+--
+-- Indexes for table `dynamic_questions`
+--
+ALTER TABLE `dynamic_questions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uuid` (`uuid`),
+  ADD KEY `dynamic_questions_category_id` (`category_id`),
+  ADD KEY `dynamic_questions_difficulty_level` (`difficulty_level`),
+  ADD KEY `dynamic_questions_subject` (`subject`),
+  ADD KEY `dynamic_questions_display_order` (`display_order`);
 
 --
 -- Indexes for table `exam_categories`
@@ -834,11 +947,11 @@ ALTER TABLE `new_test_series`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uuid` (`uuid`),
   ADD UNIQUE KEY `new_test_series_uuid_unique` (`uuid`),
+  ADD UNIQUE KEY `uuid_2` (`uuid`),
   ADD UNIQUE KEY `slug` (`slug`),
   ADD UNIQUE KEY `new_test_series_slug_unique` (`slug`),
   ADD KEY `new_test_series_status_index` (`is_active`,`is_published`),
-  ADD KEY `new_test_series_created_by_index` (`created_by`),
-  ADD KEY `new_test_series_display_order_index` (`display_order`);
+  ADD KEY `new_test_series_created_by_index` (`created_by`);
 
 --
 -- Indexes for table `new_test_sessions`
@@ -913,19 +1026,25 @@ ALTER TABLE `questions`
   ADD KEY `questions_subject_tag` (`subject_tag`),
   ADD KEY `questions_difficulty_tag` (`difficulty_tag`),
   ADD KEY `questions_display_order` (`display_order`),
-  ADD KEY `questions_marks` (`marks`);
+  ADD KEY `questions_marks` (`marks`),
+  ADD KEY `idx_questions_category` (`category_id`),
+  ADD KEY `idx_questions_gujarati_text` (`question_text_gujarati`(255));
+
+--
+-- Indexes for table `question_imports`
+--
+ALTER TABLE `question_imports`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `test_series_id` (`test_series_id`),
+  ADD KEY `question_imports_admin_id` (`admin_id`),
+  ADD KEY `question_imports_category_id` (`category_id`),
+  ADD KEY `question_imports_import_status` (`import_status`),
+  ADD KEY `question_imports_created_at` (`created_at`);
 
 --
 -- Indexes for table `SequelizeMeta`
 --
 ALTER TABLE `SequelizeMeta`
-  ADD PRIMARY KEY (`name`),
-  ADD UNIQUE KEY `name` (`name`);
-
---
--- Indexes for table `SequelizeMetaBackup`
---
-ALTER TABLE `SequelizeMetaBackup`
   ADD PRIMARY KEY (`name`),
   ADD UNIQUE KEY `name` (`name`);
 
@@ -1018,7 +1137,8 @@ ALTER TABLE `test_sessions`
   ADD KEY `test_sessions_user_id_test_id` (`user_id`,`test_id`),
   ADD KEY `test_sessions_status` (`status`),
   ADD KEY `test_sessions_is_completed` (`is_completed`),
-  ADD KEY `test_sessions_started_at` (`started_at`);
+  ADD KEY `test_sessions_started_at` (`started_at`),
+  ADD KEY `test_sessions_completed_at` (`completed_at`);
 
 --
 -- Indexes for table `users`
@@ -1047,6 +1167,18 @@ ALTER TABLE `user_answers`
 -- AUTO_INCREMENT for table `categories`
 --
 ALTER TABLE `categories`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `dynamic_categories`
+--
+ALTER TABLE `dynamic_categories`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `dynamic_questions`
+--
+ALTER TABLE `dynamic_questions`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
@@ -1156,6 +1288,25 @@ ALTER TABLE `user_answers`
 --
 
 --
+-- Constraints for table `categories`
+--
+ALTER TABLE `categories`
+  ADD CONSTRAINT `fk_categories_parent` FOREIGN KEY (`parent_category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `dynamic_categories`
+--
+ALTER TABLE `dynamic_categories`
+  ADD CONSTRAINT `dynamic_categories_ibfk_1` FOREIGN KEY (`test_series_id`) REFERENCES `new_test_series` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `dynamic_categories_ibfk_2` FOREIGN KEY (`parent_category_id`) REFERENCES `dynamic_categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `dynamic_questions`
+--
+ALTER TABLE `dynamic_questions`
+  ADD CONSTRAINT `dynamic_questions_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `dynamic_categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
 -- Constraints for table `exam_categories`
 --
 ALTER TABLE `exam_categories`
@@ -1225,7 +1376,16 @@ ALTER TABLE `push_tokens`
 -- Constraints for table `questions`
 --
 ALTER TABLE `questions`
+  ADD CONSTRAINT `fk_questions_category` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   ADD CONSTRAINT `questions_ibfk_1` FOREIGN KEY (`test_id`) REFERENCES `tests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Constraints for table `question_imports`
+--
+ALTER TABLE `question_imports`
+  ADD CONSTRAINT `question_imports_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `question_imports_ibfk_2` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `question_imports_ibfk_3` FOREIGN KEY (`test_series_id`) REFERENCES `new_test_series` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `subject_hierarchies`
