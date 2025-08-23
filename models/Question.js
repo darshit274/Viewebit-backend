@@ -15,7 +15,13 @@ module.exports = (sequelize, DataTypes) => {
     // Association
     test_id: {
       type: DataTypes.INTEGER,
-      allowNull: false
+      allowNull: true // Allow null for simplified hierarchy direct-to-category questions
+    },
+    
+    // NEW: Direct category association for simplified hierarchy
+    category_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
     },
     
     // Question content (English - primary)
@@ -50,7 +56,31 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     
-    // Gujarati fields removed - not in database
+    // Gujarati fields for multilingual support
+    question_text_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    option_a_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    option_b_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    option_c_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    option_d_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    explanation_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     
     // Basic fields that exist in database
     marks: {
@@ -85,7 +115,11 @@ module.exports = (sequelize, DataTypes) => {
       as: 'test'
     });
 
-    // Removed Admin association - created_by field doesn't exist
+    // NEW: Direct category association for simplified hierarchy
+    Question.belongsTo(models.Category, {
+      foreignKey: 'category_id',
+      as: 'category'
+    });
 
     // User answers for this question
     Question.hasMany(models.UserAnswer, {

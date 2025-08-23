@@ -45,7 +45,22 @@ router.patch('/users/:id/toggle-premium', adminAuth, adminController.toggleUserP
 // Questions management routes
 router.get('/questions', adminAuth, questionsController.getQuestions);
 router.get('/questions/stats', adminAuth, questionsController.getQuestionsStats);
+router.post('/questions/stats', adminAuth, questionsController.getQuestionsStats);
+
+// Question import status endpoint
+router.get('/questions/import/status/:importId', adminAuth, questionsController.getImportStatus);
+
+// Get import preview data
+router.get('/questions/import/preview/:importId', adminAuth, questionsController.getImportPreview);
+
+// Confirm and complete import
+router.post('/questions/import/confirm/:importId', adminAuth, questionsController.confirmImport);
 router.get('/questions/filters', adminAuth, questionsController.getQuestionFilters);
+
+// Import template routes - MUST come before /questions/:id
+router.get('/questions/template-excel', adminAuth, questionsController.downloadExcelTemplate);
+router.get('/questions/template-csv', adminAuth, questionsController.downloadCsvTemplate);
+
 router.get('/questions/:id', adminAuth, questionsController.getQuestionById);
 router.post('/questions', adminAuth, questionsController.createQuestion);
 router.post('/questions/bulk', adminAuth, questionsController.bulkCreateQuestions);
@@ -116,6 +131,7 @@ router.use('/translations', translationRoutes);
 // Test management routes (NEW SYSTEM)
 const testManagementRoutes = require('../testManagementRoutes');
 router.use('/test-management', testManagementRoutes);
+
 
 
 // Admin management routes (super admin only)

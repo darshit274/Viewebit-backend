@@ -1,6 +1,282 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Question, Test, TestSeries } = require('../../models');
+const { Question, Test, TestSeries, ExamCategory, QuestionImport } = require('../../models');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const XLSX = require('xlsx');
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../../uploads/question_imports');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const extension = path.extname(file.originalname);
+    cb(null, 'questions-' + uniqueSuffix + extension);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: function (req, file, cb) {
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls  
+      'text/csv' // .csv
+    ];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only Excel (.xlsx, .xls) and CSV files are allowed'), false);
+    }
+  }
+});
+
+// Helper function to generate and send template
+const generateAndSendTemplate = async (req, res, next, format) => {
+    try {
+        console.log(`📊 Starting template generation for format: ${format}`);
+
+        // Create sample data for template
+        const sampleData = [
+            {
+                'Question Text (English)': 'What is the capital of Gujarat?',
+                'Question Text (Gujarati)': 'ગુજરાતની રાજધાની કઈ છે?',
+                'Option A (English)': 'Ahmedabad',
+                'Option A (Gujarati)': 'અમદાવાદ',
+                'Option B (English)': 'Gandhinagar',
+                'Option B (Gujarati)': 'ગાંધીનગર',
+                'Option C (English)': 'Surat',
+                'Option C (Gujarati)': 'સુરત',
+                'Option D (English)': 'Rajkot',
+                'Option D (Gujarati)': 'રાજકોટ',
+                'Correct Answer': 'B',
+                'Explanation (English)': 'Gandhinagar is the capital of Gujarat state.',
+                'Explanation (Gujarati)': 'ગાંધીનગર ગુજરાત રાજ્યની રાજધાની છે.',
+                'Marks': 1
+            },
+            {
+                'Question Text (English)': 'Sample question 2 - Delete this row',
+                'Question Text (Gujarati)': 'નમૂનો પ્રશ્ન 2 - આ પંક્તિ કાઢી નાખો',
+                'Option A (English)': 'Option 1',
+                'Option A (Gujarati)': 'વિકલ્પ 1',
+                'Option B (English)': 'Option 2',
+                'Option B (Gujarati)': 'વિકલ્પ 2',
+                'Option C (English)': 'Option 3',
+                'Option C (Gujarati)': 'વિકલ્પ 3',
+                'Option D (English)': 'Option 4',
+                'Option D (Gujarati)': 'વિકલ્પ 4',
+                'Correct Answer': 'A',
+                'Explanation (English)': 'Sample explanation',
+                'Explanation (Gujarati)': 'નમૂનો સમજૂતી',
+                'Marks': 1
+            }
+        ];
+
+        const XLSX = require('xlsx');
+        
+        if (format === 'csv') {
+            // Generate CSV
+            const worksheet = XLSX.utils.json_to_sheet(sampleData);
+            const csv = XLSX.utils.sheet_to_csv(worksheet);
+            
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="questions_template.csv"');
+            console.log('✅ CSV template sent successfully');
+            return res.send(csv);
+        } else {
+            // Generate Excel
+            const worksheet = XLSX.utils.json_to_sheet(sampleData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Questions');
+            
+            const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+            
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename="questions_template.xlsx"');
+            console.log('✅ Excel template sent successfully');
+            return res.send(buffer);
+        }
+
+    } catch (error) {
+        console.error('Template generation error:', error);
+        return next(new ErrorHandler('Failed to generate template', 500));
+    }
+};
+
+// Helper function to handle file imports
+const handleFileImport = async (req, res, next) => {
+    try {
+        console.log('📤 Starting file import process...');
+        console.log('📋 Request body:', req.body);
+        console.log('📁 Files:', req.files);
+
+        if (!req.files || !req.files.file) {
+            return next(new ErrorHandler('No file uploaded', 400));
+        }
+
+        const file = req.files.file;
+        const categoryId = req.body.category_id;
+
+        if (!categoryId) {
+            return next(new ErrorHandler('Category ID is required', 400));
+        }
+
+        console.log(`📄 Processing file: ${file.name}`);
+        console.log(`📂 Category ID: ${categoryId}`);
+
+        // Determine file type
+        const fileExtension = path.extname(file.name).toLowerCase();
+        let fileType = '';
+        
+        if (fileExtension === '.xlsx' || fileExtension === '.xls') {
+            fileType = 'excel';
+        } else if (fileExtension === '.csv') {
+            fileType = 'csv';
+        } else {
+            return next(new ErrorHandler('Invalid file type. Only Excel and CSV files are supported', 400));
+        }
+
+        // Save file temporarily
+        const uploadDir = path.join(__dirname, '../../uploads/question_imports');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const filename = `import-${Date.now()}-${Math.round(Math.random() * 1E9)}.${fileExtension.substr(1)}`;
+        const filepath = path.join(uploadDir, filename);
+        
+        // Move uploaded file
+        await file.mv(filepath);
+        console.log(`💾 File saved to: ${filepath}`);
+
+        // Parse and validate file
+        const parsedData = await parseImportFile(filepath, fileType);
+        console.log(`📊 Parsed ${parsedData.length} rows from file`);
+
+        // Validate and convert to questions format
+        const { validQuestions, errors } = await validateImportData(parsedData, categoryId);
+        
+        if (errors.length > 0) {
+            // Clean up file
+            fs.unlinkSync(filepath);
+            return res.status(400).json({
+                success: false,
+                message: 'Validation errors found',
+                errors: errors,
+                total_rows: parsedData.length,
+                valid_rows: validQuestions.length
+            });
+        }
+
+        // Insert valid questions into database
+        const createdQuestions = await Question.bulkCreate(validQuestions);
+        
+        // Clean up file
+        fs.unlinkSync(filepath);
+
+        console.log(`✅ Successfully imported ${createdQuestions.length} questions`);
+
+        res.status(201).json({
+            success: true,
+            message: `Successfully imported ${createdQuestions.length} questions`,
+            data: {
+                imported_count: createdQuestions.length,
+                total_processed: parsedData.length,
+                errors: errors
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ File import error:', error);
+        return next(new ErrorHandler(`Failed to import questions: ${error.message}`, 500));
+    }
+};
+
+// Helper function to handle template downloads
+const handleTemplateDownload = async (req, res, next) => {
+    try {
+        const format = req.query.template; // 'excel' or 'csv'
+        
+        if (!['excel', 'csv'].includes(format)) {
+            return next(new ErrorHandler('Invalid template format. Use excel or csv', 400));
+        }
+
+        console.log(`📊 Generating ${format.toUpperCase()} template...`);
+
+        // Create sample data for template
+        const sampleData = [
+            {
+                'Question Text (English)': 'What is the capital of Gujarat?',
+                'Question Text (Gujarati)': 'ગુજરાતની રાજધાની કઈ છે?',
+                'Option A (English)': 'Ahmedabad',
+                'Option A (Gujarati)': 'અમદાવાદ',
+                'Option B (English)': 'Gandhinagar',
+                'Option B (Gujarati)': 'ગાંધીનગર',
+                'Option C (English)': 'Surat',
+                'Option C (Gujarati)': 'સુરત',
+                'Option D (English)': 'Rajkot',
+                'Option D (Gujarati)': 'રાજકોટ',
+                'Correct Answer': 'B',
+                'Explanation (English)': 'Gandhinagar is the capital of Gujarat state.',
+                'Explanation (Gujarati)': 'ગાંધીનગર ગુજરાત રાજ્યની રાજધાની છે.',
+                'Marks': 1
+            },
+            {
+                'Question Text (English)': 'Sample question 2 - Delete this row',
+                'Question Text (Gujarati)': 'નમૂનો પ્રશ્ન 2 - આ પંક્તિ કાઢી નાખો',
+                'Option A (English)': 'Option 1',
+                'Option A (Gujarati)': 'વિકલ્પ 1',
+                'Option B (English)': 'Option 2',
+                'Option B (Gujarati)': 'વિકલ્પ 2',
+                'Option C (English)': 'Option 3',
+                'Option C (Gujarati)': 'વિકલ્પ 3',
+                'Option D (English)': 'Option 4',
+                'Option D (Gujarati)': 'વિકલ્પ 4',
+                'Correct Answer': 'A',
+                'Explanation (English)': 'Sample explanation',
+                'Explanation (Gujarati)': 'નમૂનો સમજૂતી',
+                'Marks': 1
+            }
+        ];
+
+        const XLSX = require('xlsx');
+        
+        if (format === 'csv') {
+            // Generate CSV
+            const worksheet = XLSX.utils.json_to_sheet(sampleData);
+            const csv = XLSX.utils.sheet_to_csv(worksheet);
+            
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="questions_template.csv"');
+            console.log('✅ CSV template sent successfully');
+            return res.send(csv);
+        } else {
+            // Generate Excel
+            const worksheet = XLSX.utils.json_to_sheet(sampleData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Questions');
+            
+            const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+            
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename="questions_template.xlsx"');
+            console.log('✅ Excel template sent successfully');
+            return res.send(buffer);
+        }
+
+    } catch (error) {
+        console.error('Template download error:', error);
+        return next(new ErrorHandler('Failed to generate template', 500));
+    }
+};
 
 // Get all questions with pagination and filters
 exports.getQuestions = async (req, res, next) => {
@@ -247,6 +523,19 @@ exports.bulkCreateQuestions = async (req, res, next) => {
 // Get questions statistics
 exports.getQuestionsStats = async (req, res, next) => {
     try {
+        // Check if this is a template download request
+        if (req.query.download === 'template') {
+            console.log('📥 Template download requested via stats endpoint');
+            const format = req.query.format || 'excel';
+            return await generateAndSendTemplate(req, res, next, format);
+        }
+        
+        // Check if this is a file upload request
+        if (req.query.action === 'import' && req.method === 'POST') {
+            console.log('📤 File upload requested via stats endpoint');
+            return await handleFileUpload(req, res, next);
+        }
+        
         const totalQuestion = await Question.count();
         
         // Get difficulty-wise count
@@ -317,5 +606,528 @@ exports.getQuestionFilters = async (req, res, next) => {
         console.error('Get question filters error:', err);
         const error = new ErrorHandler('Failed to fetch question filters', 500);
         return next(error);
+    }
+};
+
+// Download Excel template for question import
+exports.downloadExcelTemplate = async (req, res, next) => {
+    try {
+        console.log('📥 Excel template download requested');
+        
+        // Create sample data for template
+        const sampleData = [
+            {
+                'Question Text (English)': 'What is the capital of Gujarat?',
+                'Question Text (Gujarati)': 'ગુજરાતની રાજધાની કઈ છે?',
+                'Option A (English)': 'Ahmedabad',
+                'Option A (Gujarati)': 'અમદાવાદ',
+                'Option B (English)': 'Gandhinagar',
+                'Option B (Gujarati)': 'ગાંધીનગર',
+                'Option C (English)': 'Surat',
+                'Option C (Gujarati)': 'સુરત',
+                'Option D (English)': 'Rajkot',
+                'Option D (Gujarati)': 'રાજકોટ',
+                'Correct Answer': 'B',
+                'Explanation (English)': 'Gandhinagar is the capital of Gujarat state.',
+                'Explanation (Gujarati)': 'ગાંધીનગર ગુજરાત રાજ્યની રાજધાની છે.',
+                'Marks': 1
+            },
+            {
+                'Question Text (English)': 'Sample question 2 - Delete this row',
+                'Question Text (Gujarati)': 'નમૂનો પ્રશ્ન 2 - આ પંક્તિ કાઢી નાખો',
+                'Option A (English)': 'Option 1',
+                'Option A (Gujarati)': 'વિકલ્પ 1',
+                'Option B (English)': 'Option 2',
+                'Option B (Gujarati)': 'વિકલ્પ 2',
+                'Option C (English)': 'Option 3',
+                'Option C (Gujarati)': 'વિકલ્પ 3',
+                'Option D (English)': 'Option 4',
+                'Option D (Gujarati)': 'વિકલ્પ 4',
+                'Correct Answer': 'A',
+                'Explanation (English)': 'Sample explanation',
+                'Explanation (Gujarati)': 'નમૂનો સમજૂતી',
+                'Marks': 1
+            }
+        ];
+
+        // Generate Excel
+        const XLSX = require('xlsx');
+        const worksheet = XLSX.utils.json_to_sheet(sampleData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Questions');
+        
+        const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="questions_template.xlsx"');
+        
+        console.log('✅ Excel template generated successfully');
+        res.send(buffer);
+
+    } catch (error) {
+        console.error('Download Excel template error:', error);
+        next(new ErrorHandler('Failed to generate Excel template', 500));
+    }
+};
+
+// Download CSV template for question import
+exports.downloadCsvTemplate = async (req, res, next) => {
+    try {
+        console.log('📥 CSV template download requested');
+        
+        // Create sample data for template
+        const sampleData = [
+            {
+                'Question Text (English)': 'What is the capital of Gujarat?',
+                'Question Text (Gujarati)': 'ગુજરાતની રાજધાની કઈ છે?',
+                'Option A (English)': 'Ahmedabad',
+                'Option A (Gujarati)': 'અમદાવાદ',
+                'Option B (English)': 'Gandhinagar',
+                'Option B (Gujarati)': 'ગાંધીનગર',
+                'Option C (English)': 'Surat',
+                'Option C (Gujarati)': 'સુરત',
+                'Option D (English)': 'Rajkot',
+                'Option D (Gujarati)': 'રાજકોટ',
+                'Correct Answer': 'B',
+                'Explanation (English)': 'Gandhinagar is the capital of Gujarat state.',
+                'Explanation (Gujarati)': 'ગાંધીનગર ગુજરાત રાજ્યની રાજધાની છે.',
+                'Marks': 1
+            },
+            {
+                'Question Text (English)': 'Sample question 2 - Delete this row',
+                'Question Text (Gujarati)': 'નમૂનો પ્રશ્ન 2 - આ પંક્તિ કાઢી નાખો',
+                'Option A (English)': 'Option 1',
+                'Option A (Gujarati)': 'વિકલ્પ 1',
+                'Option B (English)': 'Option 2',
+                'Option B (Gujarati)': 'વિકલ્પ 2',
+                'Option C (English)': 'Option 3',
+                'Option C (Gujarati)': 'વિકલ્પ 3',
+                'Option D (English)': 'Option 4',
+                'Option D (Gujarati)': 'વિકલ્પ 4',
+                'Correct Answer': 'A',
+                'Explanation (English)': 'Sample explanation',
+                'Explanation (Gujarati)': 'નમૂનો સમજૂતી',
+                'Marks': 1
+            }
+        ];
+
+        // Generate CSV
+        const XLSX = require('xlsx');
+        const worksheet = XLSX.utils.json_to_sheet(sampleData);
+        const csv = XLSX.utils.sheet_to_csv(worksheet);
+        
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="questions_template.csv"');
+        
+        console.log('✅ CSV template generated successfully');
+        res.send(csv);
+
+    } catch (error) {
+        console.error('Download CSV template error:', error);
+        next(new ErrorHandler('Failed to generate CSV template', 500));
+    }
+};
+
+// Helper function to parse import file
+const parseImportFile = async (filepath, fileType) => {
+    try {
+        console.log(`📖 Parsing ${fileType} file: ${filepath}`);
+        
+        const XLSX = require('xlsx');
+        const workbook = XLSX.readFile(filepath);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Convert to JSON
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        console.log(`📄 Found ${jsonData.length} rows in file`);
+        
+        return jsonData;
+    } catch (error) {
+        console.error('❌ File parsing error:', error);
+        throw new Error(`Failed to parse file: ${error.message}`);
+    }
+};
+
+// Helper function to validate import data
+const validateImportData = async (data, categoryId) => {
+    const validQuestions = [];
+    const errors = [];
+    
+    console.log(`🔍 Validating ${data.length} rows...`);
+    
+    for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        const rowNumber = i + 2; // Excel row number (accounting for header)
+        
+        try {
+            // Required fields mapping
+            const questionData = {
+                question_text: row['Question Text (English)'],
+                question_text_gujarati: row['Question Text (Gujarati)'] || null,
+                option_a: row['Option A (English)'],
+                option_a_gujarati: row['Option A (Gujarati)'] || null,
+                option_b: row['Option B (English)'],
+                option_b_gujarati: row['Option B (Gujarati)'] || null,
+                option_c: row['Option C (English)'],
+                option_c_gujarati: row['Option C (Gujarati)'] || null,
+                option_d: row['Option D (English)'],
+                option_d_gujarati: row['Option D (Gujarati)'] || null,
+                correct_answer: row['Correct Answer'],
+                explanation: row['Explanation (English)'] || null,
+                explanation_gujarati: row['Explanation (Gujarati)'] || null,
+                marks: parseInt(row['Marks']) || 1,
+                category_id: parseInt(categoryId),
+                is_active: true
+            };
+            
+            // Validate required fields
+            if (!questionData.question_text) {
+                errors.push(`Row ${rowNumber}: Question Text (English) is required`);
+                continue;
+            }
+            
+            if (!questionData.option_a || !questionData.option_b || !questionData.option_c || !questionData.option_d) {
+                errors.push(`Row ${rowNumber}: All options (A, B, C, D) are required`);
+                continue;
+            }
+            
+            if (!questionData.correct_answer || !['A', 'B', 'C', 'D'].includes(questionData.correct_answer.toUpperCase())) {
+                errors.push(`Row ${rowNumber}: Correct Answer must be A, B, C, or D`);
+                continue;
+            }
+            
+            // Normalize correct answer
+            questionData.correct_answer = questionData.correct_answer.toUpperCase();
+            
+            validQuestions.push(questionData);
+            
+        } catch (error) {
+            errors.push(`Row ${rowNumber}: ${error.message}`);
+        }
+    }
+    
+    console.log(`✅ Validation complete: ${validQuestions.length} valid, ${errors.length} errors`);
+    
+    return { validQuestions, errors };
+};
+
+// Handle file upload for question import
+const handleFileUpload = async (req, res, next) => {
+    try {
+        console.log('📤 Starting file upload process...');
+        
+        // Check if file was uploaded
+        if (!req.files || !req.files.file) {
+            return next(new ErrorHandler('No file uploaded', 400));
+        }
+        
+        const file = req.files.file;
+        const categoryId = req.body.category_id;
+        
+        console.log('📄 File details:', {
+            name: file.name,
+            mimetype: file.mimetype,
+            size: file.size,
+            categoryId
+        });
+        
+        // Validate category_id
+        if (!categoryId) {
+            return next(new ErrorHandler('Category ID is required', 400));
+        }
+        
+        // Check if category exists (check both Category and ExamCategory tables)
+        const { Category } = require('../../models');
+        let category = await Category.findByPk(categoryId);
+        
+        // If not found in Category table, check ExamCategory table
+        if (!category) {
+            category = await ExamCategory.findByPk(categoryId);
+        }
+        
+        if (!category) {
+            return next(new ErrorHandler('Category not found', 404));
+        }
+        
+        // Validate file type based on extension (more reliable than MIME type)
+        const fileExtension = path.extname(file.name).toLowerCase();
+        const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+        
+        if (!allowedExtensions.includes(fileExtension)) {
+            return next(new ErrorHandler('Only Excel (.xlsx, .xls) and CSV files are allowed', 400));
+        }
+        
+        console.log(`✅ File validation passed: ${file.name} (${fileExtension})`);
+        
+        // Create temp directory if it doesn't exist
+        const tempDir = path.join(__dirname, '../../temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        // Save file temporarily
+        const tempFileName = `import_${Date.now()}_${file.name}`;
+        const tempFilePath = path.join(tempDir, tempFileName);
+        
+        await file.mv(tempFilePath);
+        console.log(`💾 File saved temporarily: ${tempFilePath}`);
+        
+        try {
+            // Parse the file
+            const rawData = await parseImportFile(tempFilePath, file.mimetype.includes('csv') ? 'csv' : 'excel');
+            
+            if (!rawData || rawData.length === 0) {
+                return next(new ErrorHandler('File is empty or could not be parsed', 400));
+            }
+            
+            // Validate the data
+            const { validQuestions, errors } = await validateImportData(rawData, categoryId);
+            
+            // Create import record
+            const importRecord = await QuestionImport.create({
+                admin_id: req.admin.id,
+                category_id: categoryId,
+                filename: tempFileName, // Generated filename
+                original_filename: file.name, // Original filename from user
+                file_type: fileExtension === '.csv' ? 'csv' : 'excel', // Map extensions to ENUM values
+                file_name: file.name,
+                file_size: file.size,
+                total_rows: rawData.length,
+                valid_rows: validQuestions.length,
+                error_rows: errors.length,
+                validation_errors: errors.length > 0 ? JSON.stringify(errors) : null,
+                import_status: validQuestions.length > 0 ? 'validated' : 'failed',
+                import_summary: JSON.stringify({
+                    validated_questions: validQuestions,
+                    preview: validQuestions.slice(0, 5),
+                    validation_completed_at: new Date()
+                })
+            });
+            
+            console.log('📊 Import validation results:', {
+                totalRows: rawData.length,
+                validRows: validQuestions.length,
+                errorRows: errors.length,
+                importId: importRecord.id
+            });
+            
+            // Return validation results
+            res.json({
+                success: true,
+                message: 'File processed successfully',
+                data: {
+                    import_id: importRecord.id,
+                    total_rows: rawData.length,
+                    valid_rows: validQuestions.length,
+                    error_rows: errors.length,
+                    errors: errors,
+                    preview: validQuestions.slice(0, 5), // Show first 5 valid questions as preview
+                    can_import: validQuestions.length > 0
+                }
+            });
+            
+        } finally {
+            // Clean up temp file
+            if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+                console.log('🗑️ Temporary file cleaned up');
+            }
+        }
+        
+    } catch (error) {
+        console.error('❌ File upload error:', error);
+        next(new ErrorHandler(`File upload failed: ${error.message}`, 500));
+    }
+};
+
+// Get import status for polling
+exports.getImportStatus = async (req, res, next) => {
+    try {
+        const { importId } = req.params;
+        console.log(`📋 Getting import status for: ${importId}`);
+        
+        const importRecord = await QuestionImport.findByPk(importId);
+        
+        if (!importRecord) {
+            return next(new ErrorHandler('Import record not found', 404));
+        }
+        
+        // Return import status information
+        res.json({
+            success: true,
+            data: {
+                import_id: importRecord.id,
+                status: importRecord.import_status,
+                total_rows: importRecord.total_rows,
+                successful_imports: importRecord.successful_imports,
+                failed_imports: importRecord.failed_imports,
+                validation_errors: importRecord.validation_errors ? JSON.parse(importRecord.validation_errors) : [],
+                import_errors: importRecord.import_errors ? JSON.parse(importRecord.import_errors) : [],
+                created_at: importRecord.created_at,
+                updated_at: importRecord.updated_at
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Get import status error:', error);
+        next(new ErrorHandler(`Failed to get import status: ${error.message}`, 500));
+    }
+};
+
+// Get import preview data - re-parse file to show preview
+exports.getImportPreview = async (req, res, next) => {
+    try {
+        const { importId } = req.params;
+        console.log(`👁️ Getting import preview for: ${importId}`);
+        
+        const importRecord = await QuestionImport.findByPk(importId);
+        
+        if (!importRecord) {
+            return next(new ErrorHandler('Import record not found', 404));
+        }
+        
+        if (importRecord.import_status !== 'validated') {
+            return next(new ErrorHandler('Import is not validated yet. Status: ' + importRecord.import_status, 400));
+        }
+        
+        // Get the stored validated questions from import_summary
+        let previewData = null;
+        if (importRecord.import_summary) {
+            try {
+                const summaryData = JSON.parse(importRecord.import_summary);
+                previewData = summaryData.preview || summaryData.validated_questions?.slice(0, 5) || [];
+            } catch (error) {
+                console.error('Failed to parse import summary:', error);
+            }
+        }
+        
+        res.json({
+            success: true,
+            message: 'Import preview data retrieved',
+            data: {
+                import_id: importRecord.id,
+                status: importRecord.import_status,
+                total_rows: importRecord.total_rows,
+                successful_imports: importRecord.successful_imports,
+                failed_imports: importRecord.failed_imports,
+                file_name: importRecord.original_filename,
+                file_type: importRecord.file_type,
+                validation_errors: importRecord.validation_errors ? JSON.parse(importRecord.validation_errors) : [],
+                preview: previewData || []
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Get import preview error:', error);
+        next(new ErrorHandler(`Failed to get import preview: ${error.message}`, 500));
+    }
+};
+
+// Confirm and complete import - actually insert questions into database
+exports.confirmImport = async (req, res, next) => {
+    try {
+        const { importId } = req.params;
+        console.log(`✅ Confirming import for: ${importId}`);
+        
+        const importRecord = await QuestionImport.findByPk(importId);
+        
+        if (!importRecord) {
+            return next(new ErrorHandler('Import record not found', 404));
+        }
+        
+        if (importRecord.import_status !== 'validated') {
+            return next(new ErrorHandler('Import is not ready for confirmation. Status: ' + importRecord.import_status, 400));
+        }
+        
+        // Update status to importing
+        await importRecord.update({ import_status: 'importing' });
+        
+        // Get the validated questions from stored import_summary
+        let validatedQuestions = [];
+        if (importRecord.import_summary) {
+            try {
+                const summaryData = JSON.parse(importRecord.import_summary);
+                validatedQuestions = summaryData.validated_questions || [];
+            } catch (error) {
+                console.error('Failed to parse import summary:', error);
+                return next(new ErrorHandler('Failed to retrieve validated questions from import record', 500));
+            }
+        }
+        
+        if (!validatedQuestions || validatedQuestions.length === 0) {
+            return next(new ErrorHandler('No validated questions found in import record', 400));
+        }
+        
+        console.log(`📥 Importing ${validatedQuestions.length} questions directly to category ${importRecord.category_id}...`);
+        
+        const { v4: uuidv4 } = require('uuid');
+        let successCount = 0;
+        let failureCount = 0;
+        const importErrors = [];
+        const importedQuestionIds = [];
+        
+        // Insert each question
+        for (let i = 0; i < validatedQuestions.length; i++) {
+            try {
+                const questionData = {
+                    ...validatedQuestions[i],
+                    uuid: uuidv4(),
+                    // Skip test_id for now - questions will be linked directly to category
+                    created_at: new Date(),
+                    updated_at: new Date()
+                };
+                
+                const createdQuestion = await Question.create(questionData, {
+                    // Add error handling for constraint issues
+                    validate: true
+                });
+                importedQuestionIds.push(createdQuestion.id);
+                successCount++;
+                
+                console.log(`✅ Imported question ${i + 1}: ${questionData.question_text?.substring(0, 50)}...`);
+                
+            } catch (error) {
+                failureCount++;
+                const errorMsg = `Row ${i + 1}: ${error.message}`;
+                importErrors.push(errorMsg);
+                console.error(`❌ Failed to import question ${i + 1}:`, error.message);
+            }
+        }
+        
+        // Update import record with results
+        const finalStatus = failureCount === 0 ? 'completed' : (successCount > 0 ? 'completed' : 'failed');
+        
+        await importRecord.update({
+            import_status: finalStatus,
+            successful_imports: successCount,
+            failed_imports: failureCount,
+            import_errors: importErrors.length > 0 ? JSON.stringify(importErrors) : null,
+            import_summary: JSON.stringify({
+                imported_question_ids: importedQuestionIds,
+                success_count: successCount,
+                failure_count: failureCount,
+                completed_at: new Date()
+            })
+        });
+        
+        console.log(`🎉 Import completed! Success: ${successCount}, Failures: ${failureCount}`);
+        
+        res.json({
+            success: true,
+            message: `Import completed successfully. ${successCount} questions imported${failureCount > 0 ? `, ${failureCount} failed` : ''}.`,
+            data: {
+                import_id: importRecord.id,
+                status: finalStatus,
+                successful_imports: successCount,
+                failed_imports: failureCount,
+                import_errors: importErrors,
+                imported_question_ids: importedQuestionIds
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Confirm import error:', error);
+        next(new ErrorHandler(`Failed to confirm import: ${error.message}`, 500));
     }
 };

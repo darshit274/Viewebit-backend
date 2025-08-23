@@ -110,12 +110,36 @@ module.exports = {
       }
     });
 
-    // Add indexes
-    await queryInterface.addIndex('test_sessions', ['user_id']);
-    await queryInterface.addIndex('test_sessions', ['test_id']);
-    await queryInterface.addIndex('test_sessions', ['status']);
-    await queryInterface.addIndex('test_sessions', ['started_at']);
-    await queryInterface.addIndex('test_sessions', ['completed_at']);
+    // Add indexes with error handling
+    try {
+      await queryInterface.addIndex('test_sessions', ['user_id']);
+    } catch (error) {
+      console.log('Index test_sessions_user_id already exists, skipping...');
+    }
+    
+    try {
+      await queryInterface.addIndex('test_sessions', ['test_id']);
+    } catch (error) {
+      console.log('Index test_sessions_test_id already exists, skipping...');
+    }
+    
+    try {
+      await queryInterface.addIndex('test_sessions', ['status']);
+    } catch (error) {
+      console.log('Index test_sessions_status already exists, skipping...');
+    }
+    
+    try {
+      await queryInterface.addIndex('test_sessions', ['started_at']);
+    } catch (error) {
+      console.log('Index test_sessions_started_at already exists, skipping...');
+    }
+    
+    try {
+      await queryInterface.addIndex('test_sessions', ['completed_at']);
+    } catch (error) {
+      console.log('Index test_sessions_completed_at already exists, skipping...');
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

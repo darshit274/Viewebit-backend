@@ -4,11 +4,55 @@ const testManagementController = require('../controllers/TestManagementControlle
 const { adminAuth } = require('../utils/AdminAuth');
 
 // =====================
+// DYNAMIC HIERARCHY ROUTES (NEW)
+// =====================
+
+// /api/admin/test-management/hierarchy/:uuid - Get dynamic hierarchy view
+router.get('/hierarchy/:uuid', adminAuth, testManagementController.getTestSeriesWithHierarchy);
+
+// /api/admin/test-management/hierarchy/:testSeriesUuid/categories - Create dynamic category
+router.post('/hierarchy/:testSeriesUuid/categories', adminAuth, testManagementController.createDynamicCategory);
+
+// /api/admin/test-management/categories/:categoryId/actions - Get available actions
+router.get('/categories/:categoryId/actions', adminAuth, testManagementController.getDynamicCategoryActions);
+
+// =====================
+// SIMPLIFIED HIERARCHY ROUTES (NEW)
+// =====================
+
+// Get test series root categories with button states
+router.get('/simple-hierarchy/:testSeriesUuid', adminAuth, testManagementController.getTestSeriesRootCategories);
+
+// Get category content (subcategories OR questions) with button state
+router.get('/simple-hierarchy/categories/:categoryUuid', adminAuth, testManagementController.getCategoryContent);
+
+// Create category (root level or subcategory)
+router.post('/simple-hierarchy/categories', adminAuth, testManagementController.createSubCategory);
+router.post('/simple-hierarchy/categories/:parentUuid/subcategories', adminAuth, testManagementController.createSubCategory);
+
+// Create question in category
+router.post('/simple-hierarchy/categories/:categoryUuid/questions', adminAuth, testManagementController.createQuestionInCategory);
+
+// Create question at test series root level
+router.post('/simple-hierarchy/:testSeriesUuid/questions', adminAuth, testManagementController.createQuestionInTestSeries);
+
+// Edit and delete categories
+router.put('/simple-hierarchy/categories/:categoryUuid', adminAuth, testManagementController.updateCategory);
+router.delete('/simple-hierarchy/categories/:categoryUuid', adminAuth, testManagementController.deleteCategory);
+
+// Edit and delete questions
+router.put('/simple-hierarchy/questions/:questionUuid', adminAuth, testManagementController.updateQuestion);
+router.delete('/simple-hierarchy/questions/:questionUuid', adminAuth, testManagementController.deleteQuestion);
+
+// =====================
 // TEST SERIES ROUTES
 // =====================
 
 // /api/admin/test-management (GET) - Get all test series
 router.get('/', adminAuth, testManagementController.getTestSeries);
+
+// /api/admin/test-management/:uuid (GET) - Get single test series by UUID
+router.get('/:uuid', adminAuth, testManagementController.getTestSeriesById);
 
 // /api/admin/test-management (POST) - Create new test series
 router.post('/', adminAuth, testManagementController.createTestSeries);
@@ -40,6 +84,9 @@ router.delete('/categories/:uuid', adminAuth, testManagementController.deleteCat
 
 // /api/admin/test-management/categories/bulk (POST) - Bulk operations on categories
 router.post('/categories/bulk', adminAuth, testManagementController.bulkOperationsCategories);
+
+// /api/admin/test-management/simple-hierarchy/categories/bulk (POST) - Bulk operations on categories for simple hierarchy
+router.post('/simple-hierarchy/categories/bulk', adminAuth, testManagementController.bulkOperationsCategories);
 
 // =====================
 // SUB-CATEGORIES ROUTES
@@ -97,5 +144,8 @@ router.delete('/questions/:uuid', adminAuth, testManagementController.deleteQues
 
 // /api/admin/test-management/questions/bulk (POST) - Bulk operations on questions
 router.post('/questions/bulk', adminAuth, testManagementController.bulkOperationsQuestions);
+
+// /api/admin/test-management/simple-hierarchy/questions/bulk (POST) - Bulk operations on questions for simple hierarchy
+router.post('/simple-hierarchy/questions/bulk', adminAuth, testManagementController.bulkOperationsQuestions);
 
 module.exports = router;

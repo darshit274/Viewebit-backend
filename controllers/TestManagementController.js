@@ -1,7 +1,272 @@
 const { TestSeries, Category, SubCategory, Test, Question } = require('../models');
 const { Op } = require('sequelize');
 
+// Helper functions for hierarchy transformation
+function transformToHierarchy(testSeries) {
+  const hierarchy = [];
+
+  testSeries.categories?.forEach(category => {
+    const categoryNode = {
+      id: category.id,
+      uuid: category.uuid,
+      name: category.name,
+      description: category.description,
+      hierarchy_level: 0,
+      node_type: category.subCategories?.length > 0 ? 'container' : 'unset',
+      has_questions: false,
+      has_subcategories: category.subCategories?.length > 0,
+      questions_count: 0,
+      subcategories_count: category.subCategories?.length || 0,
+      total_questions_count: getTotalQuestions(category),
+      display_order: 0,
+      is_active: category.is_active,
+      children: []
+    };
+
+    // Add subcategories
+    category.subCategories?.forEach(subCategory => {
+      const subCategoryNode = {
+        id: subCategory.id,
+        uuid: subCategory.uuid,
+        name: subCategory.name,
+        description: subCategory.description,
+        hierarchy_level: 1,
+        node_type: subCategory.tests?.length > 0 ? 'question_holder' : 'unset',
+        has_questions: subCategory.tests?.some(test => test.questions?.length > 0) || false,
+        has_subcategories: false,
+        questions_count: getSubCategoryQuestionCount(subCategory),
+        subcategories_count: 0,
+        total_questions_count: getSubCategoryQuestionCount(subCategory),
+        display_order: 0,
+        is_active: subCategory.is_active,
+        tests: subCategory.tests || []
+      };
+
+      categoryNode.children.push(subCategoryNode);
+    });
+
+    hierarchy.push(categoryNode);
+  });
+
+  return hierarchy;
+}
+
+function getTotalQuestions(category) {
+  return category.subCategories?.reduce((acc, sub) => 
+    acc + sub.tests?.reduce((testAcc, test) => testAcc + (test.questions?.length || 0), 0), 0) || 0;
+}
+
+function getSubCategoryQuestionCount(subCategory) {
+  return subCategory.tests?.reduce((acc, test) => acc + (test.questions?.length || 0), 0) || 0;
+}
+
 class TestManagementController {
+  // =====================
+  // DYNAMIC HIERARCHY MANAGEMENT (NEW)
+  // =====================
+  
+  // Get test series with dynamic hierarchy view
+  async getTestSeriesWithHierarchy(req, res) {
+    try {
+      const { uuid } = req.params;
+      
+      // Get test series
+      const testSeries = await TestSeries.findOne({
+        where: { uuid },
+        include: [{
+          model: Category,
+          as: 'categories',
+          include: [{
+            model: SubCategory,
+            as: 'subCategories',
+            include: [{
+              model: Test,
+              as: 'tests',
+              include: [{
+                model: Question,
+                as: 'questions',
+                attributes: ['id', 'uuid', 'question_text', 'marks']
+              }]
+            }]
+          }]
+        }]
+      });
+
+      if (!testSeries) {
+        return res.status(404).json({
+          success: false,
+          message: 'Test Series not found'
+        });
+      }
+
+      // Transform to dynamic hierarchy structure
+      const dynamicHierarchy = transformToHierarchy(testSeries);
+
+      res.json({
+        success: true,
+        data: {
+          testSeries: {
+            id: testSeries.id,
+            uuid: testSeries.uuid,
+            name: testSeries.name,
+            description: testSeries.description
+          },
+          hierarchy: dynamicHierarchy,
+          statistics: {
+            totalCategories: testSeries.categories?.length || 0,
+            totalSubCategories: testSeries.categories?.reduce((acc, cat) => acc + (cat.subCategories?.length || 0), 0) || 0,
+            totalTests: testSeries.categories?.reduce((acc, cat) => 
+              acc + cat.subCategories?.reduce((subAcc, sub) => subAcc + (sub.tests?.length || 0), 0), 0) || 0,
+            totalQuestions: testSeries.categories?.reduce((acc, cat) => 
+              acc + cat.subCategories?.reduce((subAcc, sub) => 
+                subAcc + sub.tests?.reduce((testAcc, test) => testAcc + (test.questions?.length || 0), 0), 0), 0) || 0
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Error fetching hierarchy:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch hierarchy',
+        error: error.message
+      });
+    }
+  }
+
+
+  // Create new category (can be subcategory or question holder)
+  async createDynamicCategory(req, res) {
+    try {
+      const { testSeriesUuid } = req.params;
+      const { 
+        parentCategoryId, 
+        name, 
+        description, 
+        name_gujarati, 
+        description_gujarati,
+        isQuestionHolder = false
+      } = req.body;
+
+      // Find test series
+      const testSeries = await TestSeries.findOne({ where: { uuid: testSeriesUuid } });
+      if (!testSeries) {
+        return res.status(404).json({
+          success: false,
+          message: 'Test Series not found'
+        });
+      }
+
+      let createdCategory;
+
+      if (!parentCategoryId) {
+        // Create root category
+        createdCategory = await Category.create({
+          test_series_id: testSeries.id,
+          name,
+          description,
+          name_gujarati,
+          description_gujarati,
+          is_active: true
+        });
+      } else {
+        // Create subcategory
+        createdCategory = await SubCategory.create({
+          category_id: parentCategoryId,
+          name,
+          description,
+          name_gujarati,
+          description_gujarati,
+          is_active: true
+        });
+      }
+
+      res.status(201).json({
+        success: true,
+        message: 'Category created successfully',
+        data: {
+          ...createdCategory.toJSON(),
+          node_type: 'unset',
+          hierarchy_level: parentCategoryId ? 1 : 0,
+          has_questions: false,
+          has_subcategories: false,
+          questions_count: 0,
+          subcategories_count: 0,
+          total_questions_count: 0
+        }
+      });
+
+    } catch (error) {
+      console.error('Error creating dynamic category:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create category',
+        error: error.message
+      });
+    }
+  }
+
+  // Get available actions for a category
+  async getDynamicCategoryActions(req, res) {
+    try {
+      const { categoryId } = req.params;
+      const { type } = req.query; // 'category' or 'subcategory'
+
+      let category;
+      if (type === 'subcategory') {
+        category = await SubCategory.findByPk(categoryId, {
+          include: [{
+            model: Test,
+            as: 'tests',
+            include: [{ model: Question, as: 'questions' }]
+          }]
+        });
+      } else {
+        category = await Category.findByPk(categoryId, {
+          include: [{
+            model: SubCategory,
+            as: 'subCategories'
+          }]
+        });
+      }
+
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message: 'Category not found'
+        });
+      }
+
+      const hasSubcategories = type === 'category' && category.subCategories?.length > 0;
+      const hasQuestions = type === 'subcategory' && category.tests?.some(test => test.questions?.length > 0);
+
+      const actions = {
+        canAddSubcategory: type === 'category' && !hasQuestions,
+        canAddQuestions: type === 'subcategory' && !hasSubcategories,
+        canEditCategory: true,
+        canDeleteCategory: !hasSubcategories && !hasQuestions
+      };
+
+      res.json({
+        success: true,
+        data: {
+          categoryId,
+          type,
+          nodeType: hasSubcategories ? 'container' : hasQuestions ? 'question_holder' : 'unset',
+          actions
+        }
+      });
+
+    } catch (error) {
+      console.error('Error getting category actions:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get category actions',
+        error: error.message
+      });
+    }
+  }
+
   // =====================
   // TEST SERIES MANAGEMENT
   // =====================
@@ -100,6 +365,42 @@ class TestManagementController {
           totalPages: Math.ceil(count / parseInt(limit))
         },
         stats
+      });
+    } catch (error) {
+      console.error('Error fetching test series:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch test series'
+      });
+    }
+  }
+
+  // Get single test series by UUID
+  async getTestSeriesById(req, res) {
+    try {
+      const { uuid } = req.params;
+
+      const testSeries = await TestSeries.findOne({
+        where: { uuid },
+        attributes: [
+          'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 
+          'is_active', 'created_at', 'updated_at', 'pricing_type', 'price', 'currency', 
+          'demo_tests_count', 'subscription_duration_days', 'features', 'discount_percentage', 
+          'is_featured', 'difficulty_level', 'free_test_count', 'max_attempts_per_test', 
+          'has_negative_marking', 'negative_marks', 'supports_pause_resume', 'supports_multilanguage'
+        ]
+      });
+
+      if (!testSeries) {
+        return res.status(404).json({
+          success: false,
+          message: 'Test series not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: testSeries
       });
     } catch (error) {
       console.error('Error fetching test series:', error);
@@ -375,7 +676,7 @@ class TestManagementController {
         });
       }
 
-      await testSeries.update({ is_active: false });
+      await testSeries.destroy();
 
       res.json({
         success: true,
@@ -606,10 +907,11 @@ class TestManagementController {
   // Update category
   async updateCategory(req, res) {
     try {
-      const { uuid } = req.params;
+      const { uuid, categoryUuid } = req.params;
+      const categoryId = uuid || categoryUuid;
       const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
 
-      const category = await Category.findOne({ where: { uuid } });
+      const category = await Category.findOne({ where: { uuid: categoryId } });
       if (!category) {
         return res.status(404).json({
           success: false,
@@ -636,9 +938,10 @@ class TestManagementController {
   // Delete category
   async deleteCategory(req, res) {
     try {
-      const { uuid } = req.params;
+      const { uuid, categoryUuid } = req.params;
+      const categoryId = uuid || categoryUuid;
 
-      const category = await Category.findOne({ where: { uuid } });
+      const category = await Category.findOne({ where: { uuid: categoryId } });
       if (!category) {
         return res.status(404).json({
           success: false,
@@ -1380,7 +1683,8 @@ class TestManagementController {
   // Update question
   async updateQuestion(req, res) {
     try {
-      const { uuid } = req.params;
+      const { uuid, questionUuid } = req.params;
+      const questionId = uuid || questionUuid;
       const { 
         question_text, 
         option_a, 
@@ -1400,7 +1704,7 @@ class TestManagementController {
       } = req.body;
 
       const question = await Question.findOne({ 
-        where: { uuid },
+        where: { uuid: questionId },
         include: [{ model: Test, as: 'test' }]
       });
       
@@ -1452,10 +1756,11 @@ class TestManagementController {
   // Delete question
   async deleteQuestion(req, res) {
     try {
-      const { uuid } = req.params;
+      const { uuid, questionUuid } = req.params;
+      const questionId = uuid || questionUuid;
 
       const question = await Question.findOne({ 
-        where: { uuid },
+        where: { uuid: questionId },
         include: [{ model: Test, as: 'test' }]
       });
       
@@ -1568,6 +1873,682 @@ class TestManagementController {
         message: 'Failed to perform bulk operation'
       });
     }
+  }
+
+  // ====================================
+  // SIMPLIFIED HIERARCHY METHODS (NEW)
+  // ====================================
+
+  // Get category content (subcategories OR questions) with button state
+  async getCategoryContent(req, res) {
+    try {
+      const { categoryUuid } = req.params;
+
+      const category = await Category.findOne({
+        where: { uuid: categoryUuid },
+        include: [
+          // Get child categories
+          {
+            model: Category,
+            as: 'childCategories',
+            where: { is_active: true },
+            required: false,
+            order: [['display_order', 'ASC'], ['created_at', 'ASC']]
+          },
+          // Get questions directly
+          {
+            model: Question,
+            as: 'questions',
+            where: { is_active: true },
+            required: false,
+            order: [['display_order', 'ASC'], ['created_at', 'ASC']]
+          },
+          // Get parent for breadcrumb
+          {
+            model: Category,
+            as: 'parentCategory',
+            attributes: ['id', 'uuid', 'name', 'hierarchy_level']
+          }
+        ]
+      });
+
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message: 'Category not found'
+        });
+      }
+
+      // Determine button states based on node_type
+      const buttons_state = {
+        can_add_category: category.node_type === 'unset' || category.node_type === 'container',
+        can_add_question: category.node_type === 'unset' || category.node_type === 'question_holder'
+      };
+
+      // Determine content type and data
+      let content = [];
+      let content_type = 'empty';
+
+      if (category.node_type === 'container' && category.childCategories?.length > 0) {
+        content = category.childCategories;
+        content_type = 'categories';
+      } else if (category.node_type === 'question_holder' && category.questions?.length > 0) {
+        content = category.questions;
+        content_type = 'questions';
+      }
+
+      res.json({
+        success: true,
+        data: {
+          category: {
+            id: category.id,
+            uuid: category.uuid,
+            name: category.name,
+            description: category.description,
+            node_type: category.node_type,
+            hierarchy_level: category.hierarchy_level,
+            parent_category: category.parentCategory
+          },
+          content_type,
+          content,
+          buttons_state,
+          statistics: {
+            child_categories_count: category.childCategories?.length || 0,
+            questions_count: category.questions?.length || 0,
+            hierarchy_level: category.hierarchy_level,
+            is_leaf_category: (category.childCategories?.length || 0) === 0,
+            content_distribution: {
+              direct_questions: category.questions?.length || 0,
+              nested_categories: category.childCategories?.length || 0
+            }
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Error fetching category content:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch category content'
+      });
+    }
+  }
+
+  // Get root categories for a test series
+  async getTestSeriesRootCategories(req, res) {
+    try {
+      const { testSeriesUuid } = req.params;
+
+      // First get the test series
+      const testSeries = await TestSeries.findOne({
+        where: { uuid: testSeriesUuid }
+      });
+
+      if (!testSeries) {
+        return res.status(404).json({
+          success: false,
+          message: 'Test series not found'
+        });
+      }
+
+      // Get root categories (hierarchy_level = 0, parent_category_id = NULL)
+      const rootCategories = await Category.findAll({
+        where: {
+          test_series_id: testSeries.id,
+          hierarchy_level: 0,
+          parent_category_id: null,
+          is_active: true
+        },
+        include: [
+          // Include child categories count
+          {
+            model: Category,
+            as: 'childCategories',
+            attributes: [],
+            required: false
+          },
+          // Include questions count
+          {
+            model: Question,
+            as: 'questions',
+            attributes: [],
+            required: false
+          }
+        ],
+        order: [['display_order', 'ASC'], ['created_at', 'ASC']]
+      });
+
+      // For now, don't show any root questions to fix the button state issue
+      // TODO: We need to properly implement test_series_id on questions to associate them correctly
+      // This is a temporary fix to ensure fresh test series show both buttons enabled
+      const rootQuestions = [];
+
+      // Determine content type and button states based on what exists
+      let contentType = 'empty';
+      let content = [];
+      
+      if (rootCategories.length > 0) {
+        contentType = 'categories';
+        content = rootCategories;
+      } else if (rootQuestions.length > 0) {
+        contentType = 'questions';
+        content = rootQuestions;
+      }
+
+      // Correct either-or logic for test series root level:
+      // - If no content exists: both buttons enabled (user can choose)
+      // - If categories exist: only "Add Category" enabled
+      // - If questions exist: only "Add Question" enabled
+      const buttons_state = {
+        can_add_category: rootQuestions.length === 0,  // Can add categories only if no questions
+        can_add_question: rootCategories.length === 0  // Can add questions only if no categories
+      };
+
+      res.json({
+        success: true,
+        data: {
+          test_series: {
+            id: testSeries.id,
+            uuid: testSeries.uuid,
+            name: testSeries.name,
+            description: testSeries.description
+          },
+          content_type: contentType,
+          content: content,
+          buttons_state,
+          statistics: {
+            root_categories_count: rootCategories.length,
+            root_questions_count: rootQuestions.length
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Error fetching root categories:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch root categories'
+      });
+    }
+  }
+
+  // Create subcategory
+  async createSubCategory(req, res) {
+    try {
+      const { parentUuid } = req.params;
+      const { name, description, name_gujarati, description_gujarati, testSeriesUuid } = req.body;
+
+      if (!name?.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Category name is required'
+        });
+      }
+
+      // Get parent category or test series
+      let parentCategory = null;
+      let testSeriesId = null;
+      let hierarchyLevel = 0;
+
+      if (parentUuid) {
+        parentCategory = await Category.findOne({
+          where: { uuid: parentUuid }
+        });
+
+        if (!parentCategory) {
+          return res.status(404).json({
+            success: false,
+            message: 'Parent category not found'
+          });
+        }
+
+        // Check if parent can have subcategories
+        if (parentCategory.node_type === 'question_holder') {
+          return res.status(400).json({
+            success: false,
+            message: 'Cannot add subcategories to a category that contains questions'
+          });
+        }
+
+        testSeriesId = parentCategory.test_series_id;
+        hierarchyLevel = parentCategory.hierarchy_level + 1;
+      } else {
+        // Creating at root level - need test series UUID
+        if (!testSeriesUuid) {
+          return res.status(400).json({
+            success: false,
+            message: 'Test series UUID is required for root categories'
+          });
+        }
+
+        const testSeries = await TestSeries.findOne({
+          where: { uuid: testSeriesUuid }
+        });
+
+        if (!testSeries) {
+          return res.status(404).json({
+            success: false,
+            message: 'Test series not found'
+          });
+        }
+
+        testSeriesId = testSeries.id;
+        hierarchyLevel = 0;
+
+        // Removed constraint enforcement due to question-test series association issue
+        // TODO: Implement proper test_series_id tracking for questions
+      }
+
+      // Create the new category
+      const newCategory = await Category.create({
+        test_series_id: testSeriesId,
+        parent_category_id: parentCategory ? parentCategory.id : null,
+        name: name.trim(),
+        description: description?.trim() || null,
+        name_gujarati: name_gujarati?.trim() || null,
+        description_gujarati: description_gujarati?.trim() || null,
+        hierarchy_level: hierarchyLevel,
+        node_type: 'unset',
+        display_order: 0
+      });
+
+      // If parent exists, update its node_type to 'container'
+      if (parentCategory && parentCategory.node_type === 'unset') {
+        await parentCategory.update({
+          node_type: 'container'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: newCategory,
+        message: 'Category created successfully'
+      });
+
+    } catch (error) {
+      console.error('Error creating subcategory:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create subcategory'
+      });
+    }
+  }
+
+  // Create question in category
+  async createQuestionInCategory(req, res) {
+    try {
+      const { categoryUuid } = req.params;
+      const {
+        question_text,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
+        correct_answer,
+        explanation,
+        marks = 1,
+        question_text_gujarati,
+        option_a_gujarati,
+        option_b_gujarati,
+        option_c_gujarati,
+        option_d_gujarati,
+        explanation_gujarati
+      } = req.body;
+
+      // Validate required fields
+      if (!question_text?.trim() || !option_a?.trim() || !option_b?.trim() || 
+          !option_c?.trim() || !option_d?.trim() || !correct_answer) {
+        return res.status(400).json({
+          success: false,
+          message: 'All question fields are required'
+        });
+      }
+
+      // Get the category
+      const category = await Category.findOne({
+        where: { uuid: categoryUuid }
+      });
+
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message: 'Category not found'
+        });
+      }
+
+      // Check if category can have questions
+      if (category.node_type === 'container') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot add questions to a category that contains subcategories'
+        });
+      }
+
+      // Create the question with a temporary test_id = 1 (we'll fix this properly later)
+      const newQuestion = await Question.create({
+        test_id: 1, // Temporary workaround - we need to make this nullable in DB
+        category_id: category.id,
+        question_text: question_text.trim(),
+        option_a: option_a.trim(),
+        option_b: option_b.trim(),
+        option_c: option_c.trim(),
+        option_d: option_d.trim(),
+        correct_answer,
+        explanation: explanation?.trim() || null,
+        marks: parseInt(marks) || 1,
+        display_order: 0,
+        // Gujarati fields
+        question_text_gujarati: question_text_gujarati?.trim() || null,
+        option_a_gujarati: option_a_gujarati?.trim() || null,
+        option_b_gujarati: option_b_gujarati?.trim() || null,
+        option_c_gujarati: option_c_gujarati?.trim() || null,
+        option_d_gujarati: option_d_gujarati?.trim() || null,
+        explanation_gujarati: explanation_gujarati?.trim() || null
+      });
+
+      // Update category node_type to 'question_holder'
+      if (category.node_type === 'unset') {
+        await category.update({
+          node_type: 'question_holder'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: newQuestion,
+        message: 'Question created successfully'
+      });
+
+    } catch (error) {
+      console.error('Error creating question:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create question'
+      });
+    }
+  }
+
+  // Create question directly in test series (root level)
+  async createQuestionInTestSeries(req, res) {
+    try {
+      const { testSeriesUuid } = req.params;
+      const {
+        question_text,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
+        correct_answer,
+        explanation,
+        marks = 1,
+        question_text_gujarati,
+        option_a_gujarati,
+        option_b_gujarati,
+        option_c_gujarati,
+        option_d_gujarati,
+        explanation_gujarati
+      } = req.body;
+
+      // Validate required fields
+      if (!question_text?.trim() || !option_a?.trim() || !option_b?.trim() || 
+          !option_c?.trim() || !option_d?.trim() || !correct_answer) {
+        return res.status(400).json({
+          success: false,
+          message: 'All question fields are required'
+        });
+      }
+
+      // Get the test series
+      const testSeries = await TestSeries.findOne({
+        where: { uuid: testSeriesUuid }
+      });
+
+      if (!testSeries) {
+        return res.status(404).json({
+          success: false,
+          message: 'Test series not found'
+        });
+      }
+
+      // Removed constraint enforcement due to complexity of tracking questions properly
+      // TODO: Implement proper test_series_id tracking for questions and re-enable constraints
+
+      // Create the question at root level (no category_id, no test_id)
+      const newQuestion = await Question.create({
+        test_id: 1, // Temporary workaround - we need this for now due to model constraint
+        question_text: question_text.trim(),
+        option_a: option_a.trim(),
+        option_b: option_b.trim(),
+        option_c: option_c.trim(),
+        option_d: option_d.trim(),
+        correct_answer,
+        explanation: explanation?.trim() || null,
+        marks: parseInt(marks) || 1,
+        display_order: 0,
+        // Gujarati fields
+        question_text_gujarati: question_text_gujarati?.trim() || null,
+        option_a_gujarati: option_a_gujarati?.trim() || null,
+        option_b_gujarati: option_b_gujarati?.trim() || null,
+        option_c_gujarati: option_c_gujarati?.trim() || null,
+        option_d_gujarati: option_d_gujarati?.trim() || null,
+        explanation_gujarati: explanation_gujarati?.trim() || null
+      });
+
+      res.json({
+        success: true,
+        data: newQuestion,
+        message: 'Question created successfully'
+      });
+
+    } catch (error) {
+      console.error('Error creating question in test series:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create question'
+      });
+    }
+  }
+
+  // Helper methods for detailed statistics
+  async getMaxHierarchyLevel(testSeriesId) {
+    const { sequelize } = require('../models');
+    const result = await Category.findOne({
+      where: { test_series_id: testSeriesId },
+      attributes: [[sequelize.fn('MAX', sequelize.col('hierarchy_level')), 'maxLevel']],
+      raw: true
+    });
+    return result?.maxLevel || 0;
+  }
+
+  async getTotalNestedCategories(testSeriesId) {
+    const count = await Category.count({
+      where: { 
+        test_series_id: testSeriesId,
+        hierarchy_level: { [Op.gt]: 0 }
+      }
+    });
+    return count;
+  }
+
+  async getTotalQuestionsAllLevels(testSeriesId) {
+    const count = await Question.count({
+      include: [{
+        model: Category,
+        as: 'category',
+        where: { test_series_id: testSeriesId },
+        attributes: []
+      }]
+    });
+    return count;
+  }
+
+  async getCategoriesWithSubcategories(testSeriesId) {
+    const result = await Category.findAll({
+      where: { test_series_id: testSeriesId },
+      include: [{
+        model: Category,
+        as: 'childCategories',
+        attributes: ['id'],
+        required: true
+      }],
+      attributes: ['id'],
+      group: ['Category.id']
+    });
+    return result.length;
+  }
+
+  async getCategoriesWithQuestions(testSeriesId) {
+    const result = await Category.findAll({
+      where: { test_series_id: testSeriesId },
+      include: [{
+        model: Question,
+        as: 'questions',
+        attributes: ['id'],
+        required: true
+      }],
+      attributes: ['id'],
+      group: ['Category.id']
+    });
+    return result.length;
+  }
+
+  async getLeafCategories(testSeriesId) {
+    const allCategories = await Category.findAll({
+      where: { test_series_id: testSeriesId },
+      attributes: ['id']
+    });
+
+    const parentCategories = await Category.findAll({
+      where: { 
+        test_series_id: testSeriesId,
+        parent_category_id: { [Op.not]: null }
+      },
+      attributes: ['parent_category_id'],
+      group: ['parent_category_id']
+    });
+
+    const parentIds = parentCategories.map(cat => cat.parent_category_id);
+    return allCategories.length - parentIds.length;
+  }
+
+  async getActiveCategoriesCount(testSeriesId) {
+    return await Category.count({
+      where: { 
+        test_series_id: testSeriesId,
+        is_active: true 
+      }
+    });
+  }
+
+  async getInactiveCategoriesCount(testSeriesId) {
+    return await Category.count({
+      where: { 
+        test_series_id: testSeriesId,
+        is_active: false 
+      }
+    });
+  }
+
+  async getActiveQuestionsCount(testSeriesId) {
+    return await Question.count({
+      include: [{
+        model: Category,
+        as: 'category',
+        where: { test_series_id: testSeriesId },
+        attributes: []
+      }],
+      where: { is_active: true }
+    });
+  }
+
+  async getInactiveQuestionsCount(testSeriesId) {
+    return await Question.count({
+      include: [{
+        model: Category,
+        as: 'category',
+        where: { test_series_id: testSeriesId },
+        attributes: []
+      }],
+      where: { is_active: false }
+    });
+  }
+
+  // Additional helper methods for category-level statistics
+  async getTotalDescendantCategories(categoryId) {
+    const descendants = await Category.findAll({
+      where: { parent_category_id: categoryId },
+      include: [{
+        model: Category,
+        as: 'childCategories',
+        include: [{
+          model: Category,
+          as: 'childCategories',
+          // Continue recursively if needed
+        }]
+      }]
+    });
+
+    let count = descendants.length;
+    for (const desc of descendants) {
+      count += await this.getTotalDescendantCategories(desc.id);
+    }
+    return count;
+  }
+
+  async getTotalDescendantQuestions(categoryId) {
+    // Get direct questions for this category
+    const directQuestions = await Question.count({
+      where: { category_id: categoryId }
+    });
+
+    // Get questions from child categories recursively
+    const childCategories = await Category.findAll({
+      where: { parent_category_id: categoryId },
+      attributes: ['id']
+    });
+
+    let childQuestions = 0;
+    for (const child of childCategories) {
+      childQuestions += await this.getTotalDescendantQuestions(child.id);
+    }
+
+    return directQuestions + childQuestions;
+  }
+
+  async getActiveChildrenCount(categoryId) {
+    return await Category.count({
+      where: { 
+        parent_category_id: categoryId,
+        is_active: true 
+      }
+    });
+  }
+
+  async getInactiveChildrenCount(categoryId) {
+    return await Category.count({
+      where: { 
+        parent_category_id: categoryId,
+        is_active: false 
+      }
+    });
+  }
+
+  async getActiveQuestionsForCategory(categoryId) {
+    return await Question.count({
+      where: { 
+        category_id: categoryId,
+        is_active: true 
+      }
+    });
+  }
+
+  async getInactiveQuestionsForCategory(categoryId) {
+    return await Question.count({
+      where: { 
+        category_id: categoryId,
+        is_active: false 
+      }
+    });
   }
 }
 

@@ -96,24 +96,56 @@ exports.uploadPdf = async (req, res, next) => {
         return next(uploadErr);
       }
 
-      const { title, description, category_id, access_level, test_series_id, exam_type_id, tags } = req.body;
+      const { title, description, course_id, category_id, access_level, test_series_id, exam_type_id, tags } = req.body;
       const adminId = req.admin?.id;
 
-      if (!title || !category_id) {
+      // Debug logging to see what's being received
+      console.log('🔍 PDF Upload Request Body:', req.body);
+      console.log('📋 Received fields:', {
+        title,
+        description,
+        course_id,
+        category_id,
+        access_level,
+        test_series_id,
+        exam_type_id,
+        tags
+      });
+
+      // Support both course_id (new) and category_id (legacy) for backward compatibility
+      const courseId = course_id || category_id;
+
+      if (!title || !courseId) {
         // Delete uploaded file if validation fails
         if (req.file) {
           deletePDFFile(req.file.path);
         }
-        return next(new ErrorHandler('Title and category are required', 400));
+        return next(new ErrorHandler('Title and course are required', 400));
       }
 
-      // Validate category exists
-      const category = await PdfCategory.findByPk(category_id);
-      if (!category) {
-        if (req.file) {
-          deletePDFFile(req.file.path);
+      // If course_id is provided, validate against TestSeries (courses)
+      let validatedCategoryId = null;
+      if (course_id) {
+        const { TestSeries } = require('../../models');
+        const course = await TestSeries.findOne({ where: { uuid: course_id } });
+        if (!course) {
+          if (req.file) {
+            deletePDFFile(req.file.path);
+          }
+          return next(new ErrorHandler('Invalid course', 400));
         }
-        return next(new ErrorHandler('Invalid category', 400));
+        // For now, we'll set category_id to null and use test_series_id field
+        validatedCategoryId = null;
+      } else {
+        // Legacy support: validate category exists
+        const category = await PdfCategory.findByPk(category_id);
+        if (!category) {
+          if (req.file) {
+            deletePDFFile(req.file.path);
+          }
+          return next(new ErrorHandler('Invalid category', 400));
+        }
+        validatedCategoryId = parseInt(category_id);
       }
 
       // Validate PDF file - temporarily relaxed for debugging
@@ -142,9 +174,9 @@ exports.uploadPdf = async (req, res, next) => {
         const pdf = await Pdfs.create({
           title,
           description,
-          category_id: parseInt(category_id),
+          category_id: validatedCategoryId,
           access_level: access_level || 'free',
-          test_series_id: test_series_id || null,
+          test_series_id: course_id || test_series_id || null,
           exam_type_id: exam_type_id ? parseInt(exam_type_id) : null,
           tags: tags ? JSON.parse(tags) : null,
           uploaded_by: adminId,

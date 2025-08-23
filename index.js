@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const router = require('./routes/index');
 const serverless = require("serverless-http");
+const fileUpload = require('express-fileupload');
 
 const { sequelize } = require('./models'); // Assuming your sequelize export is CommonJS
 const errorMiddleware = require('./utils/default/globalErrorHandler');
@@ -30,6 +31,14 @@ app.use((req, res, next) => {
 
 // Parse JSON bodies
 app.use(express.json());
+
+// Configure file upload middleware
+app.use(fileUpload({
+  createParentPath: true,
+  limits: { 
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+}));
 
 // Serve static files
 app.use('/uploads', express.static('uploads'));

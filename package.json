@@ -17,19 +17,23 @@
     "bcryptjs": "^3.0.2",
     "cord": "^1.0.1",
     "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
+    "express-fileupload": "^1.5.2",
     "express-validator": "^7.2.1",
     "firebase-admin": "^12.7.0",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^2.0.1",
+    "multer": "^2.0.2",
     "mysql2": "^3.14.2",
     "node-cron": "^3.0.3",
     "nodemailer": "^7.0.5",
     "nodemon": "^3.1.10",
     "sequelize": "^6.37.7",
-    "serverless-http": "^3.2.0"
+    "serverless-http": "^3.2.0",
+    "xlsx": "^0.18.5",
+    "xlsx-style": "^0.8.13"
   },
   "devDependencies": {
     "sequelize-cli": "^6.6.3"
