@@ -5,6 +5,7 @@ const { authToken } = require('../../utils/AuthToken');
 
 // Public routes (no auth required)
 router.get('/', pdfController.getPdfs);
+router.get('/categories', pdfController.getPdfCategories);
 router.get('/filters', pdfController.getPdfFilters);
 router.get('/stats', pdfController.getPdfStats);
 router.get('/:id', pdfController.getPdfById);

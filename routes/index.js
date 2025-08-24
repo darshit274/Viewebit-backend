@@ -7,6 +7,7 @@ const SubscriptionRoutes = require("./SubscriptionRoutes/subscriptionRoutes");
 const PDFRoutes = require("./PDFRoutes/pdfRoutes");
 const NotificationRoutes = require("./notificationRoutes");
 const StudentTestRoutes = require("./TestRoutes/studentTestRoutes");
+const StudentDynamicTestRoutes = require("./TestRoutes/studentDynamicTestRoutes");
 const TestManagementRoutes = require("./testManagementRoutes");
 const DynamicTestManagementRoutes = require("./dynamicTestManagementRoutes");
 const ProfileRoutes = require("./profileRoutes");
@@ -19,6 +20,7 @@ router.use("/subscriptions", SubscriptionRoutes);
 router.use("/pdfs", PDFRoutes);
 router.use("/notifications", NotificationRoutes);
 router.use("/profile", ProfileRoutes); // User profile management APIs
-router.use("/", StudentTestRoutes); // Student-facing test APIs at root level
+router.use("/", StudentDynamicTestRoutes); // NEW: Student-facing dynamic hierarchy APIs
+router.use("/", StudentTestRoutes); // OLD: Student-facing test APIs (kept for backwards compatibility)
 
 module.exports = router;

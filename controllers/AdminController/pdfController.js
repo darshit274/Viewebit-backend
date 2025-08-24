@@ -492,6 +492,28 @@ exports.getPdfStats = async (req, res, next) => {
     }
 };
 
+// Get PDF categories
+exports.getPdfCategories = async (req, res, next) => {
+    try {
+        const { PdfCategory } = require('../../models');
+        
+        const categories = await PdfCategory.findAll({
+            attributes: ['id', 'name', 'slug', 'description', 'icon', 'color', 'sort_order'],
+            where: { is_active: true },
+            order: [['sort_order', 'ASC'], ['name', 'ASC']]
+        });
+
+        res.status(200).json({
+            success: true,
+            data: categories
+        });
+    } catch (err) {
+        console.error('Get PDF categories error:', err);
+        const error = new ErrorHandler('Failed to fetch PDF categories', 500);
+        return next(error);
+    }
+};
+
 // Get PDF categories and subjects for filters
 exports.getPdfFilters = async (req, res, next) => {
     try {
