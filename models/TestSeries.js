@@ -1,0 +1,123 @@
+module.exports = (sequelize, DataTypes) => {
+  const TestSeries = sequelize.define('TestSeries', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    uuid: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      allowNull: false,
+      unique: true
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    name_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    description_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
+    pricing_type: {
+      type: DataTypes.ENUM('free', 'paid'),
+      defaultValue: 'free',
+      allowNull: false
+    },
+    price: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0.00,
+      allowNull: false
+    },
+    currency: {
+      type: DataTypes.STRING(10),
+      defaultValue: 'INR',
+      allowNull: false
+    },
+    demo_tests_count: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false
+    },
+    subscription_duration_days: {
+      type: DataTypes.INTEGER,
+      defaultValue: 365,
+      allowNull: false
+    },
+    features: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    discount_percentage: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 0.00,
+      allowNull: false
+    },
+    is_featured: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    // Additional fields that exist in the table
+    difficulty_level: {
+      type: DataTypes.ENUM('beginner', 'intermediate', 'advanced'),
+      defaultValue: 'beginner',
+      allowNull: false
+    },
+    free_test_count: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false
+    },
+    max_attempts_per_test: {
+      type: DataTypes.INTEGER,
+      defaultValue: 1,
+      allowNull: false
+    },
+    has_negative_marking: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    negative_marks: {
+      type: DataTypes.DECIMAL(3, 2),
+      defaultValue: 0.25,
+      allowNull: true
+    },
+    supports_pause_resume: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false
+    },
+    supports_multilanguage: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false
+    }
+  }, {
+    tableName: 'new_test_series',
+    underscored: true,
+    timestamps: true
+  });
+
+  TestSeries.associate = function(models) {
+    TestSeries.hasMany(models.Category, { 
+      foreignKey: 'test_series_id', 
+      as: 'categories' 
+    });
+  };
+
+  return TestSeries;
+};

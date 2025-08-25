@@ -85,6 +85,12 @@ const handlePDFUpload = (req, res, next) => {
             message: 'Too many files. Only one file allowed.'
           });
         }
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(400).json({
+            success: false,
+            message: 'Unexpected field in form data. Expected "pdf" field.'
+          });
+        }
       }
       
       return res.status(400).json({

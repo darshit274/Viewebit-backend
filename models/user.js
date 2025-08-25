@@ -6,18 +6,44 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     static associate(models) {
-      User.hasMany(models.User_Answers, {
-        foreignKey: 'user_id',
-        as: 'userAnswers'
-      });
-      User.hasMany(models.User_Score, {
-        foreignKey: 'user_id',
-        as: 'userScores'
-      });
-      User.hasMany(models.Subscription, {
-        foreignKey: 'user_id',
-        as: 'subscriptions'
-      });
+      // UserAnswer is linked through TestSession, not directly to User
+      // Removed incorrect UserAnswer association
+      
+      if (models.TestSession) {
+        User.hasMany(models.TestSession, {
+          foreignKey: 'user_id',
+          as: 'testSessions'
+        });
+      }
+      
+      if (models.UserSubscription) {
+        User.hasMany(models.UserSubscription, {
+          foreignKey: 'user_id',
+          as: 'userSubscriptions'
+        });
+      }
+      
+      // Legacy associations (only if models exist)
+      if (models.Subscription) {
+        User.hasMany(models.Subscription, {
+          foreignKey: 'user_id',
+          as: 'subscriptions'
+        });
+      }
+      
+      if (models.Notification) {
+        User.hasMany(models.Notification, {
+          foreignKey: 'user_id',
+          as: 'notifications'
+        });
+      }
+      
+      if (models.PushToken) {
+        User.hasMany(models.PushToken, {
+          foreignKey: 'user_id',
+          as: 'pushTokens'
+        });
+      }
     }
   }
 
@@ -62,6 +88,34 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     phone: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    fullName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    phoneNumber: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    dateOfBirth: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    schoolName: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    city: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    state: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    avatarUrl: {
       type: DataTypes.STRING,
       allowNull: true
     },

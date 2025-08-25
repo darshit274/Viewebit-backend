@@ -1,17 +1,24 @@
 const express = require('express');
 const router = express.Router();
 const pdfController = require('../../controllers/AdminController/pdfController');
-const { verifyToken } = require('../../utils/AuthToken');
+const { authToken } = require('../../utils/AuthToken');
 
 // Public routes (no auth required)
 router.get('/', pdfController.getPdfs);
+router.get('/categories', pdfController.getPdfCategories);
 router.get('/filters', pdfController.getPdfFilters);
 router.get('/stats', pdfController.getPdfStats);
 router.get('/:id', pdfController.getPdfById);
 
+// View PDF (accessible without auth for now, can be changed later)
+router.get('/:id/view', pdfController.viewPdf);
+
+// Secure PDF viewing - returns base64 (no downloads possible)
+router.get('/:id/secure', authToken, pdfController.getPdfBase64);
+
 // Protected routes (require user authentication)
-router.get('/:id/download', verifyToken, pdfController.getPdfDownloadUrl);
-router.post('/:id/view', verifyToken, async (req, res, next) => {
+router.get('/:id/download', authToken, pdfController.getPdfDownloadUrl);
+router.post('/:id/view', authToken, async (req, res, next) => {
   try {
     const { id } = req.params;
     

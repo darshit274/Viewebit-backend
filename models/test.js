@@ -1,112 +1,154 @@
-'use strict';
-const {
-  Model
-} = require('sequelize');
-
 module.exports = (sequelize, DataTypes) => {
-  class Test extends Model {
-    static associate(models) {
-      Test.belongsTo(models.Test_Series, {
-        foreignKey: 'test_series_id',
-        as: 'testSeries'
-      });
-      Test.hasMany(models.Questions, {
-        foreignKey: 'test_id',
-        as: 'questions'
-      });
-      Test.hasMany(models.User_Score, {
-        foreignKey: 'test_id',
-        as: 'userScores'
-      });
-      Test.hasMany(models.Pdfs, {
-        foreignKey: 'test_id',
-        as: 'pdfs'
-      });
-    }
-  }
-  Test.init({
+  const Test = sequelize.define('Test', {
     id: {
-      type: DataTypes.UUID, 
-        defaultValue: DataTypes.UUIDV4,
-        primaryKey: true
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
     },
-    test_series_id: {
+    uuid: {
       type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      references: {
-        model: 'test_series',
-        key: 'id'
-      },
+      unique: true
+    },
+    sub_category_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false
     },
     title: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: false
+    },
+    title_gujarati: {
+      type: DataTypes.STRING,
+      allowNull: true
     },
     description: {
       type: DataTypes.TEXT,
-      allowNull: true,
+      allowNull: true
     },
-    instructions: {
+    description_gujarati: {
       type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    is_free: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-    },
-    is_one_time_test: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-    },
-    is_active: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
+      allowNull: true
     },
     duration_minutes: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      defaultValue: 60,
-    },
-    negative_marking: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-    },
-    negative_marks: {
-      type: DataTypes.DOUBLE,
-      defaultValue: 0.25,
-    },
-    pass_marks: {
-      type: DataTypes.INTEGER,
-      defaultValue: 40,
-    },
-    total_questions: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
+      defaultValue: 60
     },
     total_marks: {
       type: DataTypes.INTEGER,
       allowNull: false,
+      defaultValue: 0
     },
-    start_time: {
-      type: DataTypes.DATE,
-      allowNull: true,
+    is_active: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
     },
-    end_time: {
-      type: DataTypes.DATE,
-      allowNull: true,
+    is_demo: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
     },
-
-    
-
-
-    }, {
-    sequelize,
-    modelName: 'Test',
-    tableName: 'test',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    is_free_in_paid_series: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    negative_marking_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    negative_marks_per_wrong: {
+      type: DataTypes.DECIMAL(3, 2),
+      defaultValue: 0.25,
+      allowNull: false
+    },
+    is_one_time_only: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    max_duration_minutes: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    attempt_restrictions: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    passing_marks: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    instructions: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    instructions_gujarati: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    // Additional advanced test features
+    difficulty_level: {
+      type: DataTypes.ENUM('easy', 'medium', 'hard'),
+      defaultValue: 'medium',
+      allowNull: false,
+      comment: 'Difficulty level of the test'
+    },
+    randomize_questions: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether to randomize question order'
+    },
+    show_results_immediately: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Whether to show results immediately after test completion'
+    },
+    pass_percentage: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 60.00,
+      allowNull: false,
+      comment: 'Minimum percentage required to pass'
+    },
+    allow_review: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Whether students can review answers after test'
+    },
+    total_questions: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Total number of questions in the test'
+    },
+    display_order: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Display order for sorting tests'
+    }
+  }, {
+    tableName: 'tests',
+    underscored: true,
+    timestamps: true
   });
+
+  Test.associate = function(models) {
+    Test.belongsTo(models.SubCategory, { 
+      foreignKey: 'sub_category_id', 
+      as: 'subCategory' 
+    });
+    Test.hasMany(models.Question, { 
+      foreignKey: 'test_id', 
+      as: 'questions' 
+    });
+  };
 
   return Test;
 };

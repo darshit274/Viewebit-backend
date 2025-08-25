@@ -3,16 +3,47 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const router = require('./routes/index');
 const serverless = require("serverless-http");
+const fileUpload = require('express-fileupload');
 
 const { sequelize } = require('./models'); // Assuming your sequelize export is CommonJS
-const errorMiddleware = require('./utils/default/globalErrorHandler')
+const errorMiddleware = require('./utils/default/globalErrorHandler');
+const { initializeFirebase } = require('./config/firebase');
+const NotificationScheduler = require('./services/NotificationScheduler');
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Configure CORS with more specific options
+app.use(cors({
+}));
+// Trust proxy for devtunnels/ngrok
+app.set('trust proxy', true);
+
+// Request logging middleware for debugging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.get('origin') || 'No origin'}`);
+  if (req.path.includes('/api/profile')) {
+    console.log('Headers:', req.headers);
+  }
+  next();
+});
+
+// Parse JSON bodies
 app.use(express.json());
+
+// Configure file upload middleware
+app.use(fileUpload({
+  createParentPath: true,
+  limits: { 
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+}));
+
+// Serve static files
+app.use('/uploads', express.static('uploads'));
+
+// API routes
 app.use('/api', router);
 
 app.get('/', (req, res) => {
@@ -27,12 +58,18 @@ sequelize.authenticate().then(() => {
 
 async function startServer() {
   try {
+    // Initialize Firebase Admin SDK
+    initializeFirebase();
+
+    // Initialize Notification Scheduler
+    NotificationScheduler.initialize();
 
     app.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`🔔 Notification system initialized with automated triggers`);
     });
   } catch (error) {
-    // console.error('❌ DB Connection error:', error);
+    console.error('❌ Server startup error:', error);
   }
 }
 

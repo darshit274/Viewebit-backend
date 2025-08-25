@@ -26,11 +26,25 @@ exports.authToken = async (req, res, next) => {
     // Verify token using the same secret as auth controller
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Add user info to request object
+    // Get the user from database to ensure complete user data
+    const { User } = require('../models');
+    
+    // Look up user by UUID
+    const user = await User.findOne({ where: { uuid: decoded.uuid } });
+    
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not found. Please login again.' 
+      });
+    }
+
+    // Add complete user info to request object
     req.user = {
-      id: decoded.id,
-      email: decoded.email,
-      uuid: decoded.uuid
+      uuid: user.uuid,     // User UUID (primary key)
+      email: user.email,
+      username: user.username,
+      isEmailVerified: user.isEmailVerified
     };
     
     next();
@@ -70,11 +84,18 @@ exports.optionalAuth = async (req, res, next) => {
       
       if (token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = {
-          id: decoded.id,
-          email: decoded.email,
-          uuid: decoded.uuid
-        };
+        const { User } = require('../models');
+        const user = await User.findOne({ where: { uuid: decoded.id } });
+        
+        if (user) {
+          req.user = {
+            id: user.id,         // Database primary key
+            uuid: user.uuid,     // User UUID for foreign key relations
+            email: user.email,
+            username: user.username,
+            isEmailVerified: user.isEmailVerified
+          };
+        }
       }
     }
     
@@ -82,5 +103,51 @@ exports.optionalAuth = async (req, res, next) => {
   } catch (error) {
     // Continue without auth if token is invalid
     next();
+  }
+};
+
+// Helper method to verify token without middleware wrapper
+exports.verifyToken = (token) => {
+  return jwt.verify(token, process.env.JWT_SECRET);
+};
+
+// Admin authorization middleware
+exports.isAdmin = async (req, res, next) => {
+  try {
+    // Check if user is authenticated first
+    if (!req.user && !req.admin) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    // Check if user has admin privileges
+    if (req.admin) {
+      // Already verified as admin
+      return next();
+    }
+
+    // For regular users, check if they have admin role
+    const { Admin } = require('../models');
+    const admin = await Admin.findOne({ 
+      where: { email: req.user.email, is_active: true } 
+    });
+
+    if (!admin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
+    req.admin = admin;
+    next();
+  } catch (error) {
+    console.error('Admin authorization error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Authorization failed'
+    });
   }
 };

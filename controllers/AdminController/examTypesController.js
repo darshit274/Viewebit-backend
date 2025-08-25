@@ -16,8 +16,8 @@ exports.getExamTypes = async (req, res, next) => {
         const whereClause = {};
         if (search) {
             whereClause[Op.or] = [
-                { name: { [Op.iLike]: `%${search}%` } },
-                { code: { [Op.iLike]: `%${search}%` } }
+                { name: { [Op.like]: `%${search}%` } },
+                { code: { [Op.like]: `%${search}%` } }
             ];
         }
 
@@ -91,8 +91,8 @@ exports.createExamType = async (req, res, next) => {
         const existingExamType = await ExamType.findOne({
             where: {
                 [Op.or]: [
-                    { name: { [Op.iLike]: name } },
-                    { code: { [Op.iLike]: code } }
+                    { name: { [Op.like]: name } },
+                    { code: { [Op.like]: code } }
                 ]
             }
         });
@@ -137,8 +137,8 @@ exports.updateExamType = async (req, res, next) => {
                 where: {
                     id: { [Op.ne]: id },
                     [Op.or]: [
-                        ...(name ? [{ name: { [Op.iLike]: name } }] : []),
-                        ...(code ? [{ code: { [Op.iLike]: code } }] : [])
+                        ...(name ? [{ name: { [Op.like]: name } }] : []),
+                        ...(code ? [{ code: { [Op.like]: code } }] : [])
                     ]
                 }
             });

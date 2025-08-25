@@ -10,10 +10,12 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'user_id',
         as: 'user'
       });
-      Subscription.belongsTo(models.Test_Series, {
-        foreignKey: 'test_series_id',
-        as: 'testSeries'
-      });
+      if (models.TestSeries) {
+        Subscription.belongsTo(models.TestSeries, {
+          foreignKey: 'test_series_id',
+          as: 'testSeries'
+        });
+      }
     }
   }
   Subscription.init({
@@ -31,10 +33,10 @@ module.exports = (sequelize, DataTypes) => {
       },
     },
     test_series_id: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: 'test_series',
+        model: 'new_test_series',
         key: 'id'
       },
     },

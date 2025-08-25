@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const authController = require('../../controllers/AuthController/authController');
+const notificationController = require('../../controllers/NotificationController');
 const { authToken } = require('../../utils/AuthToken');
 
 // Public routes (no authentication required)
@@ -14,5 +15,6 @@ router.post('/resend-otp', authController.resendOTP);
 
 // Protected routes (authentication required)
 router.get('/profile', authToken, authController.getProfile);
+router.post('/register-push-token', authToken, notificationController.registerPushToken);
 
 module.exports = router;
