@@ -4,36 +4,38 @@ module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable('admins', {
       id: {
-        type: Sequelize.UUID,
-        defaultValue: Sequelize.UUIDV4,
-        primaryKey: true
+        type: Sequelize.CHAR(36),
+        primaryKey: true,
+        allowNull: false,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin'
       },
       name: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false
       },
       email: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false,
         unique: true
       },
       password: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false
       },
       role: {
         type: Sequelize.ENUM('super_admin', 'admin', 'moderator'),
-        defaultValue: 'admin',
-        allowNull: false
+        allowNull: false,
+        defaultValue: 'admin'
       },
       avatar: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: true
       },
       isActive: {
         type: Sequelize.BOOLEAN,
-        defaultValue: true,
-        allowNull: false
+        allowNull: false,
+        defaultValue: true
       },
       lastLogin: {
         type: Sequelize.DATE,
@@ -41,25 +43,22 @@ module.exports = {
       },
       permissions: {
         type: Sequelize.JSON,
-        allowNull: true,
-        defaultValue: {}
+        allowNull: true
       },
       created_at: {
         type: Sequelize.DATE,
-        allowNull: false,
-        defaultValue: Sequelize.NOW
+        allowNull: false
       },
       updated_at: {
         type: Sequelize.DATE,
-        allowNull: false,
-        defaultValue: Sequelize.NOW
+        allowNull: false
       }
     });
 
     // Add indexes
-    await queryInterface.addIndex('admins', ['email']);
-    await queryInterface.addIndex('admins', ['role']);
-    await queryInterface.addIndex('admins', ['isActive']);
+    await queryInterface.addIndex('admins', ['email'], { name: 'admins_email' });
+    await queryInterface.addIndex('admins', ['role'], { name: 'admins_role' });
+    await queryInterface.addIndex('admins', ['isActive'], { name: 'admins_is_active' });
   },
 
   down: async (queryInterface, Sequelize) => {

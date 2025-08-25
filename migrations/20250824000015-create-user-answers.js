@@ -10,8 +10,10 @@ module.exports = {
         allowNull: false
       },
       test_session_id: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         allowNull: false,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin',
         references: {
           model: 'test_sessions',
           key: 'id'
@@ -35,19 +37,23 @@ module.exports = {
       },
       is_correct: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: false
       },
       time_spent: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0,
         comment: 'Time spent on this question in seconds'
       },
       is_flagged: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: false
       },
       is_visited: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: false
       },
       created_at: {
@@ -62,13 +68,13 @@ module.exports = {
       }
     });
 
-    // Add indexes for better performance
-    await queryInterface.addIndex('user_answers', ['test_session_id']);
-    await queryInterface.addIndex('user_answers', ['question_id']);
-    await queryInterface.addIndex('user_answers', ['test_session_id', 'question_id'], {
-      unique: true,
-      name: 'unique_session_question'
+    // Add indexes
+    await queryInterface.addIndex('user_answers', ['test_session_id', 'question_id'], { 
+      unique: true, 
+      name: 'unique_session_question' 
     });
+    await queryInterface.addIndex('user_answers', ['test_session_id'], { name: 'user_answers_test_session_id' });
+    await queryInterface.addIndex('user_answers', ['question_id'], { name: 'user_answers_question_id' });
   },
 
   down: async (queryInterface, Sequelize) => {

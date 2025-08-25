@@ -1,23 +1,26 @@
 'use strict';
 
-/** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  async up (queryInterface, Sequelize) {
+  up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable('question_imports', {
       id: {
-        type: Sequelize.UUID,
-        defaultValue: Sequelize.UUIDV4,
-        primaryKey: true
+        type: Sequelize.CHAR(36),
+        primaryKey: true,
+        allowNull: false,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin'
       },
       admin_id: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         allowNull: false,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin',
         references: {
           model: 'admins',
           key: 'id'
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
       },
       category_id: {
         type: Sequelize.INTEGER,
@@ -26,8 +29,8 @@ module.exports = {
           model: 'categories',
           key: 'id'
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
       },
       test_series_id: {
         type: Sequelize.INTEGER,
@@ -36,15 +39,15 @@ module.exports = {
           model: 'new_test_series',
           key: 'id'
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
       },
       filename: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false
       },
       original_filename: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false
       },
       file_size: {
@@ -57,20 +60,23 @@ module.exports = {
       },
       total_rows: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
       successful_imports: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
       failed_imports: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
       import_status: {
         type: Sequelize.ENUM('uploaded', 'validating', 'validated', 'importing', 'completed', 'failed'),
-        defaultValue: 'uploaded',
-        allowNull: false
+        allowNull: false,
+        defaultValue: 'uploaded'
       },
       validation_errors: {
         type: Sequelize.JSON,
@@ -89,24 +95,23 @@ module.exports = {
       },
       created_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW,
         allowNull: false
       },
       updated_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW,
         allowNull: false
       }
     });
 
-    // Add indexes for better performance
-    await queryInterface.addIndex('question_imports', ['admin_id']);
-    await queryInterface.addIndex('question_imports', ['category_id']);
-    await queryInterface.addIndex('question_imports', ['import_status']);
-    await queryInterface.addIndex('question_imports', ['created_at']);
+    // Add indexes
+    await queryInterface.addIndex('question_imports', ['admin_id'], { name: 'question_imports_admin_id' });
+    await queryInterface.addIndex('question_imports', ['category_id'], { name: 'question_imports_category_id' });
+    await queryInterface.addIndex('question_imports', ['test_series_id'], { name: 'test_series_id' });
+    await queryInterface.addIndex('question_imports', ['import_status'], { name: 'question_imports_import_status' });
+    await queryInterface.addIndex('question_imports', ['created_at'], { name: 'question_imports_created_at' });
   },
 
-  async down (queryInterface, Sequelize) {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable('question_imports');
   }
 };

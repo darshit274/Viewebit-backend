@@ -10,10 +10,11 @@ module.exports = {
         allowNull: false
       },
       uuid: {
-        type: Sequelize.UUID,
-        defaultValue: Sequelize.UUIDV4,
+        type: Sequelize.CHAR(36),
+        allowNull: false,
         unique: true,
-        allowNull: false
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin'
       },
       name: {
         type: Sequelize.STRING(200),
@@ -31,8 +32,6 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
-      
-      // Hierarchy management
       test_series_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -40,8 +39,8 @@ module.exports = {
           model: 'new_test_series',
           key: 'id'
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
       },
       parent_id: {
         type: Sequelize.INTEGER,
@@ -50,25 +49,20 @@ module.exports = {
           model: 'hierarchy_categories',
           key: 'id'
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'CASCADE'
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
       },
       hierarchy_level: {
         type: Sequelize.INTEGER,
-        allowNull: false,
-        validate: {
-          min: 1,
-          max: 4
-        }
+        allowNull: false
       },
       hierarchy_path: {
         type: Sequelize.STRING(500),
         allowNull: true
       },
-      
-      // Display and organization
       display_order: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
       icon_url: {
@@ -79,20 +73,19 @@ module.exports = {
         type: Sequelize.STRING(7),
         allowNull: true
       },
-      
-      // SEO and metadata
       slug: {
         type: Sequelize.STRING(200),
-        allowNull: true
+        allowNull: true,
+        unique: true
       },
       tags: {
-        type: Sequelize.JSON
+        type: Sequelize.JSON,
+        allowNull: true
       },
       metadata: {
-        type: Sequelize.JSON
+        type: Sequelize.JSON,
+        allowNull: true
       },
-      
-      // Content configuration
       instructions: {
         type: Sequelize.TEXT,
         allowNull: true
@@ -101,89 +94,64 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
-      
-      // Status and visibility
       is_active: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: true
       },
       is_featured: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: false
       },
-      
-      // Analytics (auto-calculated)
       child_categories_count: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
       tests_count: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
       total_questions: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
       total_attempts: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0
       },
-      
-      // Admin tracking
       created_by: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         allowNull: true,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin',
         references: {
           model: 'admins',
           key: 'id'
         },
-        onUpdate: 'SET NULL',
-        onDelete: 'SET NULL'
+        onDelete: 'SET NULL',
+        onUpdate: 'SET NULL'
       },
-      
       created_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW,
         allowNull: false
       },
       updated_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW,
         allowNull: false
       }
     });
 
     // Add indexes
-    await queryInterface.addIndex('hierarchy_categories', ['uuid'], {
-      unique: true,
-      name: 'hierarchy_categories_uuid_unique'
-    });
-
-    await queryInterface.addIndex('hierarchy_categories', ['test_series_id', 'hierarchy_level'], {
-      name: 'hierarchy_categories_series_level_index'
-    });
-
-    await queryInterface.addIndex('hierarchy_categories', ['parent_id'], {
-      name: 'hierarchy_categories_parent_index'
-    });
-
-    await queryInterface.addIndex('hierarchy_categories', ['hierarchy_path'], {
-      name: 'hierarchy_categories_path_index'
-    });
-
-    await queryInterface.addIndex('hierarchy_categories', ['slug'], {
-      unique: true,
-      name: 'hierarchy_categories_slug_unique'
-    });
-
-    await queryInterface.addIndex('hierarchy_categories', ['is_active'], {
-      name: 'hierarchy_categories_active_index'
-    });
-
-    await queryInterface.addIndex('hierarchy_categories', ['display_order'], {
-      name: 'hierarchy_categories_display_order_index'
-    });
+    await queryInterface.addIndex('hierarchy_categories', ['test_series_id', 'hierarchy_level'], { name: 'hierarchy_categories_series_level_index' });
+    await queryInterface.addIndex('hierarchy_categories', ['parent_id'], { name: 'hierarchy_categories_parent_index' });
+    await queryInterface.addIndex('hierarchy_categories', ['hierarchy_path'], { name: 'hierarchy_categories_path_index' });
+    await queryInterface.addIndex('hierarchy_categories', ['is_active'], { name: 'hierarchy_categories_active_index' });
+    await queryInterface.addIndex('hierarchy_categories', ['display_order'], { name: 'hierarchy_categories_display_order_index' });
   },
 
   down: async (queryInterface, Sequelize) => {

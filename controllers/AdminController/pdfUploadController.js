@@ -90,129 +90,121 @@ exports.createPdfCategory = async (req, res, next) => {
 // Upload PDF
 exports.uploadPdf = async (req, res, next) => {
   try {
-    // Handle file upload first
-    handlePDFUpload(req, res, async (uploadErr) => {
-      if (uploadErr) {
-        return next(uploadErr);
+    const { title, description, course_id, category_id, access_level, test_series_id, exam_type_id, tags } = req.body;
+    const adminId = req.admin?.id;
+
+    console.log('📤 PDF Upload using express-fileupload');
+    console.log('📋 Request body:', req.body);
+    console.log('📁 Files:', req.files);
+
+    // Check if file was uploaded using express-fileupload
+    if (!req.files || !req.files.pdf) {
+      return next(new ErrorHandler('No PDF file provided', 400));
+    }
+
+    const uploadedFile = req.files.pdf;
+
+    // Validate file type
+    if (uploadedFile.mimetype !== 'application/pdf') {
+      return next(new ErrorHandler('Only PDF files are allowed', 400));
+    }
+
+    // Validate file size (50MB limit)
+    const maxSize = 50 * 1024 * 1024;
+    if (uploadedFile.size > maxSize) {
+      return next(new ErrorHandler('File size must be less than 50MB', 400));
+    }
+
+    // Support both course_id (new) and category_id (legacy) for backward compatibility
+    const courseId = course_id || category_id;
+
+    if (!title || !courseId) {
+      return next(new ErrorHandler('Title and course are required', 400));
+    }
+
+    // If course_id is provided, validate against TestSeries (courses)
+    let validatedCategoryId = null;
+    if (course_id) {
+      const { TestSeries } = require('../../models');
+      const course = await TestSeries.findOne({ where: { uuid: course_id } });
+      if (!course) {
+        return next(new ErrorHandler('Invalid course', 400));
       }
+      validatedCategoryId = null;
+    } else {
+      // Legacy support: validate category exists
+      const category = await PdfCategory.findByPk(category_id);
+      if (!category) {
+        return next(new ErrorHandler('Invalid category', 400));
+      }
+      validatedCategoryId = parseInt(category_id);
+    }
 
-      const { title, description, course_id, category_id, access_level, test_series_id, exam_type_id, tags } = req.body;
-      const adminId = req.admin?.id;
+    // Create upload directory if it doesn't exist
+    const uploadsDir = path.join(__dirname, '../../uploads/pdfs');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
 
-      // Debug logging to see what's being received
-      console.log('🔍 PDF Upload Request Body:', req.body);
-      console.log('📋 Received fields:', {
+    // Generate unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const filename = `pdf-${uniqueSuffix}.pdf`;
+    const filePath = path.join(uploadsDir, filename);
+
+    // Save file to disk
+    await uploadedFile.mv(filePath);
+
+    console.log('✅ File saved to:', filePath);
+    console.log('📄 File size:', uploadedFile.size, 'bytes');
+
+    try {
+      // Create PDF record
+      const pdf = await Pdfs.create({
         title,
         description,
-        course_id,
-        category_id,
-        access_level,
-        test_series_id,
-        exam_type_id,
-        tags
+        category_id: validatedCategoryId,
+        access_level: access_level || 'free',
+        test_series_id: course_id || test_series_id || null,
+        exam_type_id: exam_type_id ? parseInt(exam_type_id) : null,
+        tags: tags ? JSON.parse(tags) : null,
+        uploaded_by: adminId,
+        original_filename: uploadedFile.name,
+        file_path: filePath,
+        file_size: uploadedFile.size,
+        mime_type: uploadedFile.mimetype
       });
 
-      // Support both course_id (new) and category_id (legacy) for backward compatibility
-      const courseId = course_id || category_id;
-
-      if (!title || !courseId) {
-        // Delete uploaded file if validation fails
-        if (req.file) {
-          deletePDFFile(req.file.path);
-        }
-        return next(new ErrorHandler('Title and course are required', 400));
-      }
-
-      // If course_id is provided, validate against TestSeries (courses)
-      let validatedCategoryId = null;
-      if (course_id) {
-        const { TestSeries } = require('../../models');
-        const course = await TestSeries.findOne({ where: { uuid: course_id } });
-        if (!course) {
-          if (req.file) {
-            deletePDFFile(req.file.path);
+      // Fetch the created PDF with associations
+      const createdPdf = await Pdfs.findByPk(pdf.id, {
+        include: [
+          {
+            model: PdfCategory,
+            as: 'category',
+            attributes: ['id', 'name', 'color']
+          },
+          {
+            model: Admin,
+            as: 'uploader',
+            attributes: ['id', 'name', 'email']
           }
-          return next(new ErrorHandler('Invalid course', 400));
+        ]
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'PDF uploaded successfully',
+        data: {
+          ...createdPdf.toJSON(),
+          formatted_file_size: formatFileSize(createdPdf.file_size)
         }
-        // For now, we'll set category_id to null and use test_series_id field
-        validatedCategoryId = null;
-      } else {
-        // Legacy support: validate category exists
-        const category = await PdfCategory.findByPk(category_id);
-        if (!category) {
-          if (req.file) {
-            deletePDFFile(req.file.path);
-          }
-          return next(new ErrorHandler('Invalid category', 400));
-        }
-        validatedCategoryId = parseInt(category_id);
+      });
+    } catch (dbErr) {
+      // Delete uploaded file if database operation fails
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
       }
-
-      // Validate PDF file - temporarily relaxed for debugging
-      console.log('File uploaded:', req.file);
-      console.log('File path:', req.file.path);
-      console.log('File exists:', require('fs').existsSync(req.file.path));
-      
-      // Skip PDF signature validation for now - just check if file exists and has size
-      if (!require('fs').existsSync(req.file.path)) {
-        return next(new ErrorHandler('Uploaded file not found', 400));
-      }
-      
-      const stats = require('fs').statSync(req.file.path);
-      if (stats.size === 0) {
-        deletePDFFile(req.file.path);
-        return next(new ErrorHandler('Uploaded file is empty', 400));
-      }
-      
-      console.log('File validation passed - size:', stats.size, 'bytes');
-
-      try {
-        // Get file information
-        const fileInfo = getFileInfo(req.file);
-
-        // Create PDF record
-        const pdf = await Pdfs.create({
-          title,
-          description,
-          category_id: validatedCategoryId,
-          access_level: access_level || 'free',
-          test_series_id: course_id || test_series_id || null,
-          exam_type_id: exam_type_id ? parseInt(exam_type_id) : null,
-          tags: tags ? JSON.parse(tags) : null,
-          uploaded_by: adminId,
-          ...fileInfo
-        });
-
-        // Fetch the created PDF with associations
-        const createdPdf = await Pdfs.findByPk(pdf.id, {
-          include: [
-            {
-              model: PdfCategory,
-              as: 'category',
-              attributes: ['id', 'name', 'color']
-            },
-            {
-              model: Admin,
-              as: 'uploader',
-              attributes: ['id', 'name', 'email']
-            }
-          ]
-        });
-
-        res.status(201).json({
-          success: true,
-          message: 'PDF uploaded successfully',
-          data: {
-            ...createdPdf.toJSON(),
-            formatted_file_size: formatFileSize(createdPdf.file_size)
-          }
-        });
-      } catch (dbErr) {
-        // Delete uploaded file if database operation fails
-        deletePDFFile(req.file.path);
-        throw dbErr;
-      }
-    });
+      throw dbErr;
+    }
   } catch (err) {
     console.error('Upload PDF error:', err);
     const error = new ErrorHandler('Failed to upload PDF', 500);

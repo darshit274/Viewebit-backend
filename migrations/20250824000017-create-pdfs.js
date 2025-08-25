@@ -1,21 +1,17 @@
 'use strict';
 
 module.exports = {
-  async up(queryInterface, Sequelize) {
-    // Drop the old pdfs table if it exists and create new one
-    await queryInterface.dropTable('pdfs').catch(() => {
-      // Table might not exist, ignore error
-    });
-
-    // Create new uploads-ready PDFs table
+  up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable('pdfs', {
       id: {
-        type: Sequelize.UUID,
-        defaultValue: Sequelize.UUIDV4,
-        primaryKey: true
+        type: Sequelize.CHAR(36),
+        primaryKey: true,
+        allowNull: false,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin'
       },
       title: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false,
         comment: 'Display title for the PDF'
       },
@@ -23,27 +19,23 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true
       },
-      
-      // Category relationship
       category_id: {
         type: Sequelize.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: 'pdf_categories',
           key: 'id'
         },
-        onUpdate: 'CASCADE',
-        onDelete: 'RESTRICT'
+        onDelete: 'RESTRICT',
+        onUpdate: 'CASCADE'
       },
-      
-      // File information
       file_path: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false,
         comment: 'Server path to the PDF file'
       },
       original_filename: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false,
         comment: 'Original filename when uploaded'
       },
@@ -53,37 +45,33 @@ module.exports = {
         comment: 'File size in bytes'
       },
       mime_type: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
+        allowNull: true,
         defaultValue: 'application/pdf',
         comment: 'MIME type of the file'
       },
-      
-      // Access control
       access_level: {
         type: Sequelize.ENUM('free', 'premium', 'restricted'),
+        allowNull: true,
         defaultValue: 'free',
         comment: 'Who can access this PDF'
       },
-      
-      // Test series linking (optional) - will add foreign key later
       test_series_id: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         allowNull: true,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin',
         comment: 'Link to specific test series if applicable'
       },
-      
-      // Subject/exam linking
       exam_type_id: {
         type: Sequelize.INTEGER,
         allowNull: true,
+        comment: 'Link to exam type if applicable',
         references: {
           model: 'exam_types',
           key: 'id'
-        },
-        comment: 'Link to exam type if applicable'
+        }
       },
-      
-      // Metadata
       tags: {
         type: Sequelize.JSON,
         allowNull: true,
@@ -91,55 +79,54 @@ module.exports = {
       },
       download_count: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0,
         comment: 'Number of times downloaded'
       },
       view_count: {
         type: Sequelize.INTEGER,
+        allowNull: true,
         defaultValue: 0,
         comment: 'Number of times viewed'
       },
-      
-      // Status
       is_active: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: true
       },
       is_featured: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: false
       },
-      
-      // Admin information - will add foreign key later
       uploaded_by: {
-        type: Sequelize.UUID,
+        type: Sequelize.CHAR(36),
         allowNull: true,
+        charset: 'utf8mb4',
+        collate: 'utf8mb4_bin',
         comment: 'Admin who uploaded this PDF'
       },
-      
       created_at: {
-        allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW
+        allowNull: false
       },
       updated_at: {
-        allowNull: false,
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW
+        allowNull: false
       }
     });
 
-    // Add indexes for better performance
-    await queryInterface.addIndex('pdfs', ['category_id']);
-    await queryInterface.addIndex('pdfs', ['test_series_id']);
-    await queryInterface.addIndex('pdfs', ['exam_type_id']);
-    await queryInterface.addIndex('pdfs', ['access_level']);
-    await queryInterface.addIndex('pdfs', ['is_active']);
-    await queryInterface.addIndex('pdfs', ['is_featured']);
-    await queryInterface.addIndex('pdfs', ['created_at']);
+    // Add indexes
+    await queryInterface.addIndex('pdfs', ['category_id'], { name: 'pdfs_category_id' });
+    await queryInterface.addIndex('pdfs', ['test_series_id'], { name: 'pdfs_test_series_id' });
+    await queryInterface.addIndex('pdfs', ['exam_type_id'], { name: 'pdfs_exam_type_id' });
+    await queryInterface.addIndex('pdfs', ['access_level'], { name: 'pdfs_access_level' });
+    await queryInterface.addIndex('pdfs', ['is_active'], { name: 'pdfs_is_active' });
+    await queryInterface.addIndex('pdfs', ['is_featured'], { name: 'pdfs_is_featured' });
+    await queryInterface.addIndex('pdfs', ['created_at'], { name: 'pdfs_created_at' });
   },
 
-  async down(queryInterface, Sequelize) {
+  down: async (queryInterface, Sequelize) => {
     await queryInterface.dropTable('pdfs');
   }
 };

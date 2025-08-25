@@ -2,22 +2,23 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('subjects', {
+    await queryInterface.createTable('exam_types', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
-        autoIncrement: true
+        autoIncrement: true,
+        allowNull: false
       },
       name: {
-        type: Sequelize.STRING,
+        type: Sequelize.STRING(255),
         allowNull: false,
-        comment: 'Subject name (e.g., Mathematics, English, etc.)'
+        comment: 'Exam name (e.g., "Deputy Section Officer", "PSI", "GPSC")'
       },
       code: {
-        type: Sequelize.STRING,
-        allowNull: true,
+        type: Sequelize.STRING(255),
+        allowNull: false,
         unique: true,
-        comment: 'Short code for subject'
+        comment: 'Short code for exam (e.g., "DSO", "PSI", "GPSC")'
       },
       description: {
         type: Sequelize.TEXT,
@@ -25,24 +26,21 @@ module.exports = {
       },
       is_active: {
         type: Sequelize.BOOLEAN,
+        allowNull: true,
         defaultValue: true
       },
       created_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW
+        allowNull: false
       },
       updated_at: {
         type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW
+        allowNull: false
       }
     });
-
-    // Add indexes
-    await queryInterface.addIndex('subjects', ['is_active']);
-    await queryInterface.addIndex('subjects', ['name']);
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.dropTable('subjects');
+    await queryInterface.dropTable('exam_types');
   }
 };
