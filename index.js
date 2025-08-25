@@ -14,11 +14,35 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configure CORS with more specific options
+// Configure CORS to allow all origins and methods
 app.use(cors({
+  origin: '*',
+  credentials: false,
+  optionsSuccessStatus: 200
 }));
+
 // Trust proxy for devtunnels/ngrok
 app.set('trust proxy', true);
+
+// Handle preflight requests explicitly
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.status(200).send();
+  } else {
+    next();
+  }
+});
+
+// Manual CORS headers middleware (fallback)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  next();
+});
 
 // Request logging middleware for debugging
 app.use((req, res, next) => {
