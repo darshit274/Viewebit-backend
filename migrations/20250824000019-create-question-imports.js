@@ -11,16 +11,9 @@ module.exports = {
         collate: 'utf8mb4_bin'
       },
       admin_id: {
-        type: Sequelize.CHAR(36),
-        allowNull: false,
-        charset: 'utf8mb4',
-        collate: 'utf8mb4_bin',
-        references: {
-          model: 'admins',
-          key: 'id'
-        },
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
+        type: Sequelize.STRING(255),
+        allowNull: false
+        // Note: Foreign key constraint removed to avoid data type conflicts
       },
       category_id: {
         type: Sequelize.INTEGER,

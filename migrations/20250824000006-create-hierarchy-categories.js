@@ -125,16 +125,10 @@ module.exports = {
         defaultValue: 0
       },
       created_by: {
-        type: Sequelize.CHAR(36),
-        allowNull: true,
-        charset: 'utf8mb4',
-        collate: 'utf8mb4_bin',
-        references: {
-          model: 'admins',
-          key: 'id'
-        },
-        onDelete: 'SET NULL',
-        onUpdate: 'SET NULL'
+        type: Sequelize.STRING(255),
+        allowNull: true
+        // Note: Foreign key constraint removed to avoid data type conflicts
+        // The relationship will be handled at application level
       },
       created_at: {
         type: Sequelize.DATE,
