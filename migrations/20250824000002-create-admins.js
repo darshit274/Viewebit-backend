@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('admins', {
+    // Check if admins table exists
+    const tableExists = await queryInterface.tableExists('admins');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('admins', {
       id: {
         type: Sequelize.CHAR(36),
         primaryKey: true,
@@ -53,12 +57,66 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('admins', ['email'], { name: 'admins_email' });
-    await queryInterface.addIndex('admins', ['role'], { name: 'admins_role' });
-    await queryInterface.addIndex('admins', ['isActive'], { name: 'admins_is_active' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('admins', ['email'], { name: 'admins_email' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index admins_email already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('admins', ['role'], { name: 'admins_role' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index admins_role already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('admins', ['isActive'], { name: 'admins_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index admins_is_active already exists, skipping...');
+      }
+    } else {
+      console.log('Admins table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('admins', ['email'], { name: 'admins_email' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index admins_email already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('admins', ['role'], { name: 'admins_role' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index admins_role already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('admins', ['isActive'], { name: 'admins_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index admins_is_active already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

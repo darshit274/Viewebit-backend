@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('users', {
+    // Check if users table exists
+    const tableExists = await queryInterface.tableExists('users');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('users', {
       uuid: {
         type: Sequelize.CHAR(36),
         primaryKey: true,
@@ -107,11 +111,48 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('users', ['isActive'], { name: 'users_is_active' });
-    await queryInterface.addIndex('users', ['lastLogin'], { name: 'users_last_login' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('users', ['isActive'], { name: 'users_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index users_is_active already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('users', ['lastLogin'], { name: 'users_last_login' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index users_last_login already exists, skipping...');
+      }
+    } else {
+      console.log('Users table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('users', ['isActive'], { name: 'users_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index users_is_active already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('users', ['lastLogin'], { name: 'users_last_login' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index users_last_login already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

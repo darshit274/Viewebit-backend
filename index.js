@@ -16,11 +16,12 @@ const PORT = process.env.PORT || 3000;
 
 // Configure CORS to allow all origins and methods
 app.use(cors({
-  origin: '*',
-  credentials: false,
-  optionsSuccessStatus: 200
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: false, // Set to false when using origin: '*'
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
-
 // Trust proxy for devtunnels/ngrok
 app.set('trust proxy', true);
 
