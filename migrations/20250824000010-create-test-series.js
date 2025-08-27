@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('test_series', {
+    // Check if test_series table exists
+    const tableExists = await queryInterface.tableExists('test_series');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('test_series', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -139,15 +143,120 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('test_series', ['category_id'], { name: 'test_series_category_id' });
-    await queryInterface.addIndex('test_series', ['is_published'], { name: 'test_series_is_published' });
-    await queryInterface.addIndex('test_series', ['is_active'], { name: 'test_series_is_active' });
-    await queryInterface.addIndex('test_series', ['uuid'], { name: 'test_series_uuid' });
-    await queryInterface.addIndex('test_series', ['is_free'], { name: 'test_series_is_free' });
-    await queryInterface.addIndex('test_series', ['requires_subscription'], { name: 'test_series_requires_subscription' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('test_series', ['category_id'], { name: 'test_series_category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_category_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['is_published'], { name: 'test_series_is_published' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_is_published already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['is_active'], { name: 'test_series_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_is_active already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['uuid'], { name: 'test_series_uuid' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_uuid already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['is_free'], { name: 'test_series_is_free' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_is_free already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['requires_subscription'], { name: 'test_series_requires_subscription' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_requires_subscription already exists, skipping...');
+      }
+    } else {
+      console.log('test_series table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('test_series', ['category_id'], { name: 'test_series_category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_category_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['is_published'], { name: 'test_series_is_published' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_is_published already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['is_active'], { name: 'test_series_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_is_active already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['uuid'], { name: 'test_series_uuid' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_uuid already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['is_free'], { name: 'test_series_is_free' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_is_free already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_series', ['requires_subscription'], { name: 'test_series_requires_subscription' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_series_requires_subscription already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

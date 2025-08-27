@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('categories', {
+    // Check if categories table exists
+    const tableExists = await queryInterface.tableExists('categories');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('categories', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -82,10 +86,64 @@ module.exports = {
       }
     });
 
-    // Add indexes
-    await queryInterface.addIndex('categories', ['parent_category_id'], { name: 'idx_categories_parent' });
-    await queryInterface.addIndex('categories', ['test_series_id', 'hierarchy_level'], { name: 'idx_categories_test_series_level' });
-    await queryInterface.addIndex('categories', ['node_type'], { name: 'idx_categories_node_type' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('categories', ['parent_category_id'], { name: 'idx_categories_parent' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_categories_parent already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('categories', ['test_series_id', 'hierarchy_level'], { name: 'idx_categories_test_series_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_categories_test_series_level already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('categories', ['node_type'], { name: 'idx_categories_node_type' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_categories_node_type already exists, skipping...');
+      }
+    } else {
+      console.log('Categories table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('categories', ['parent_category_id'], { name: 'idx_categories_parent' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_categories_parent already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('categories', ['test_series_id', 'hierarchy_level'], { name: 'idx_categories_test_series_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_categories_test_series_level already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('categories', ['node_type'], { name: 'idx_categories_node_type' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_categories_node_type already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

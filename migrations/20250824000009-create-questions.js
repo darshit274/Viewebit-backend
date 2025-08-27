@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('questions', {
+    // Check if questions table exists
+    const tableExists = await queryInterface.tableExists('questions');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('questions', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -148,13 +152,118 @@ module.exports = {
       }
     });
 
-    // Add indexes
-    await queryInterface.addIndex('questions', ['test_id'], { name: 'questions_test_id' });
-    await queryInterface.addIndex('questions', ['subject_tag'], { name: 'questions_subject_tag' });
-    await queryInterface.addIndex('questions', ['difficulty_tag'], { name: 'questions_difficulty_tag' });
-    await queryInterface.addIndex('questions', ['display_order'], { name: 'questions_display_order' });
-    await queryInterface.addIndex('questions', ['marks'], { name: 'questions_marks' });
-    await queryInterface.addIndex('questions', ['category_id'], { name: 'idx_questions_category' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('questions', ['test_id'], { name: 'questions_test_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_test_id already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['subject_tag'], { name: 'questions_subject_tag' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_subject_tag already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['difficulty_tag'], { name: 'questions_difficulty_tag' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_difficulty_tag already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['display_order'], { name: 'questions_display_order' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_display_order already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['marks'], { name: 'questions_marks' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_marks already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['category_id'], { name: 'idx_questions_category' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_questions_category already exists, skipping...');
+      }
+    } else {
+      console.log('Questions table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('questions', ['test_id'], { name: 'questions_test_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_test_id already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['subject_tag'], { name: 'questions_subject_tag' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_subject_tag already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['difficulty_tag'], { name: 'questions_difficulty_tag' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_difficulty_tag already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['display_order'], { name: 'questions_display_order' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_display_order already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['marks'], { name: 'questions_marks' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index questions_marks already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('questions', ['category_id'], { name: 'idx_questions_category' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_questions_category already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

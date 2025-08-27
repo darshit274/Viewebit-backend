@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('subscription', {
+    // Check if subscription table exists
+    const tableExists = await queryInterface.tableExists('subscription');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('subscription', {
       id: {
         type: Sequelize.CHAR(36),
         primaryKey: true,
@@ -67,13 +71,84 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('subscription', ['user_id'], { name: 'subscription_user_id' });
-    await queryInterface.addIndex('subscription', ['test_series_id'], { name: 'subscription_test_series_id' });
-    await queryInterface.addIndex('subscription', ['status'], { name: 'subscription_status' });
-    await queryInterface.addIndex('subscription', ['transaction_id'], { name: 'subscription_transaction_id' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('subscription', ['user_id'], { name: 'subscription_user_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_user_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('subscription', ['test_series_id'], { name: 'subscription_test_series_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_test_series_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('subscription', ['status'], { name: 'subscription_status' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_status already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('subscription', ['transaction_id'], { name: 'subscription_transaction_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_transaction_id already exists, skipping...');
+      }
+    } else {
+      console.log('subscription table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('subscription', ['user_id'], { name: 'subscription_user_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_user_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('subscription', ['test_series_id'], { name: 'subscription_test_series_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_test_series_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('subscription', ['status'], { name: 'subscription_status' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_status already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('subscription', ['transaction_id'], { name: 'subscription_transaction_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index subscription_transaction_id already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

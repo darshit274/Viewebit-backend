@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('pdfs', {
+    // Check if pdfs table exists
+    const tableExists = await queryInterface.tableExists('pdfs');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('pdfs', {
       id: {
         type: Sequelize.CHAR(36),
         primaryKey: true,
@@ -114,16 +118,138 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('pdfs', ['category_id'], { name: 'pdfs_category_id' });
-    await queryInterface.addIndex('pdfs', ['test_series_id'], { name: 'pdfs_test_series_id' });
-    await queryInterface.addIndex('pdfs', ['exam_type_id'], { name: 'pdfs_exam_type_id' });
-    await queryInterface.addIndex('pdfs', ['access_level'], { name: 'pdfs_access_level' });
-    await queryInterface.addIndex('pdfs', ['is_active'], { name: 'pdfs_is_active' });
-    await queryInterface.addIndex('pdfs', ['is_featured'], { name: 'pdfs_is_featured' });
-    await queryInterface.addIndex('pdfs', ['created_at'], { name: 'pdfs_created_at' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('pdfs', ['category_id'], { name: 'pdfs_category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_category_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['test_series_id'], { name: 'pdfs_test_series_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_test_series_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['exam_type_id'], { name: 'pdfs_exam_type_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_exam_type_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['access_level'], { name: 'pdfs_access_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_access_level already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['is_active'], { name: 'pdfs_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_is_active already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['is_featured'], { name: 'pdfs_is_featured' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_is_featured already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['created_at'], { name: 'pdfs_created_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_created_at already exists, skipping...');
+      }
+    } else {
+      console.log('pdfs table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('pdfs', ['category_id'], { name: 'pdfs_category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_category_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['test_series_id'], { name: 'pdfs_test_series_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_test_series_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['exam_type_id'], { name: 'pdfs_exam_type_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_exam_type_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['access_level'], { name: 'pdfs_access_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_access_level already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['is_active'], { name: 'pdfs_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_is_active already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['is_featured'], { name: 'pdfs_is_featured' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_is_featured already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdfs', ['created_at'], { name: 'pdfs_created_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdfs_created_at already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('notifications', {
+    // Check if notifications table exists
+    const tableExists = await queryInterface.tableExists('notifications');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('notifications', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -67,14 +71,102 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('notifications', ['user_id'], { name: 'notifications_user_id' });
-    await queryInterface.addIndex('notifications', ['type'], { name: 'notifications_type' });
-    await queryInterface.addIndex('notifications', ['status'], { name: 'notifications_status' });
-    await queryInterface.addIndex('notifications', ['created_at'], { name: 'notifications_created_at' });
-    await queryInterface.addIndex('notifications', ['user_id', 'read_at'], { name: 'notifications_user_id_read_at' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('notifications', ['user_id'], { name: 'notifications_user_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_user_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['type'], { name: 'notifications_type' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_type already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['status'], { name: 'notifications_status' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_status already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['created_at'], { name: 'notifications_created_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_created_at already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['user_id', 'read_at'], { name: 'notifications_user_id_read_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_user_id_read_at already exists, skipping...');
+      }
+    } else {
+      console.log('notifications table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('notifications', ['user_id'], { name: 'notifications_user_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_user_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['type'], { name: 'notifications_type' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_type already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['status'], { name: 'notifications_status' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_status already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['created_at'], { name: 'notifications_created_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_created_at already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('notifications', ['user_id', 'read_at'], { name: 'notifications_user_id_read_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index notifications_user_id_read_at already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('pdf_categories', {
+    // Check if pdf_categories table exists
+    const tableExists = await queryInterface.tableExists('pdf_categories');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('pdf_categories', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -54,12 +58,66 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('pdf_categories', ['slug'], { name: 'pdf_categories_slug' });
-    await queryInterface.addIndex('pdf_categories', ['is_active'], { name: 'pdf_categories_is_active' });
-    await queryInterface.addIndex('pdf_categories', ['sort_order'], { name: 'pdf_categories_sort_order' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('pdf_categories', ['slug'], { name: 'pdf_categories_slug' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdf_categories_slug already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdf_categories', ['is_active'], { name: 'pdf_categories_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdf_categories_is_active already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdf_categories', ['sort_order'], { name: 'pdf_categories_sort_order' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdf_categories_sort_order already exists, skipping...');
+      }
+    } else {
+      console.log('pdf_categories table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('pdf_categories', ['slug'], { name: 'pdf_categories_slug' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdf_categories_slug already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdf_categories', ['is_active'], { name: 'pdf_categories_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdf_categories_is_active already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('pdf_categories', ['sort_order'], { name: 'pdf_categories_sort_order' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index pdf_categories_sort_order already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

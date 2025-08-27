@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('tests', {
+    // Check if tests table exists
+    const tableExists = await queryInterface.tableExists('tests');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('tests', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -185,17 +189,156 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('tests', ['sub_category_id'], { name: 'sub_category_id' });
-    await queryInterface.addIndex('tests', ['is_demo'], { name: 'idx_tests_is_demo' });
-    await queryInterface.addIndex('tests', ['is_free_in_paid_series'], { name: 'idx_tests_is_free_in_paid_series' });
-    await queryInterface.addIndex('tests', ['is_one_time_only'], { name: 'idx_tests_is_one_time_only' });
-    await queryInterface.addIndex('tests', ['negative_marking_enabled'], { name: 'idx_tests_negative_marking_enabled' });
-    await queryInterface.addIndex('tests', ['is_free_in_series'], { name: 'tests_is_free_in_series' });
-    await queryInterface.addIndex('tests', ['difficulty_level'], { name: 'tests_difficulty_level' });
-    await queryInterface.addIndex('tests', ['display_order'], { name: 'tests_display_order' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('tests', ['sub_category_id'], { name: 'sub_category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index sub_category_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_demo'], { name: 'idx_tests_is_demo' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_is_demo already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_free_in_paid_series'], { name: 'idx_tests_is_free_in_paid_series' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_is_free_in_paid_series already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_one_time_only'], { name: 'idx_tests_is_one_time_only' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_is_one_time_only already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['negative_marking_enabled'], { name: 'idx_tests_negative_marking_enabled' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_negative_marking_enabled already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_free_in_series'], { name: 'tests_is_free_in_series' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index tests_is_free_in_series already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['difficulty_level'], { name: 'tests_difficulty_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index tests_difficulty_level already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['display_order'], { name: 'tests_display_order' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index tests_display_order already exists, skipping...');
+      }
+    } else {
+      console.log('tests table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('tests', ['sub_category_id'], { name: 'sub_category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index sub_category_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_demo'], { name: 'idx_tests_is_demo' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_is_demo already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_free_in_paid_series'], { name: 'idx_tests_is_free_in_paid_series' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_is_free_in_paid_series already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_one_time_only'], { name: 'idx_tests_is_one_time_only' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_is_one_time_only already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['negative_marking_enabled'], { name: 'idx_tests_negative_marking_enabled' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index idx_tests_negative_marking_enabled already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['is_free_in_series'], { name: 'tests_is_free_in_series' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index tests_is_free_in_series already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['difficulty_level'], { name: 'tests_difficulty_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index tests_difficulty_level already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('tests', ['display_order'], { name: 'tests_display_order' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index tests_display_order already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

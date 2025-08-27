@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('exam_categories', {
+    // Check if exam_categories table exists
+    const tableExists = await queryInterface.tableExists('exam_categories');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('exam_categories', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -78,11 +82,82 @@ module.exports = {
       }
     });
 
-    // Add indexes
-    await queryInterface.addIndex('exam_categories', ['parent_id'], { name: 'exam_categories_parent_id' });
-    await queryInterface.addIndex('exam_categories', ['hierarchy_level'], { name: 'exam_categories_hierarchy_level' });
-    await queryInterface.addIndex('exam_categories', ['is_active'], { name: 'exam_categories_is_active' });
-    await queryInterface.addIndex('exam_categories', ['uuid'], { name: 'exam_categories_uuid' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('exam_categories', ['parent_id'], { name: 'exam_categories_parent_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_parent_id already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('exam_categories', ['hierarchy_level'], { name: 'exam_categories_hierarchy_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_hierarchy_level already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('exam_categories', ['is_active'], { name: 'exam_categories_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_is_active already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('exam_categories', ['uuid'], { name: 'exam_categories_uuid' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_uuid already exists, skipping...');
+      }
+    } else {
+      console.log('Exam categories table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('exam_categories', ['parent_id'], { name: 'exam_categories_parent_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_parent_id already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('exam_categories', ['hierarchy_level'], { name: 'exam_categories_hierarchy_level' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_hierarchy_level already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('exam_categories', ['is_active'], { name: 'exam_categories_is_active' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_is_active already exists, skipping...');
+      }
+
+      try {
+        await queryInterface.addIndex('exam_categories', ['uuid'], { name: 'exam_categories_uuid' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index exam_categories_uuid already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

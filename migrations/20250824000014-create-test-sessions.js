@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('test_sessions', {
+    // Check if test_sessions table exists
+    const tableExists = await queryInterface.tableExists('test_sessions');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('test_sessions', {
       id: {
         type: Sequelize.CHAR(36),
         primaryKey: true,
@@ -112,20 +116,162 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('test_sessions', ['user_id', 'test_id', 'status'], { 
-      unique: true, 
-      name: 'unique_active_session_per_user_test' 
-    });
-    await queryInterface.addIndex('test_sessions', ['user_id'], { name: 'test_sessions_user_id' });
-    await queryInterface.addIndex('test_sessions', ['test_id'], { name: 'test_sessions_test_id' });
-    await queryInterface.addIndex('test_sessions', ['user_id', 'test_id'], { name: 'test_sessions_user_id_test_id' });
-    await queryInterface.addIndex('test_sessions', ['status'], { name: 'test_sessions_status' });
-    await queryInterface.addIndex('test_sessions', ['is_completed'], { name: 'test_sessions_is_completed' });
-    await queryInterface.addIndex('test_sessions', ['started_at'], { name: 'test_sessions_started_at' });
-    await queryInterface.addIndex('test_sessions', ['completed_at'], { name: 'test_sessions_completed_at' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('test_sessions', ['user_id', 'test_id', 'status'], { 
+          unique: true, 
+          name: 'unique_active_session_per_user_test' 
+        });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index unique_active_session_per_user_test already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['user_id'], { name: 'test_sessions_user_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_user_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['test_id'], { name: 'test_sessions_test_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_test_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['user_id', 'test_id'], { name: 'test_sessions_user_id_test_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_user_id_test_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['status'], { name: 'test_sessions_status' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_status already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['is_completed'], { name: 'test_sessions_is_completed' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_is_completed already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['started_at'], { name: 'test_sessions_started_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_started_at already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['completed_at'], { name: 'test_sessions_completed_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_completed_at already exists, skipping...');
+      }
+    } else {
+      console.log('test_sessions table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('test_sessions', ['user_id', 'test_id', 'status'], { 
+          unique: true, 
+          name: 'unique_active_session_per_user_test' 
+        });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index unique_active_session_per_user_test already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['user_id'], { name: 'test_sessions_user_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_user_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['test_id'], { name: 'test_sessions_test_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_test_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['user_id', 'test_id'], { name: 'test_sessions_user_id_test_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_user_id_test_id already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['status'], { name: 'test_sessions_status' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_status already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['is_completed'], { name: 'test_sessions_is_completed' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_is_completed already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['started_at'], { name: 'test_sessions_started_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_started_at already exists, skipping...');
+      }
+      
+      try {
+        await queryInterface.addIndex('test_sessions', ['completed_at'], { name: 'test_sessions_completed_at' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index test_sessions_completed_at already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {

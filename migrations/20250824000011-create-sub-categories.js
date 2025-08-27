@@ -2,7 +2,11 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('sub_categories', {
+    // Check if sub_categories table exists
+    const tableExists = await queryInterface.tableExists('sub_categories');
+    
+    if (!tableExists) {
+      await queryInterface.createTable('sub_categories', {
       id: {
         type: Sequelize.INTEGER,
         primaryKey: true,
@@ -57,10 +61,30 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: false
       }
-    });
+      });
 
-    // Add indexes
-    await queryInterface.addIndex('sub_categories', ['category_id'], { name: 'category_id' });
+      // Add indexes only if table was created
+      try {
+        await queryInterface.addIndex('sub_categories', ['category_id'], { name: 'category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index category_id already exists, skipping...');
+      }
+    } else {
+      console.log('sub_categories table already exists, skipping table creation...');
+      
+      // Still try to add indexes if they don't exist
+      try {
+        await queryInterface.addIndex('sub_categories', ['category_id'], { name: 'category_id' });
+      } catch (error) {
+        if (!error.message.includes('Duplicate key name')) {
+          throw error;
+        }
+        console.log('Index category_id already exists, skipping...');
+      }
+    }
   },
 
   down: async (queryInterface, Sequelize) => {
