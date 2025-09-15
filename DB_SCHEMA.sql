@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1:3306
--- Generation Time: Aug 25, 2025 at 07:03 AM
+-- Generation Time: Sep 14, 2025 at 05:49 PM
 -- Server version: 8.3.0
 -- PHP Version: 8.1.2-1ubuntu2.22
 
@@ -135,6 +135,34 @@ CREATE TABLE `hierarchy_categories` (
   `total_questions` int DEFAULT '0',
   `total_attempts` int DEFAULT '0',
   `created_by` char(36) DEFAULT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `leaderboard_entries`
+--
+
+CREATE TABLE `leaderboard_entries` (
+  `id` int NOT NULL,
+  `user_id` char(36) NOT NULL,
+  `test_id` int NOT NULL,
+  `test_session_id` char(36) NOT NULL,
+  `test_series_id` int DEFAULT NULL,
+  `category_id` int DEFAULT NULL COMMENT 'For category-based leaderboards',
+  `score` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `percentage` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `total_questions` int NOT NULL,
+  `correct_answers` int NOT NULL DEFAULT '0',
+  `wrong_answers` int NOT NULL DEFAULT '0',
+  `unanswered` int NOT NULL DEFAULT '0',
+  `time_taken_seconds` int NOT NULL COMMENT 'Total time taken to complete the test',
+  `rank` int DEFAULT NULL COMMENT 'Calculated rank for this test',
+  `percentile` decimal(5,2) DEFAULT NULL COMMENT 'Percentile score (0-100)',
+  `completion_date` datetime NOT NULL COMMENT 'When the test was completed',
+  `is_valid` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'False for tests that should be excluded from rankings (e.g., practice tests)',
   `created_at` datetime NOT NULL,
   `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -292,7 +320,13 @@ CREATE TABLE `pdfs` (
   `is_featured` tinyint(1) DEFAULT '0',
   `uploaded_by` char(36) DEFAULT NULL COMMENT 'Admin who uploaded this PDF',
   `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL
+  `updated_at` datetime NOT NULL,
+  `price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT 'Price for premium PDFs',
+  `currency` varchar(10) NOT NULL DEFAULT 'INR' COMMENT 'Currency for pricing',
+  `is_free` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Whether the PDF is free to access',
+  `discount_percentage` decimal(5,2) NOT NULL DEFAULT '0.00' COMMENT 'Discount percentage if any',
+  `subscription_required` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether subscription is required to access',
+  `preview_pages` int NOT NULL DEFAULT '0' COMMENT 'Number of preview pages available for free'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -396,7 +430,7 @@ CREATE TABLE `SequelizeMeta` (
 CREATE TABLE `subscription` (
   `id` char(36) NOT NULL,
   `user_id` char(36) NOT NULL,
-  `test_series_id` char(36) NOT NULL,
+  `test_series_id` int DEFAULT NULL,
   `transaction_id` varchar(255) NOT NULL,
   `payment_method` varchar(255) DEFAULT NULL,
   `amount_paid` double NOT NULL,
@@ -405,7 +439,8 @@ CREATE TABLE `subscription` (
   `purchase_date` datetime NOT NULL,
   `expiry_date` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL
+  `updated_at` datetime NOT NULL,
+  `metadata` json DEFAULT NULL COMMENT 'Additional metadata for the subscription (payment details, PDF info, etc.)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -640,6 +675,20 @@ ALTER TABLE `hierarchy_categories`
   ADD KEY `hierarchy_categories_display_order_index` (`display_order`);
 
 --
+-- Indexes for table `leaderboard_entries`
+--
+ALTER TABLE `leaderboard_entries`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `test_session_id` (`test_session_id`),
+  ADD KEY `leaderboard_entries_user_id` (`user_id`),
+  ADD KEY `leaderboard_entries_test_id` (`test_id`),
+  ADD KEY `leaderboard_entries_test_series_id` (`test_series_id`),
+  ADD KEY `leaderboard_entries_category_id` (`category_id`),
+  ADD KEY `leaderboard_entries_score_date` (`score`,`completion_date`),
+  ADD KEY `leaderboard_entries_is_valid` (`is_valid`),
+  ADD KEY `leaderboard_entries_rank` (`rank`);
+
+--
 -- Indexes for table `new_tests`
 --
 ALTER TABLE `new_tests`
@@ -838,6 +887,12 @@ ALTER TABLE `hierarchy_categories`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `leaderboard_entries`
+--
+ALTER TABLE `leaderboard_entries`
+  MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `new_tests`
 --
 ALTER TABLE `new_tests`
@@ -914,6 +969,15 @@ ALTER TABLE `hierarchy_categories`
   ADD CONSTRAINT `hierarchy_categories_ibfk_1` FOREIGN KEY (`test_series_id`) REFERENCES `new_test_series` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `hierarchy_categories_ibfk_2` FOREIGN KEY (`parent_id`) REFERENCES `hierarchy_categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `hierarchy_categories_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL ON UPDATE SET NULL;
+
+--
+-- Constraints for table `leaderboard_entries`
+--
+ALTER TABLE `leaderboard_entries`
+  ADD CONSTRAINT `leaderboard_entries_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `leaderboard_entries_ibfk_2` FOREIGN KEY (`test_id`) REFERENCES `tests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `leaderboard_entries_ibfk_3` FOREIGN KEY (`test_session_id`) REFERENCES `test_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `leaderboard_entries_ibfk_4` FOREIGN KEY (`test_series_id`) REFERENCES `test_series` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `new_tests`

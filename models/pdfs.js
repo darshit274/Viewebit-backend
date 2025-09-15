@@ -132,6 +132,44 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Number of times viewed'
     },
     
+    // Pricing
+    price: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0.00,
+      allowNull: false,
+      comment: 'Price for premium PDFs'
+    },
+    currency: {
+      type: DataTypes.STRING(10),
+      defaultValue: 'INR',
+      allowNull: false,
+      comment: 'Currency for pricing'
+    },
+    is_free: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Whether the PDF is free to access'
+    },
+    discount_percentage: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 0.00,
+      allowNull: false,
+      comment: 'Discount percentage if any'
+    },
+    subscription_required: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether subscription is required to access'
+    },
+    preview_pages: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Number of preview pages available for free'
+    },
+
     // Status
     is_active: {
       type: DataTypes.BOOLEAN,

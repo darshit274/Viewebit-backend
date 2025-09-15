@@ -98,6 +98,14 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'test_id', 
       as: 'test' 
     });
+    TestSession.hasMany(models.UserAnswer, {
+      foreignKey: 'test_session_id',
+      as: 'answers'
+    });
+    TestSession.hasOne(models.LeaderboardEntry, {
+      foreignKey: 'test_session_id',
+      as: 'leaderboardEntry'
+    });
   };
 
   return TestSession;

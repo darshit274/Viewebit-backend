@@ -44,6 +44,13 @@ module.exports = (sequelize, DataTypes) => {
           as: 'pushTokens'
         });
       }
+      
+      if (models.LeaderboardEntry) {
+        User.hasMany(models.LeaderboardEntry, {
+          foreignKey: 'user_id',
+          as: 'leaderboardEntries'
+        });
+      }
     }
   }
 

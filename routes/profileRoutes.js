@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { User, TestSession, Test, Subscription, TestSeries } = require('../models');
 const { authToken } = require('../utils/AuthToken');
-const { Sequelize } = require('sequelize');
+const { Sequelize, Op } = require('sequelize');
 
 // Configure multer for avatar uploads
 const storage = multer.diskStorage({
@@ -27,16 +27,28 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit (increased)
+    files: 1, // Only 1 file
+    fieldSize: 100 * 1024, // 100KB for text fields
+    fieldNameSize: 100, // Field name limit
+    fields: 10 // Max 10 fields
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif/;
+    console.log('🔍 File filter called:', { 
+      originalname: file.originalname, 
+      mimetype: file.mimetype,
+      fieldname: file.fieldname 
+    });
+    
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
 
     if (mimetype && extname) {
+      console.log('✅ File allowed');
       return cb(null, true);
     } else {
+      console.log('❌ File rejected');
       cb(new Error('Only image files are allowed'));
     }
   }
@@ -87,12 +99,53 @@ router.get('/profile', authToken, async (req, res) => {
   }
 });
 
+// Add error handling middleware for multer
+const handleMulterError = (err, req, res, next) => {
+  console.log('🚨 Multer error occurred:', err);
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: 'File size too large'
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      message: `Upload error: ${err.message}`
+    });
+  }
+  return res.status(500).json({
+    success: false,
+    message: `Unexpected error: ${err.message}`
+  });
+};
+
 // Update user profile
-router.put('/profile', authToken, upload.single('avatar'), async (req, res) => {
+router.put('/profile', authToken, (req, res, next) => {
+  console.log('🔄 Profile update request received');
+  console.log('📄 Headers:', req.headers);
+  console.log('📏 Content-Length:', req.headers['content-length']);
+  console.log('🔗 Content-Type:', req.headers['content-type']);
+  next();
+}, (req, res, next) => {
+  // Check if this is a base64 avatar upload (JSON request)
+  if (req.headers['content-type'] && req.headers['content-type'].includes('application/json')) {
+    console.log('📝 JSON request detected - bypassing multer');
+    return next();
+  }
+  // Otherwise use multer for multipart uploads
+  upload.single('avatar')(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
-    console.log('Profile update request received');
-    console.log('File:', req.file);
-    console.log('Body:', req.body);
+    console.log('✅ Multer processing completed');
+    console.log('📁 File:', req.file);
+    console.log('📝 Body:', req.body);
+    console.log('🔍 Raw body type:', typeof req.body);
     
     const {
       fullName,
@@ -116,9 +169,10 @@ router.put('/profile', authToken, upload.single('avatar'), async (req, res) => {
     if (city !== undefined) updateData.city = city;
     if (state !== undefined) updateData.state = state;
 
-    // Handle avatar upload
+    // Handle avatar upload - both multipart file and base64
     if (req.file) {
-      // Delete old avatar if exists
+      // Multipart file upload
+      console.log('🔄 Processing multipart file upload');
       const user = await User.findByPk(req.user.uuid);
       if (user.avatarUrl && user.avatarUrl.startsWith('/uploads/')) {
         const oldAvatarPath = path.join(__dirname, '..', user.avatarUrl);
@@ -128,9 +182,46 @@ router.put('/profile', authToken, upload.single('avatar'), async (req, res) => {
           console.log('Error deleting old avatar:', error.message);
         }
       }
-
-      // Set new avatar URL
       updateData.avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    } else if (req.body.avatarBase64) {
+      // Base64 upload
+      console.log('🔄 Processing base64 avatar upload');
+      try {
+        const base64Data = req.body.avatarBase64.replace(/^data:image\/[a-z]+;base64,/, '');
+        const fileBuffer = Buffer.from(base64Data, 'base64');
+        
+        // Create unique filename
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const filename = `avatar-${req.user.uuid}-${uniqueSuffix}.jpg`;
+        const uploadsDir = path.join(__dirname, '../uploads/avatars');
+        const filePath = path.join(uploadsDir, filename);
+        
+        // Ensure directory exists
+        await fs.mkdir(uploadsDir, { recursive: true });
+        
+        // Save file
+        await fs.writeFile(filePath, fileBuffer);
+        
+        // Delete old avatar if exists
+        const user = await User.findByPk(req.user.uuid);
+        if (user.avatarUrl && user.avatarUrl.startsWith('/uploads/')) {
+          const oldAvatarPath = path.join(__dirname, '..', user.avatarUrl);
+          try {
+            await fs.unlink(oldAvatarPath);
+          } catch (error) {
+            console.log('Error deleting old avatar:', error.message);
+          }
+        }
+        
+        updateData.avatarUrl = `/uploads/avatars/${filename}`;
+        console.log('✅ Base64 avatar saved:', updateData.avatarUrl);
+      } catch (error) {
+        console.error('❌ Base64 avatar upload failed:', error);
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to process avatar image'
+        });
+      }
     }
 
     // Update user
@@ -308,12 +399,30 @@ async function getUserStatistics(userUuid) {
     const averageScore = scoredSessions > 0 ? totalPercentage / scoredSessions : 0;
 
     // Study hours (based on time spent in tests)
-    const totalTimeSpent = await TestSession.sum('time_taken', {
-      where: {
-        user_id: userUuid,
-        status: 'completed'
-      }
-    }) || 0;
+    let totalTimeSpent = 0;
+    
+    try {
+      const completedSessions = await TestSession.findAll({
+        where: {
+          user_id: userUuid,
+          status: 'completed',
+          started_at: { [Op.ne]: null },
+          completed_at: { [Op.ne]: null }
+        },
+        attributes: ['started_at', 'completed_at']
+      });
+
+      // Calculate total time spent by summing the differences
+      totalTimeSpent = completedSessions.reduce((total, session) => {
+        const startTime = new Date(session.started_at).getTime();
+        const endTime = new Date(session.completed_at).getTime();
+        const sessionTime = Math.max(0, (endTime - startTime) / 1000); // Convert to seconds
+        return total + sessionTime;
+      }, 0);
+    } catch (error) {
+      console.error('Error calculating total time spent:', error);
+      totalTimeSpent = 0;
+    }
 
     const studyHours = Math.round(totalTimeSpent / 3600); // Convert seconds to hours
 

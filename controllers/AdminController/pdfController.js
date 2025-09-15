@@ -61,10 +61,33 @@ exports.getPdfs = async (req, res, next) => {
             limit,
             offset,
             order: [[sortBy, sortOrder]],
-            attributes: {
-                exclude: ['file_path'], // Don't expose direct file paths
-                include: ['id'] // Ensure ID is included
-            }
+            attributes: [
+                'id',
+                'title',
+                'description',
+                'category_id',
+                'original_filename',
+                'file_size',
+                'mime_type',
+                'access_level',
+                'test_series_id',
+                'exam_type_id',
+                'tags',
+                'download_count',
+                'view_count',
+                'is_active',
+                'is_featured',
+                'uploaded_by',
+                'created_at',
+                'updated_at',
+                // Pricing fields - now available in DB
+                'price',
+                'currency',
+                'is_free',
+                'discount_percentage',
+                'subscription_required',
+                'preview_pages'
+            ]
         });
 
         console.log('📊 Query results:', { count, resultsLength: rows.length });

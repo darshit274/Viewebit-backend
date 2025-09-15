@@ -12,6 +12,7 @@ const {
   Sequelize
 } = require('../../models');
 const AuthToken = require('../../utils/AuthToken');
+const { checkUserTestSeriesAccess } = require('../SubscriptionRoutes/subscriptionAccess');
 
 // Middleware for optional authentication
 const optionalAuth = async (req, res, next) => {
@@ -19,11 +20,13 @@ const optionalAuth = async (req, res, next) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (token) {
       const decoded = AuthToken.verifyToken(token);
-      const user = await User.findOne({ where: { uuid: decoded.id } });
+      // Handle both old 'id' and new 'uuid' field in JWT payload
+      const userUuid = decoded.uuid || decoded.id;
+      const user = await User.findOne({ where: { uuid: userUuid } });
       if (user) {
         req.user = {
           ...user.toJSON(),
-          id: user.id,
+          id: user.uuid,        // Use UUID as ID for consistency
           uuid: user.uuid
         };
       }
@@ -43,7 +46,9 @@ const requireAuth = async (req, res, next) => {
     }
 
     const decoded = AuthToken.verifyToken(token);
-    const user = await User.findOne({ where: { uuid: decoded.id } });
+    // Handle both old 'id' and new 'uuid' field in JWT payload
+    const userUuid = decoded.uuid || decoded.id;
+    const user = await User.findOne({ where: { uuid: userUuid } });
     
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid token' });
@@ -51,7 +56,7 @@ const requireAuth = async (req, res, next) => {
 
     req.user = {
       ...user.toJSON(),
-      id: user.id,
+      id: user.uuid,        // Use UUID as ID for consistency
       uuid: user.uuid
     };
     
@@ -68,6 +73,7 @@ const requireAuth = async (req, res, next) => {
 
 // Get test series with new hierarchy (replaces old test-series listing)
 router.get('/dynamic/test-series', optionalAuth, async (req, res) => {
+  console.log('🔍 /dynamic/test-series route hit with user:', req.user ? req.user.uuid : 'no user');
   try {
     const {
       page = 1,
@@ -140,10 +146,13 @@ router.get('/dynamic/test-series', optionalAuth, async (req, res) => {
         if (req.user) {
           const subscription = await Subscription.findOne({
             where: {
-              user_id: req.user.id,
+              user_id: req.user.uuid, // Use uuid instead of id
               test_series_id: series.id,
-              is_active: true,
-              expires_at: { [Sequelize.Op.gt]: new Date() }
+              status: 'completed', // Check status instead of is_active
+              [Sequelize.Op.or]: [
+                { expiry_date: null }, // No expiry (lifetime)
+                { expiry_date: { [Sequelize.Op.gt]: new Date() } } // Not expired
+              ]
             }
           });
           is_subscribed = !!subscription;
@@ -173,7 +182,10 @@ router.get('/dynamic/test-series', optionalAuth, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching test series:', error);
+    console.error('❌ ERROR in /dynamic/test-series:', error);
+    console.error('❌ Error name:', error.name);
+    console.error('❌ Error message:', error.message);
+    console.error('❌ Stack trace:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch test series'
@@ -268,10 +280,13 @@ router.get('/dynamic/test-series/:uuid', optionalAuth, async (req, res) => {
     if (req.user) {
       const subscription = await Subscription.findOne({
         where: {
-          user_id: req.user.id,
+          user_id: req.user.uuid,
           test_series_id: series.id,
-          is_active: true,
-          expires_at: { [Sequelize.Op.gt]: new Date() }
+          status: 'completed',
+          [Sequelize.Op.or]: [
+            { expiry_date: null },
+            { expiry_date: { [Sequelize.Op.gt]: new Date() } }
+          ]
         }
       });
       is_subscribed = !!subscription;
@@ -454,10 +469,13 @@ router.get('/dynamic/categories/:uuid', optionalAuth, async (req, res) => {
     if (req.user && category.testSeries) {
       const subscription = await Subscription.findOne({
         where: {
-          user_id: req.user.id,
+          user_id: req.user.uuid,
           test_series_id: category.test_series_id,
-          is_active: true,
-          expires_at: { [Sequelize.Op.gt]: new Date() }
+          status: 'completed',
+          [Sequelize.Op.or]: [
+            { expiry_date: null },
+            { expiry_date: { [Sequelize.Op.gt]: new Date() } }
+          ]
         }
       });
       is_subscribed = !!subscription;
@@ -517,20 +535,26 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
     }
 
     // Check subscription for paid content
-    if (category.testSeries.pricing_type === 'paid' && req.user) {
-      const subscription = await Subscription.findOne({
-        where: {
-          user_id: req.user.id,
-          test_series_id: category.test_series_id,
-          is_active: true,
-          expires_at: { [Sequelize.Op.gt]: new Date() }
-        }
-      });
+    if (category.testSeries.pricing_type === 'paid') {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required to access paid content',
+          requiresAuth: true
+        });
+      }
 
-      if (!subscription) {
+      // Use our new subscription access check logic
+      const accessCheck = await checkUserTestSeriesAccess(req.user.uuid, category.testSeries.id);
+      
+      if (!accessCheck.hasAccess) {
         return res.status(403).json({
           success: false,
-          message: 'Subscription required to access this content'
+          message: 'Subscription required to access this content. Please purchase a subscription to continue.',
+          errorCode: 'ACCESS_DENIED',
+          accessRequired: true,
+          testSeriesId: category.testSeries.id,
+          reason: accessCheck.reason
         });
       }
     }
@@ -646,20 +670,26 @@ router.get('/dynamic/categories/:uuid/solutions', optionalAuth, async (req, res)
     }
 
     // Check subscription for paid content
-    if (category.testSeries.pricing_type === 'paid' && req.user) {
-      const subscription = await Subscription.findOne({
-        where: {
-          user_id: req.user.id,
-          test_series_id: category.test_series_id,
-          is_active: true,
-          expires_at: { [Sequelize.Op.gt]: new Date() }
-        }
-      });
+    if (category.testSeries.pricing_type === 'paid') {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required to access paid content',
+          requiresAuth: true
+        });
+      }
 
-      if (!subscription) {
+      // Use our new subscription access check logic
+      const accessCheck = await checkUserTestSeriesAccess(req.user.uuid, category.testSeries.id);
+      
+      if (!accessCheck.hasAccess) {
         return res.status(403).json({
           success: false,
-          message: 'Subscription required to access this content'
+          message: 'Subscription required to access this content. Please purchase a subscription to continue.',
+          errorCode: 'ACCESS_DENIED',
+          accessRequired: true,
+          testSeriesId: category.testSeries.id,
+          reason: accessCheck.reason
         });
       }
     }

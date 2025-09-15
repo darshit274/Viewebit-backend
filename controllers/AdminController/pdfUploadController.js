@@ -90,7 +90,23 @@ exports.createPdfCategory = async (req, res, next) => {
 // Upload PDF
 exports.uploadPdf = async (req, res, next) => {
   try {
-    const { title, description, course_id, category_id, access_level, test_series_id, exam_type_id, tags } = req.body;
+    const {
+      title,
+      description,
+      course_id,
+      category_id,
+      access_level,
+      test_series_id,
+      exam_type_id,
+      tags,
+      // Pricing fields
+      price,
+      currency,
+      is_free,
+      discount_percentage,
+      subscription_required,
+      preview_pages
+    } = req.body;
     const adminId = req.admin?.id;
 
     console.log('📤 PDF Upload using express-fileupload');
@@ -171,7 +187,14 @@ exports.uploadPdf = async (req, res, next) => {
         original_filename: uploadedFile.name,
         file_path: filePath,
         file_size: uploadedFile.size,
-        mime_type: uploadedFile.mimetype
+        mime_type: uploadedFile.mimetype,
+        // Pricing fields - automatically set is_free based on access_level
+        price: price ? parseFloat(price) : 0.00,
+        currency: currency || 'INR',
+        is_free: access_level === 'free',
+        discount_percentage: discount_percentage ? parseFloat(discount_percentage) : 0.00,
+        subscription_required: subscription_required !== undefined ? (subscription_required === 'true' || subscription_required === true) : false,
+        preview_pages: preview_pages ? parseInt(preview_pages) : 0
       });
 
       // Fetch the created PDF with associations
@@ -338,7 +361,26 @@ exports.getPdfById = async (req, res, next) => {
 exports.updatePdf = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title, description, category_id, access_level, test_series_id, exam_type_id, tags } = req.body;
+    const {
+      title,
+      description,
+      category_id,
+      course_id, // Support both course_id and category_id for compatibility
+      access_level,
+      test_series_id,
+      exam_type_id,
+      tags,
+      // Pricing fields
+      price,
+      currency,
+      is_free,
+      discount_percentage,
+      subscription_required,
+      preview_pages
+    } = req.body;
+
+    // Support both course_id (new) and category_id (legacy) for backward compatibility
+    const finalCategoryId = course_id || category_id;
 
     const pdf = await Pdfs.findByPk(id);
     if (!pdf) {
@@ -346,23 +388,36 @@ exports.updatePdf = async (req, res, next) => {
     }
 
     // Validate category if provided
-    if (category_id) {
-      const category = await PdfCategory.findByPk(category_id);
+    if (finalCategoryId) {
+      const category = await PdfCategory.findByPk(finalCategoryId);
       if (!category) {
         return next(new ErrorHandler('Invalid category', 400));
       }
     }
 
     // Update PDF
-    await pdf.update({
+    const updateData = {
       ...(title && { title }),
       ...(description !== undefined && { description }),
-      ...(category_id && { category_id: parseInt(category_id) }),
-      ...(access_level && { access_level }),
+      ...(finalCategoryId && { category_id: parseInt(finalCategoryId) }),
       ...(test_series_id !== undefined && { test_series_id }),
       ...(exam_type_id !== undefined && { exam_type_id: exam_type_id ? parseInt(exam_type_id) : null }),
-      ...(tags !== undefined && { tags: tags ? JSON.parse(tags) : null })
-    });
+      ...(tags !== undefined && { tags: tags ? JSON.parse(tags) : null }),
+      // Pricing fields
+      ...(price !== undefined && { price: parseFloat(price) || 0.00 }),
+      ...(currency !== undefined && { currency }),
+      ...(discount_percentage !== undefined && { discount_percentage: parseFloat(discount_percentage) || 0.00 }),
+      ...(subscription_required !== undefined && { subscription_required: subscription_required === 'true' || subscription_required === true }),
+      ...(preview_pages !== undefined && { preview_pages: parseInt(preview_pages) || 0 })
+    };
+
+    // Set access_level and automatically determine is_free
+    if (access_level) {
+      updateData.access_level = access_level;
+      updateData.is_free = access_level === 'free';
+    }
+
+    await pdf.update(updateData);
 
     // Fetch updated PDF with associations
     const updatedPdf = await Pdfs.findByPk(id, {

@@ -8,6 +8,7 @@ const fileUpload = require('express-fileupload');
 const { sequelize } = require('./models'); // Assuming your sequelize export is CommonJS
 const errorMiddleware = require('./utils/default/globalErrorHandler');
 const { initializeFirebase } = require('./config/firebase');
+const { validateConfig: validateRazorpayConfig } = require('./config/razorpay');
 const NotificationScheduler = require('./services/NotificationScheduler');
 dotenv.config();
 
@@ -54,8 +55,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Parse JSON bodies
-app.use(express.json());
+// Parse JSON bodies with increased limit for base64 images
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Configure file upload middleware
 app.use(fileUpload({
@@ -86,11 +88,15 @@ async function startServer() {
     // Initialize Firebase Admin SDK
     initializeFirebase();
 
+    // Validate Razorpay configuration
+    validateRazorpayConfig();
+
     // Initialize Notification Scheduler
     NotificationScheduler.initialize();
 
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`🔔 Server also accessible on network at http://192.168.1.2:${PORT}`);
       console.log(`🔔 Notification system initialized with automated triggers`);
     });
   } catch (error) {

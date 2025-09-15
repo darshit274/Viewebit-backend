@@ -3,14 +3,18 @@ const { User, TestSession, Test } = require('../../models'); // Adjust the path 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { sendMail } = require("../../utils/verifyEmail");
-const { Sequelize } = require('sequelize');
+const { Sequelize, Op } = require('sequelize');
 
 
 
 
 exports.register = async (req, res, next) => {
     try {
-        const { username, email, password, phone } = req.body;
+        const { username, name, email, password, phone, mobile } = req.body;
+
+        // Handle field mapping - accept both naming conventions
+        const finalUsername = username || name;
+        const finalPhone = phone || mobile;
 
 
         // Check if user already exists with email or username
@@ -19,7 +23,7 @@ exports.register = async (req, res, next) => {
             return next(new ErrorHandler('User already exists with this email!', 400));
         }
 
-        const existingUserByUsername = await User.findOne({ where: { username } });
+        const existingUserByUsername = await User.findOne({ where: { username: finalUsername } });
         if (existingUserByUsername) {
             return next(new ErrorHandler('Username is already taken!', 400));
         }
@@ -33,9 +37,9 @@ exports.register = async (req, res, next) => {
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
         
         const newUser = await User.create({
-            username,
+            username: finalUsername,
             email,
-            phone,
+            phone: finalPhone,
             password: hashedPassword,
             otp,
             otpExpiry,
@@ -63,7 +67,7 @@ exports.register = async (req, res, next) => {
       <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f6f8;">
         <div style="max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
           <h2 style="color: #333; text-align: center;">Email Verification</h2>
-          <p>Hi <strong>${username}</strong>,</p>
+          <p>Hi <strong>${finalUsername}</strong>,</p>
           <p>Use the following OTP to complete your verification:</p>
           <h1 style="text-align: center; color: #007bff; letter-spacing: 4px;">${otp}</h1>
           <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
@@ -184,6 +188,7 @@ exports.otp_verify = async (req, res, next) => {
 
 
         res.status(200).json({
+            success: true,
             message: 'OTP verified successfully',
         });
     } catch (err) {
@@ -409,12 +414,30 @@ async function getUserStatistics(userUuid) {
         const averageScore = scoredSessions > 0 ? totalPercentage / scoredSessions : 0;
 
         // Study hours (based on time spent in tests)
-        const totalTimeSpent = await TestSession.sum('time_taken', {
-            where: {
-                user_id: userUuid,
-                status: 'completed'
-            }
-        }) || 0;
+        let totalTimeSpent = 0;
+        
+        try {
+            const completedSessions = await TestSession.findAll({
+                where: {
+                    user_id: userUuid,
+                    status: 'completed',
+                    started_at: { [Op.ne]: null },
+                    completed_at: { [Op.ne]: null }
+                },
+                attributes: ['started_at', 'completed_at']
+            });
+
+            // Calculate total time spent by summing the differences
+            totalTimeSpent = completedSessions.reduce((total, session) => {
+                const startTime = new Date(session.started_at).getTime();
+                const endTime = new Date(session.completed_at).getTime();
+                const sessionTime = Math.max(0, (endTime - startTime) / 1000); // Convert to seconds
+                return total + sessionTime;
+            }, 0);
+        } catch (error) {
+            console.error('Error calculating total time spent:', error);
+            totalTimeSpent = 0;
+        }
 
         const studyHours = Math.round(totalTimeSpent / 3600); // Convert seconds to hours
 
@@ -550,5 +573,47 @@ async function calculateUserRank(userUuid, userAvgScore) {
 
     return (betterUsers?.length || 0) + 1;
 }
+
+// Change user password
+exports.changePassword = async (req, res, next) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        const userUuid = req.user.uuid;
+
+        if (!currentPassword || !newPassword) {
+            return next(new ErrorHandler('Current password and new password are required', 400));
+        }
+
+        // Find the user
+        const user = await User.findOne({ where: { uuid: userUuid } });
+        if (!user) {
+            return next(new ErrorHandler('User not found', 404));
+        }
+
+        // Verify current password
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isCurrentPasswordValid) {
+            return next(new ErrorHandler('Current password is incorrect', 400));
+        }
+
+        // Hash new password
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update password
+        await User.update(
+            { password: hashedNewPassword },
+            { where: { uuid: userUuid } }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Password changed successfully'
+        });
+
+    } catch (error) {
+        console.error('Change password error:', error);
+        next(new ErrorHandler('Internal server error', 500));
+    }
+};
 
 

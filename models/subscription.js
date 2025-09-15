@@ -34,7 +34,7 @@ module.exports = (sequelize, DataTypes) => {
     },
     test_series_id: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true, // Allow null for PDF purchases
       references: {
         model: 'new_test_series',
         key: 'id'
@@ -69,6 +69,11 @@ module.exports = (sequelize, DataTypes) => {
     expiry_date: {
       type: DataTypes.DATE,
       allowNull: true,
+    },
+    metadata: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      comment: 'Additional metadata for the subscription (payment details, PDF info, etc.)'
     },
 
     }, {

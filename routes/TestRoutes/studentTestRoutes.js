@@ -14,6 +14,7 @@ const {
   Sequelize
 } = require('../../models');
 const AuthToken = require('../../utils/AuthToken');
+const { checkUserTestSeriesAccess } = require('../SubscriptionRoutes/subscriptionAccess');
 
 // Middleware to verify user authentication (optional for some endpoints)
 const optionalAuth = async (req, res, next) => {
@@ -21,7 +22,7 @@ const optionalAuth = async (req, res, next) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (token) {
       const decoded = AuthToken.verifyToken(token);
-      const user = await User.findOne({ where: { uuid: decoded.id } });
+      const user = await User.findOne({ where: { uuid: decoded.uuid || decoded.id } });
       if (user) {
         req.user = {
           ...user.toJSON(),
@@ -57,7 +58,7 @@ const requireAuth = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Invalid token', error: tokenError.message });
     }
     
-    const user = await User.findOne({ where: { uuid: decoded.id } });
+    const user = await User.findOne({ where: { uuid: decoded.uuid || decoded.id } });
     console.log('🔍 Auth Debug - User lookup with UUID:', decoded.id);
     console.log('🔍 Auth Debug - User found:', user ? `Yes (ID: ${user.id}, UUID: ${user.uuid})` : 'No');
     
@@ -950,17 +951,49 @@ router.get('/tests/:uuid', optionalAuth, async (req, res) => {
   }
 });
 
-// Get questions for a test (TEMP: Auth bypassed for testing)
-router.get('/tests/:uuid/questions', async (req, res) => {
+// Get questions for a test with proper access control
+router.get('/tests/:uuid/questions', optionalAuth, async (req, res) => {
   try {
     console.log('🔍 Getting questions for test:', req.params.uuid);
-    // Find the test directly
+    
+    // Find the test with its test series to check pricing
     const test = await Test.findOne({
-      where: { uuid: req.params.uuid, is_active: true }
+      where: { uuid: req.params.uuid, is_active: true },
+      include: [{
+        model: TestSeries,
+        as: 'testSeries',
+        attributes: ['id', 'uuid', 'pricing_type', 'name']
+      }]
     });
 
     if (!test) {
       return res.status(404).json({ success: false, message: 'Test not found' });
+    }
+
+    // Check if test belongs to a paid series and requires access control
+    if (test.testSeries && test.testSeries.pricing_type === 'paid') {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required to access paid content',
+          requiresAuth: true
+        });
+      }
+
+      // Use our subscription access check logic
+      const accessCheck = await checkUserTestSeriesAccess(req.user.uuid, test.testSeries.id);
+      
+      if (!accessCheck.hasAccess) {
+        return res.status(403).json({
+          success: false,
+          message: 'Subscription required to access this content. Please purchase a subscription to continue.',
+          errorCode: 'ACCESS_DENIED',
+          accessRequired: true,
+          testSeriesId: test.testSeries.id,
+          testSeriesName: test.testSeries.name,
+          reason: accessCheck.reason
+        });
+      }
     }
 
     const questionsRaw = await Question.findAll({
@@ -1101,39 +1134,42 @@ router.get('/test-series/:uuid/subscription-access', requireAuth, async (req, re
   }
 });
 
-// Start a test session (TEMP: Auth bypassed for testing)
-router.post('/tests/:uuid/start', async (req, res) => {
+// Start a test session (requires authentication and subscription)
+router.post('/tests/:uuid/start', requireAuth, async (req, res) => {
   try {
-    // Find the test directly
+    // Find the test with its test series
     const test = await Test.findOne({
-      where: { uuid: req.params.uuid, is_active: true }
+      where: { uuid: req.params.uuid, is_active: true },
+      include: [{
+        model: TestSeries,
+        as: 'testSeries',
+        attributes: ['id', 'uuid', 'name', 'pricing_type']
+      }]
     });
 
     if (!test) {
       return res.status(404).json({ success: false, message: 'Test not found' });
     }
 
-    // TEMPORARY: Create a mock user for testing
-    // TODO: Remove when authentication is fixed
-    // Let's use an actual user from the database or create one temporarily
-    let mockUser = await User.findOne({ limit: 1 });
-    if (!mockUser) {
-      // Create a temporary test user if none exists
-      mockUser = await User.create({
-        username: 'test-user',
-        email: 'test@example.com',
-        password: 'hashedpassword',
-        isEmailVerified: true
-      });
-      console.log('🔥 TEMPORARY: Created test user for testing');
+    // Check subscription access for paid test series
+    if (test.testSeries && test.testSeries.pricing_type === 'paid') {
+      const { checkUserTestSeriesAccess } = require('../SubscriptionRoutes/subscriptionAccess');
+      const hasAccess = await checkUserTestSeriesAccess(req.user.id, test.testSeries.id);
+      
+      if (!hasAccess) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Access denied. Please subscribe to access this test.',
+          requires_subscription: true,
+          test_series_id: test.testSeries.uuid
+        });
+      }
     }
-    req.user = { id: mockUser.id, uuid: mockUser.uuid };
-    console.log('🔥 TEMPORARY: Using user for testing:', mockUser.uuid);
 
     // Check if user already has an active session for this test
     const existingSession = await TestSession.findOne({
       where: {
-        user_id: req.user.uuid,
+        user_id: req.user.id,
         test_id: test.id,
         status: ['active', 'paused']
       }
@@ -1159,7 +1195,7 @@ router.post('/tests/:uuid/start', async (req, res) => {
 
     // Create new test session
     const session = await TestSession.create({
-      user_id: req.user.uuid,
+      user_id: req.user.id,
       test_id: test.id,
       started_at: new Date(),
       status: 'active',
@@ -1334,28 +1370,39 @@ router.post('/test-sessions/:sessionUuid/resume', requireAuth, async (req, res) 
   }
 });
 
-// TEMPORARY SUBMIT ENDPOINT (working around caching issue)
-router.post('/tests/:testUuid/submit', async (req, res) => {
+// Test submission endpoint by test UUID (REAL IMPLEMENTATION)
+router.post('/tests/:testUuid/submit', requireAuth, async (req, res) => {
   try {
-    console.log('🔍 TEMP Submit test - Test UUID:', req.params.testUuid);
-    
-    // Mock response to test frontend
-    res.json({
-      success: true,
-      message: 'Test submitted successfully',
-      data: {
-        session_id: req.body.session_uuid || 'mock-session',
-        total_score: 85,
-        correct_answers: 8,
-        wrong_answers: 2,
-        unanswered: 0,
-        percentage: 85,
-        passed: true,
-        time_taken: req.body.time_taken || 300
+    console.log('🔍 Submit test by UUID - Test UUID:', req.params.testUuid);
+    console.log('🔍 User ID:', req.user.uuid);
+
+    // Get the session UUID from the request body
+    const sessionUuid = req.body.session_uuid || req.body.sessionId;
+
+    if (!sessionUuid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Session UUID is required'
+      });
+    }
+
+    // Call the TestResponseController.submitTest method which has the real logic
+    const TestResponseController = require('../../controllers/TestResponseController');
+
+    // Reformat request to match TestResponseController expectations
+    const modifiedReq = {
+      ...req,
+      body: {
+        ...req.body,
+        testSessionId: sessionUuid
       }
-    });
+    };
+
+    // Call the real submission logic
+    return await TestResponseController.submitTest(modifiedReq, res);
+
   } catch (error) {
-    console.error('Error in temp submit:', error);
+    console.error('Error in test submit:', error);
     res.status(500).json({ success: false, message: 'Submit failed', error: error.message });
   }
 });
@@ -1551,12 +1598,29 @@ router.get('/test-sessions/:sessionUuid/review', async (req, res) => {
   }
 });
 
-// Submit test session (SIMPLIFIED FOR TESTING)
-router.post('/test-sessions/:sessionUuid/submit', async (req, res) => {
+// Submit test session (REAL IMPLEMENTATION)
+router.post('/test-sessions/:sessionUuid/submit', requireAuth, async (req, res) => {
   try {
     console.log('🔍 Submit test - Session UUID:', req.params.sessionUuid);
-    
-    // FOR NOW: Return mock response to test if routing works
+    console.log('🔍 User ID:', req.user.uuid);
+
+    // Call the TestResponseController.submitTest method which has the real logic
+    const TestResponseController = require('../../controllers/TestResponseController');
+
+    // Reformat request to match TestResponseController expectations
+    const modifiedReq = {
+      ...req,
+      body: {
+        ...req.body,
+        testSessionId: req.params.sessionUuid
+      }
+    };
+
+    // Call the real submission logic
+    return await TestResponseController.submitTest(modifiedReq, res);
+
+    // OLD MOCK CODE (removed)
+    /*
     res.json({
       success: true,
       message: 'Test submitted successfully',
@@ -1572,125 +1636,8 @@ router.post('/test-sessions/:sessionUuid/submit', async (req, res) => {
       }
     });
     return;
-    
-    // ORIGINAL CODE BELOW (commented out for testing)
-    const { sessionUuid } = req.params;
-    const { answers, submitted_at, time_taken } = req.body;
+    */
 
-    const session = await TestSession.findOne({
-      where: {
-        id: sessionUuid,
-        status: Sequelize.Op.in(['active', 'paused'])
-      },
-      include: [{
-        model: Test,
-        as: 'test',
-        include: [{
-          model: SubCategory,
-          as: 'subCategory',
-          include: [{
-            model: Category,
-            as: 'category',
-            include: [{
-              model: TestSeries,
-              as: 'testSeries'
-            }]
-          }]
-        }]
-      }]
-    });
-
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: 'Test session not found or already submitted'
-      });
-    }
-
-    const test = session.test;
-    
-    // Save all answers
-    for (const answer of answers) {
-      await UserAnswer.findOrCreate({
-        where: {
-          session_id: session.id,
-          question_id: answer.question_id
-        },
-        defaults: {
-          user_id: session.user_id,
-          session_id: session.id,
-          question_id: answer.question_id,
-          selected_option: answer.selected_option,
-          time_spent: answer.time_spent || 0,
-          is_flagged: answer.is_flagged || false
-        }
-      });
-    }
-
-    // Get all questions for this test to calculate results
-    const questions = await Question.findAll({
-      where: { test_id: test.id, is_active: true },
-      attributes: ['id', 'correct_option', 'marks']
-    });
-
-    // Get user's answers
-    const userAnswers = await UserAnswer.findAll({
-      where: { session_id: session.id }
-    });
-
-    // Calculate results
-    let totalScore = 0;
-    let correctAnswers = 0;
-    let wrongAnswers = 0;
-    let unanswered = 0;
-
-    questions.forEach(question => {
-      const userAnswer = userAnswers.find(ua => ua.question_id === question.id);
-      
-      if (!userAnswer || !userAnswer.selected_option) {
-        unanswered++;
-      } else if (userAnswer.selected_option === question.correct_option) {
-        correctAnswers++;
-        totalScore += question.marks;
-      } else {
-        wrongAnswers++;
-        // Apply negative marking if configured
-        if (test.negative_marking) {
-          totalScore -= (question.marks * test.negative_marks_percentage / 100);
-        }
-      }
-    });
-
-    const totalQuestions = questions.length;
-    const maxPossibleScore = questions.reduce((sum, q) => sum + q.marks, 0);
-    const percentage = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-    const passed = percentage >= (test.passing_marks || 50); // Default passing mark 50%
-
-    // Update session
-    await session.update({
-      status: 'completed',
-      completed_at: new Date(submitted_at),
-      is_completed: true,
-      is_submitted: true,
-      calculated_score: totalScore,
-      total_correct: correctAnswers,
-      total_wrong: wrongAnswers,
-      total_unanswered: unanswered
-    });
-
-    res.json({
-      success: true,
-      data: {
-        session_id: sessionUuid,
-        total_score: Math.max(0, totalScore), // Don't allow negative scores
-        correct_answers: correctAnswers,
-        wrong_answers: wrongAnswers,
-        unanswered: unanswered,
-        percentage: Math.round(percentage * 100) / 100,
-        passed: passed,
-        time_taken: time_taken
-      }
-    });
   } catch (error) {
     console.error('Error submitting test session:', error);
     res.status(500).json({
