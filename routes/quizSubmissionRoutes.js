@@ -120,7 +120,7 @@ router.post('/submit', async (req, res) => {
             user_id: userId,
             test_id: test.id, // Use the created test ID
             test_session_id: testSession.id,
-            test_series_id: null, // Set to null to avoid foreign key issues
+            test_series_id: null, // Set to null to avoid foreign key issues for now
             category_id: null,
             score: score,
             percentage: percentage,

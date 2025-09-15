@@ -22,6 +22,7 @@ const DebugRoutes = require("./debug");
 const TestSimulationRoutes = require("./testSimulation");
 const QuizSubmissionRoutes = require("./quizSubmissionRoutes");
 const DebugLeaderboardRoutes = require("./debugLeaderboard");
+const SampleDataRoutes = require("./sampleDataRoutes");
 
 router.use("/users", UserRoutes);
 router.use("/admin", AdminRoutes);
@@ -42,6 +43,7 @@ router.use("/debug", DebugRoutes); // Debug APIs for checking database state
 router.use("/test-simulation", TestSimulationRoutes); // Temporary test simulation APIs for testing
 router.use("/quiz", QuizSubmissionRoutes); // Simple quiz submission APIs for frontend
 router.use("/debug-leaderboard", DebugLeaderboardRoutes); // Debug leaderboard queries
+router.use("/sample-data", SampleDataRoutes); // Temporary sample data creation routes
 router.use("/", StudentDynamicTestRoutes); // NEW: Student-facing dynamic hierarchy APIs
 router.use("/", StudentTestRoutes); // OLD: Student-facing test APIs (kept for backwards compatibility)
 

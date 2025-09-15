@@ -59,9 +59,9 @@ class TestSeriesController {
             include: [{
               model: Category,
               as: 'category',
-              where: { 
-                test_series_id: series.id, 
-                is_active: true 
+              where: {
+                test_series_id: series.id,
+                is_active: true
               },
               required: true
             }]
@@ -396,6 +396,7 @@ class TestSeriesController {
           const questionsCount = await Question.count({
             include: [{
               model: Category,
+              as: 'category',
               where: { test_series_id: test.id },
               required: true
             }]

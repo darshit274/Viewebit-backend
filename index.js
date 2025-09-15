@@ -96,8 +96,6 @@ async function startServer() {
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`🔔 Server also accessible on network at http://192.168.1.2:${PORT}`);
-      console.log(`🔔 Notification system initialized with automated triggers`);
     });
   } catch (error) {
     console.error('❌ Server startup error:', error);
