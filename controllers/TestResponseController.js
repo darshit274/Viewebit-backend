@@ -360,8 +360,8 @@ class TestResponseController {
         obtainedMarks += userAnswer.question?.marks || 1;
       } else {
         wrongAnswers++;
-        if (test.has_negative_marking) {
-          negativeMarks += userAnswer.question?.negative_marks || 0.25;
+        if (test.negative_marking_enabled) {
+          negativeMarks += test.negative_marks_per_wrong || 0.25;
         }
       }
       
@@ -726,7 +726,7 @@ class TestResponseController {
           {
             model: Test,
             as: 'test',
-            attributes: ['id', 'title', 'duration_minutes', 'has_negative_marking']
+            attributes: ['id', 'title', 'duration_minutes', 'negative_marking_enabled', 'negative_marks_per_wrong']
           },
           {
             model: User,

@@ -273,6 +273,9 @@ class TestManagementController {
   
   // Get all test series with pagination, filtering, and statistics
   async getTestSeries(req, res) {
+    console.log('=================================');
+    console.log('🔥 CLAUDE DEBUG: getTestSeries called!');
+    console.log('=================================');
     try {
       const {
         page = 1,
@@ -305,7 +308,7 @@ class TestManagementController {
         attributes: [
           'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 'is_active', 'created_at', 'updated_at',
           'pricing_type', 'price', 'currency', 'demo_tests_count', 'subscription_duration_days',
-          'features', 'discount_percentage', 'is_featured'
+          'features', 'discount_percentage', 'is_featured', 'has_negative_marking', 'negative_marks'
         ],
         where,
         order: [[sortBy, sortOrder]],
@@ -334,26 +337,36 @@ class TestManagementController {
       };
 
       // Transform data to match frontend expectations
-      const transformedSeries = testSeries.map(series => ({
-        id: series.id,
-        uuid: series.uuid,
-        title: series.name, // Map name to title for frontend
-        title_gujarati: series.name_gujarati,
-        description: series.description,
-        description_gujarati: series.description_gujarati,
-        is_active: series.is_active,
-        pricing_type: series.pricing_type,
-        price: series.price,
-        currency: series.currency,
-        demo_tests_count: series.demo_tests_count,
-        subscription_duration_days: series.subscription_duration_days,
-        features: series.features,
-        discount_percentage: series.discount_percentage,
-        is_featured: series.is_featured,
-        created_at: series.created_at,
-        updated_at: series.updated_at,
-        categories_count: series.categories ? series.categories.length : 0
-      }));
+      console.log('DEBUG: Raw testSeries data from DB:', JSON.stringify(testSeries.slice(0, 1), null, 2));
+
+      const transformedSeries = testSeries.map(series => {
+        console.log('DEBUG: Processing series:', series.uuid, 'has_negative_marking:', series.has_negative_marking, 'negative_marks:', series.negative_marks);
+
+        return {
+          id: series.id,
+          uuid: series.uuid,
+          title: series.name, // Map name to title for frontend
+          title_gujarati: series.name_gujarati,
+          description: series.description,
+          description_gujarati: series.description_gujarati,
+          is_active: series.is_active,
+          pricing_type: series.pricing_type,
+          price: series.price,
+          currency: series.currency,
+          demo_tests_count: series.demo_tests_count,
+          subscription_duration_days: series.subscription_duration_days,
+          features: series.features,
+          discount_percentage: series.discount_percentage,
+          is_featured: series.is_featured,
+          has_negative_marking: series.has_negative_marking,
+          negative_marks: series.negative_marks,
+          created_at: series.created_at,
+          updated_at: series.updated_at,
+          categories_count: series.categories ? series.categories.length : 0
+        };
+      });
+
+      console.log('DEBUG: Transformed response first item:', JSON.stringify(transformedSeries[0], null, 2));
 
       res.json({
         success: true,
@@ -622,6 +635,8 @@ class TestManagementController {
       if (features !== undefined) updateData.features = features;
       if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
       if (is_featured !== undefined) updateData.is_featured = is_featured;
+      if (req.body.has_negative_marking !== undefined) updateData.has_negative_marking = req.body.has_negative_marking;
+      if (req.body.negative_marks !== undefined) updateData.negative_marks = req.body.negative_marks;
 
       await testSeries.update(updateData);
 
@@ -642,6 +657,8 @@ class TestManagementController {
         features: testSeries.features,
         discount_percentage: testSeries.discount_percentage,
         is_featured: testSeries.is_featured,
+        has_negative_marking: testSeries.has_negative_marking,
+        negative_marks: testSeries.negative_marks,
         created_at: testSeries.created_at,
         updated_at: testSeries.updated_at
       };
