@@ -26,8 +26,12 @@ router.post('/submit', async (req, res) => {
         const totalQuestions = answers.length;
         const correctAnswers = answers.filter(answer => answer.isCorrect).length;
         const wrongAnswers = totalQuestions - correctAnswers;
-        const percentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
-        const score = correctAnswers;
+
+        console.log('🧮 QUIZ SCORE CALCULATION:', {
+            totalQuestions,
+            correctAnswers,
+            wrongAnswers
+        });
 
         // Find or create user
         let user = await User.findOne({ where: { uuid: userId } });
@@ -47,6 +51,14 @@ router.post('/submit', async (req, res) => {
 
         // Find or create test series
         let testSeries = await TestSeries.findOne({ where: { uuid: testSeriesId } });
+
+        console.log('🔍 TEST SERIES DATABASE VALUES:', {
+            uuid: testSeries?.uuid,
+            has_negative_marking: testSeries?.has_negative_marking,
+            negative_marks: testSeries?.negative_marks,
+            negativeMarksType: typeof testSeries?.negative_marks
+        });
+
         if (!testSeries) {
             testSeries = await TestSeries.create({
                 uuid: testSeriesId,
@@ -59,10 +71,43 @@ router.post('/submit', async (req, res) => {
                 difficulty_level: 'beginner',
                 is_active: 1,
                 is_published: 1,
-                published_at: new Date()
+                published_at: new Date(),
+                has_negative_marking: false,  // Default to disabled
+                negative_marks: 0.25         // Default value
             });
             console.log(`Created test series: ${testSeries.uuid}`);
         }
+
+        // Calculate score with negative marking if enabled
+        let obtainedMarks = correctAnswers; // 1 mark per correct answer
+        let negativeMarks = 0;
+        let finalScore = obtainedMarks;
+        let percentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+
+        // Check if test series has negative marking enabled
+        if (testSeries.has_negative_marking && wrongAnswers > 0) {
+            const negativeMarkValue = parseFloat(testSeries.negative_marks) || 0.25;
+            negativeMarks = wrongAnswers * negativeMarkValue;
+            finalScore = Math.max(0, obtainedMarks - negativeMarks);
+            percentage = totalQuestions > 0 ? Math.round((finalScore / totalQuestions) * 100) : 0;
+
+            console.log('✅ NEGATIVE MARKING APPLIED:', {
+                obtainedMarks,
+                negativeMarks,
+                finalScore,
+                percentage: percentage + '%',
+                negativeMarkValue
+            });
+        } else {
+            console.log('❌ NO NEGATIVE MARKING:', {
+                has_negative_marking: testSeries.has_negative_marking,
+                obtainedMarks,
+                finalScore,
+                percentage: percentage + '%'
+            });
+        }
+
+        const score = finalScore;
 
         // ALWAYS create a NEW category for this specific test series to ensure isolation
         const category = await Category.create({
@@ -90,7 +135,8 @@ router.post('/submit', async (req, res) => {
             duration_minutes: Math.ceil(totalTimeSpent / 60),
             total_questions: totalQuestions,
             passing_marks: Math.ceil(totalQuestions * 0.6), // 60% passing
-            negative_marking: false,
+            negative_marking_enabled: testSeries.has_negative_marking || false,
+            negative_marks_per_wrong: testSeries.negative_marks || 0.25,
             is_active: true,
             sub_category_id: subCategory.id
         });
@@ -145,8 +191,32 @@ router.post('/submit', async (req, res) => {
                 score: score,
                 totalQuestions: totalQuestions,
                 correctAnswers: correctAnswers,
+                wrongAnswers: wrongAnswers,
                 percentage: percentage,
-                completionTime: new Date().toISOString()
+                // Alternative field names in case frontend uses different keys
+                finalPercentage: percentage,
+                calculatedPercentage: percentage,
+                actualPercentage: percentage,
+                // Mark calculation info
+                obtainedMarks: obtainedMarks,
+                negativeMarkingEnabled: testSeries.has_negative_marking,
+                negativeMarksDeducted: negativeMarks,
+                negativeMarkValue: testSeries.negative_marks,
+                finalScore: finalScore,
+                completionTime: new Date().toISOString(),
+                timestamp: Date.now(), // Cache buster
+                // Override any frontend calculation
+                displayPercentage: percentage,
+                resultPercentage: percentage,
+                scorePercentage: percentage,
+                debug: {
+                    obtainedMarks,
+                    negativeMarks,
+                    finalScore,
+                    percentageCalculation: `(${finalScore}/${totalQuestions}) * 100 = ${percentage}%`,
+                    correctAnswersOnly: `(${correctAnswers}/${totalQuestions}) * 100 = ${Math.round((correctAnswers/totalQuestions)*100)}%`,
+                    warning: "Frontend should use 'percentage' field, not calculate (correctAnswers/totalQuestions)*100"
+                }
             }
         });
 
@@ -213,6 +283,64 @@ router.delete('/clear-series/:testSeriesId', async (req, res) => {
     } catch (error) {
         console.error('Error clearing test series:', error);
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * Get latest quiz result for a user and test series
+ */
+router.get('/latest-result/:userId/:testSeriesId', async (req, res) => {
+    try {
+        const { userId, testSeriesId } = req.params;
+
+        console.log(`🔍 Getting latest result for user ${userId} in test series ${testSeriesId}`);
+
+        // Find the latest leaderboard entry for this user and test series
+        const latestEntry = await LeaderboardEntry.findOne({
+            where: {
+                user_id: userId,
+                test_series_id: testSeriesId
+            },
+            order: [['completion_date', 'DESC']],
+            include: [{
+                model: TestSeries,
+                as: 'testSeries',
+                attributes: ['name', 'has_negative_marking', 'negative_marks']
+            }]
+        });
+
+        if (!latestEntry) {
+            return res.status(404).json({
+                success: false,
+                message: 'No quiz results found for this user and test series'
+            });
+        }
+
+        console.log(`✅ Found latest result: ${latestEntry.percentage}% (entry ID: ${latestEntry.id})`);
+
+        res.json({
+            success: true,
+            message: 'Latest quiz result retrieved successfully',
+            data: {
+                leaderboardEntryId: latestEntry.id,
+                score: parseFloat(latestEntry.score),
+                totalQuestions: latestEntry.total_questions,
+                correctAnswers: latestEntry.correct_answers,
+                wrongAnswers: latestEntry.wrong_answers,
+                percentage: latestEntry.percentage,
+                completionTime: latestEntry.completion_date,
+                negativeMarkingEnabled: latestEntry.testSeries?.has_negative_marking || false,
+                timestamp: Date.now()
+            }
+        });
+
+    } catch (error) {
+        console.error('Get latest result error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve latest quiz result',
+            error: error.message
+        });
     }
 });
 
