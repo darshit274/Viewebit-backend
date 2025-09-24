@@ -12,14 +12,16 @@ router.post('/submit', async (req, res) => {
             userId,
             testSeriesId, // This is actually the UUID from the frontend URL
             answers = [],
-            totalTimeSpent = 120
+            totalTimeSpent = 120,
+            markedForReviewCount = 0
         } = req.body;
 
         console.log('Quiz submission received:', {
             userId,
             testSeriesId,
             answersCount: answers.length,
-            totalTimeSpent
+            totalTimeSpent,
+            markedForReviewCount
         });
 
         // Calculate score from answers
@@ -154,7 +156,8 @@ router.post('/submit', async (req, res) => {
             calculated_score: score,
             total_correct: correctAnswers,
             total_wrong: wrongAnswers,
-            total_unanswered: 0,
+            total_unanswered: Math.max(0, totalQuestions - answers.length),
+            total_marked_for_review: markedForReviewCount,
             total_questions: totalQuestions,
             time_spent_seconds: totalTimeSpent,
             final_score: score,
