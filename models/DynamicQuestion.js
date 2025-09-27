@@ -202,43 +202,43 @@ module.exports = (sequelize, DataTypes) => {
     }
   };
 
-  // Get questions with formatting for frontend
+  // Get questions with formatting for frontend (returns both languages for smart selection)
   DynamicQuestion.getFormattedQuestions = async function(categoryId, language = 'english') {
     const questions = await this.findAll({
-      where: { 
+      where: {
         category_id: categoryId,
-        is_active: true 
+        is_active: true
       },
       order: [['display_order', 'ASC'], ['created_at', 'ASC']]
     });
 
     return questions.map(question => {
-      const isGujarati = language.toLowerCase() === 'gujarati';
-      
       return {
         id: question.id,
         uuid: question.uuid,
-        question_text: isGujarati && question.question_text_gujarati 
-          ? question.question_text_gujarati 
-          : question.question_text,
+        // Return both language fields for smart frontend selection
+        question_text: question.question_text,
+        question_text_gujarati: question.question_text_gujarati,
+        // Keep legacy options structure for backward compatibility
         options: {
-          A: isGujarati && question.option_a_gujarati 
-            ? question.option_a_gujarati 
-            : question.option_a,
-          B: isGujarati && question.option_b_gujarati 
-            ? question.option_b_gujarati 
-            : question.option_b,
-          C: isGujarati && question.option_c_gujarati 
-            ? question.option_c_gujarati 
-            : question.option_c,
-          D: isGujarati && question.option_d_gujarati 
-            ? question.option_d_gujarati 
-            : question.option_d,
+          A: question.option_a,
+          B: question.option_b,
+          C: question.option_c,
+          D: question.option_d,
         },
+        // Include individual option fields for smart selection
+        option_a: question.option_a,
+        option_b: question.option_b,
+        option_c: question.option_c,
+        option_d: question.option_d,
+        option_a_gujarati: question.option_a_gujarati,
+        option_b_gujarati: question.option_b_gujarati,
+        option_c_gujarati: question.option_c_gujarati,
+        option_d_gujarati: question.option_d_gujarati,
         correct_answer: question.correct_answer,
-        explanation: isGujarati && question.explanation_gujarati 
-          ? question.explanation_gujarati 
-          : question.explanation,
+        // Return both explanation fields
+        explanation: question.explanation,
+        explanation_gujarati: question.explanation_gujarati,
         marks: question.marks,
         difficulty_level: question.difficulty_level,
         subject: question.subject,

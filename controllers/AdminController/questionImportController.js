@@ -347,25 +347,70 @@ class QuestionImportController {
     const errors = [];
     const question = {};
 
-    // Required fields validation
-    const requiredFields = [
-      'Question Text (English)',
-      'Option A (English)',
-      'Option B (English)', 
-      'Option C (English)',
-      'Option D (English)',
-      'Correct Answer'
-    ];
+    // Check if we have English or Gujarati content (or both)
+    const hasEnglishContent = row['Question Text (English)'] && row['Question Text (English)'].toString().trim() !== '';
+    const hasGujaratiContent = row['Question Text (Gujarati)'] && row['Question Text (Gujarati)'].toString().trim() !== '';
 
-    requiredFields.forEach(field => {
-      if (!row[field] || row[field].toString().trim() === '') {
-        errors.push({
-          row: rowNumber,
-          field: field,
-          error: `${field} is required`
-        });
-      }
-    });
+    // Must have at least one language
+    if (!hasEnglishContent && !hasGujaratiContent) {
+      errors.push({
+        row: rowNumber,
+        field: 'Question Text',
+        error: 'Question text is required in at least one language (English or Gujarati)'
+      });
+      return { errors, question };
+    }
+
+    // Validate English fields if English content exists
+    if (hasEnglishContent) {
+      const englishRequiredFields = [
+        'Question Text (English)',
+        'Option A (English)',
+        'Option B (English)',
+        'Option C (English)',
+        'Option D (English)'
+      ];
+
+      englishRequiredFields.forEach(field => {
+        if (!row[field] || row[field].toString().trim() === '') {
+          errors.push({
+            row: rowNumber,
+            field: field,
+            error: `${field} is required when providing English content`
+          });
+        }
+      });
+    }
+
+    // Validate Gujarati fields if Gujarati content exists
+    if (hasGujaratiContent) {
+      const gujaratiRequiredFields = [
+        'Question Text (Gujarati)',
+        'Option A (Gujarati)',
+        'Option B (Gujarati)',
+        'Option C (Gujarati)',
+        'Option D (Gujarati)'
+      ];
+
+      gujaratiRequiredFields.forEach(field => {
+        if (!row[field] || row[field].toString().trim() === '') {
+          errors.push({
+            row: rowNumber,
+            field: field,
+            error: `${field} is required when providing Gujarati content`
+          });
+        }
+      });
+    }
+
+    // Correct Answer is always required
+    if (!row['Correct Answer'] || row['Correct Answer'].toString().trim() === '') {
+      errors.push({
+        row: rowNumber,
+        field: 'Correct Answer',
+        error: 'Correct Answer is required'
+      });
+    }
 
     // Validate correct answer format
     if (row['Correct Answer']) {
@@ -391,19 +436,24 @@ class QuestionImportController {
 
     // If no errors, create question object
     if (errors.length === 0) {
-      question.question_text = row['Question Text (English)'].toString().trim();
-      question.question_text_gujarati = row['Question Text (Gujarati)'] ? row['Question Text (Gujarati)'].toString().trim() : null;
-      question.option_a = row['Option A (English)'].toString().trim();
-      question.option_b = row['Option B (English)'].toString().trim();
-      question.option_c = row['Option C (English)'].toString().trim();
-      question.option_d = row['Option D (English)'].toString().trim();
-      question.option_a_gujarati = row['Option A (Gujarati)'] ? row['Option A (Gujarati)'].toString().trim() : null;
-      question.option_b_gujarati = row['Option B (Gujarati)'] ? row['Option B (Gujarati)'].toString().trim() : null;
-      question.option_c_gujarati = row['Option C (Gujarati)'] ? row['Option C (Gujarati)'].toString().trim() : null;
-      question.option_d_gujarati = row['Option D (Gujarati)'] ? row['Option D (Gujarati)'].toString().trim() : null;
+      // Handle English content (only if English content exists)
+      question.question_text = hasEnglishContent ? row['Question Text (English)'].toString().trim() : null;
+      question.option_a = hasEnglishContent ? row['Option A (English)'].toString().trim() : null;
+      question.option_b = hasEnglishContent ? row['Option B (English)'].toString().trim() : null;
+      question.option_c = hasEnglishContent ? row['Option C (English)'].toString().trim() : null;
+      question.option_d = hasEnglishContent ? row['Option D (English)'].toString().trim() : null;
+      question.explanation = (hasEnglishContent && row['Explanation (English)']) ? row['Explanation (English)'].toString().trim() : null;
+
+      // Handle Gujarati content (only if Gujarati content exists)
+      question.question_text_gujarati = hasGujaratiContent ? row['Question Text (Gujarati)'].toString().trim() : null;
+      question.option_a_gujarati = hasGujaratiContent ? row['Option A (Gujarati)'].toString().trim() : null;
+      question.option_b_gujarati = hasGujaratiContent ? row['Option B (Gujarati)'].toString().trim() : null;
+      question.option_c_gujarati = hasGujaratiContent ? row['Option C (Gujarati)'].toString().trim() : null;
+      question.option_d_gujarati = hasGujaratiContent ? row['Option D (Gujarati)'].toString().trim() : null;
+      question.explanation_gujarati = (hasGujaratiContent && row['Explanation (Gujarati)']) ? row['Explanation (Gujarati)'].toString().trim() : null;
+
+      // Common fields
       question.correct_answer = row['Correct Answer'].toString().toUpperCase().trim();
-      question.explanation = row['Explanation (English)'] ? row['Explanation (English)'].toString().trim() : null;
-      question.explanation_gujarati = row['Explanation (Gujarati)'] ? row['Explanation (Gujarati)'].toString().trim() : null;
       question.marks = marks;
       question.is_active = true;
     }

@@ -781,14 +781,28 @@ const validateImportData = async (data, categoryId) => {
                 is_active: true
             };
             
-            // Validate required fields
-            if (!questionData.question_text) {
-                errors.push(`Row ${rowNumber}: Question Text (English) is required`);
+            // Smart validation: Check if we have English or Gujarati content (or both)
+            const hasEnglishContent = questionData.question_text && questionData.question_text.toString().trim() !== '';
+            const hasGujaratiContent = questionData.question_text_gujarati && questionData.question_text_gujarati.toString().trim() !== '';
+
+            // At least one language is required
+            if (!hasEnglishContent && !hasGujaratiContent) {
+                errors.push(`Row ${rowNumber}: Question Text is required (in English or Gujarati or both)`);
                 continue;
             }
-            
-            if (!questionData.option_a || !questionData.option_b || !questionData.option_c || !questionData.option_d) {
-                errors.push(`Row ${rowNumber}: All options (A, B, C, D) are required`);
+
+            // Validate options based on the primary language
+            let primaryLang = hasEnglishContent ? 'english' : 'gujarati';
+            let optionSuffix = primaryLang === 'english' ? '' : '_gujarati';
+
+            const option_a_key = `option_a${optionSuffix}`;
+            const option_b_key = `option_b${optionSuffix}`;
+            const option_c_key = `option_c${optionSuffix}`;
+            const option_d_key = `option_d${optionSuffix}`;
+
+            if (!questionData[option_a_key] || !questionData[option_b_key] || !questionData[option_c_key] || !questionData[option_d_key]) {
+                const langLabel = primaryLang === 'english' ? 'English' : 'Gujarati';
+                errors.push(`Row ${rowNumber}: All options (A, B, C, D) are required in ${langLabel}`);
                 continue;
             }
             

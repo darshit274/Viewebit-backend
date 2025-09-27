@@ -24,28 +24,28 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     
-    // Question content (English - primary)
+    // Question content (English - now optional for multilingual support)
     question_text: {
       type: DataTypes.TEXT,
-      allowNull: false,
+      allowNull: true, // Allow null for Gujarati-only questions
       field: 'question_text' // Explicitly map to database column
     },
-    // Options as separate columns (matching database)
+    // Options as separate columns (now optional for multilingual support)
     option_a: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: true // Allow null for Gujarati-only questions
     },
     option_b: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: true // Allow null for Gujarati-only questions
     },
     option_c: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: true // Allow null for Gujarati-only questions
     },
     option_d: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: true // Allow null for Gujarati-only questions
     },
     correct_answer: {
       type: DataTypes.ENUM('A', 'B', 'C', 'D'),

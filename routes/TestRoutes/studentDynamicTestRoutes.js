@@ -590,30 +590,36 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
       type: Sequelize.QueryTypes.SELECT
     });
 
-    // Format questions based on language preference
+    // Format questions to include both languages for smart frontend selection
     const formattedQuestions = questions.map(question => {
       const formatted = {
         id: question.id,
         uuid: question.uuid,
-        question_text: language === 'gujarati' && question.question_text_gujarati 
-          ? question.question_text_gujarati 
-          : question.question_text,
+        // Return both language fields for smart frontend selection
+        question_text: question.question_text,
+        question_text_gujarati: question.question_text_gujarati,
         correct_answer: question.correct_answer,
-        explanation: language === 'gujarati' && question.explanation_gujarati 
-          ? question.explanation_gujarati 
-          : question.explanation,
+        // Return both explanation fields
+        explanation: question.explanation,
+        explanation_gujarati: question.explanation_gujarati,
         marks: question.marks,
-        options: {}
+        // Keep legacy options structure for backward compatibility
+        options: {
+          A: question.option_a,
+          B: question.option_b,
+          C: question.option_c,
+          D: question.option_d,
+        },
+        // Include individual option fields for smart selection
+        option_a: question.option_a,
+        option_b: question.option_b,
+        option_c: question.option_c,
+        option_d: question.option_d,
+        option_a_gujarati: question.option_a_gujarati,
+        option_b_gujarati: question.option_b_gujarati,
+        option_c_gujarati: question.option_c_gujarati,
+        option_d_gujarati: question.option_d_gujarati,
       };
-
-      // Format options based on language
-      ['A', 'B', 'C', 'D'].forEach(option => {
-        const optionKey = `option_${option.toLowerCase()}`;
-        const gujaratiKey = `${optionKey}_gujarati`;
-        formatted.options[option] = language === 'gujarati' && question[gujaratiKey]
-          ? question[gujaratiKey]
-          : question[optionKey];
-      });
 
       return formatted;
     });
