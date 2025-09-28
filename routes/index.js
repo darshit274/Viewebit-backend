@@ -23,9 +23,11 @@ const TestSimulationRoutes = require("./testSimulation");
 const QuizSubmissionRoutes = require("./quizSubmissionRoutes");
 const DebugLeaderboardRoutes = require("./debugLeaderboard");
 const SampleDataRoutes = require("./sampleDataRoutes");
+const UploadRoutes = require("./uploadRoutes");
 
 router.use("/users", UserRoutes);
 router.use("/admin", AdminRoutes);
+router.use("/admin/upload", UploadRoutes); // File upload APIs for rich text editor
 router.use("/admin/test-management", TestManagementRoutes); // Admin test management APIs (old system)
 router.use("/admin/dynamic-test", DynamicTestManagementRoutes); // New dynamic hierarchy system
 router.use("/subscriptions", SubscriptionRoutes);

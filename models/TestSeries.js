@@ -86,16 +86,9 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 1,
       allowNull: false
     },
-    has_negative_marking: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false
-    },
-    negative_marks: {
-      type: DataTypes.DECIMAL(3, 2),
-      defaultValue: 0.25,
-      allowNull: true
-    },
+    // Negative marking moved to category level
+    // has_negative_marking: removed - now handled at category level
+    // negative_marks: removed - now handled at category level
     supports_pause_resume: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,

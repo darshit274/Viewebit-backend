@@ -469,8 +469,7 @@ class TestManagementController {
         difficulty_level: 'beginner', // Required field
         free_test_count: free_tests_count || 0, // Use existing field name
         max_attempts_per_test: max_attempts || 1, // Use existing field name
-        has_negative_marking: negative_marking_enabled || false, // Use existing field name
-        negative_marks: negative_marking_value || 0.25, // Use existing field name
+        // Negative marking removed from test series level - now handled at category level
         supports_pause_resume: true,
         supports_multilanguage: true
       });
@@ -635,8 +634,7 @@ class TestManagementController {
       if (features !== undefined) updateData.features = features;
       if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
       if (is_featured !== undefined) updateData.is_featured = is_featured;
-      if (req.body.has_negative_marking !== undefined) updateData.has_negative_marking = req.body.has_negative_marking;
-      if (req.body.negative_marks !== undefined) updateData.negative_marks = req.body.negative_marks;
+      // Negative marking fields removed - now handled at category level
 
       await testSeries.update(updateData);
 
@@ -926,7 +924,16 @@ class TestManagementController {
     try {
       const { uuid, categoryUuid } = req.params;
       const categoryId = uuid || categoryUuid;
-      const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
+      const {
+        name,
+        description,
+        name_gujarati,
+        description_gujarati,
+        is_active,
+        negative_marking_enabled,
+        negative_marks_per_wrong,
+        test_duration_minutes
+      } = req.body;
 
       const category = await Category.findOne({ where: { uuid: categoryId } });
       if (!category) {
@@ -936,7 +943,29 @@ class TestManagementController {
         });
       }
 
-      await category.update({ name, description, name_gujarati, description_gujarati, is_active });
+      // Prepare update data
+      const updateData = {
+        name,
+        description,
+        name_gujarati,
+        description_gujarati,
+        is_active
+      };
+
+      // Add negative marking fields if provided
+      if (negative_marking_enabled !== undefined) {
+        updateData.negative_marking_enabled = negative_marking_enabled;
+      }
+      if (negative_marks_per_wrong !== undefined) {
+        updateData.negative_marks_per_wrong = negative_marks_per_wrong;
+      }
+
+      // Add test duration field if provided
+      if (test_duration_minutes !== undefined) {
+        updateData.test_duration_minutes = test_duration_minutes;
+      }
+
+      await category.update(updateData);
 
       res.json({
         success: true,
@@ -1750,11 +1779,13 @@ class TestManagementController {
         is_active
       });
 
-      // Update test total marks
-      const totalMarks = await Question.sum('marks', {
-        where: { test_id: question.test_id, is_active: true }
-      });
-      await question.test.update({ total_marks: totalMarks });
+      // Update test total marks (only if question belongs to a test)
+      if (question.test_id && question.test) {
+        const totalMarks = await Question.sum('marks', {
+          where: { test_id: question.test_id, is_active: true }
+        });
+        await question.test.update({ total_marks: totalMarks });
+      }
 
       res.json({
         success: true,
@@ -1946,13 +1977,17 @@ class TestManagementController {
       let content = [];
       let content_type = 'empty';
 
-      if (category.node_type === 'container' && category.childCategories?.length > 0) {
-        content = category.childCategories;
-        content_type = 'categories';
-      } else if (category.node_type === 'question_holder' && category.questions?.length > 0) {
+      // Priority-based logic: Check actual content regardless of node_type
+      if (category.questions?.length > 0) {
+        // Category has questions → show questions
         content = category.questions;
         content_type = 'questions';
+      } else if (category.childCategories?.length > 0) {
+        // Category has subcategories → show categories
+        content = category.childCategories;
+        content_type = 'categories';
       }
+      // Otherwise → content_type remains 'empty'
 
       res.json({
         success: true,
@@ -1964,7 +1999,9 @@ class TestManagementController {
             description: category.description,
             node_type: category.node_type,
             hierarchy_level: category.hierarchy_level,
-            parent_category: category.parentCategory
+            parent_category: category.parentCategory,
+            negative_marking_enabled: category.negative_marking_enabled,
+            negative_marks_per_wrong: category.negative_marks_per_wrong
           },
           content_type,
           content,
@@ -2016,6 +2053,14 @@ class TestManagementController {
           parent_category_id: null,
           is_active: true
         },
+        attributes: [
+          'id', 'uuid', 'test_series_id', 'name', 'description',
+          'name_gujarati', 'description_gujarati', 'is_active',
+          'node_type', 'parent_category_id', 'hierarchy_level',
+          'display_order', 'createdAt', 'updatedAt',
+          // Include negative marking and test timing fields
+          'negative_marking_enabled', 'negative_marks_per_wrong', 'test_duration_minutes'
+        ],
         include: [
           // Include child categories count
           {
@@ -2093,7 +2138,16 @@ class TestManagementController {
   async createSubCategory(req, res) {
     try {
       const { parentUuid } = req.params;
-      const { name, description, name_gujarati, description_gujarati, testSeriesUuid } = req.body;
+      const {
+        name,
+        description,
+        name_gujarati,
+        description_gujarati,
+        testSeriesUuid,
+        negative_marking_enabled,
+        negative_marks_per_wrong,
+        test_duration_minutes
+      } = req.body;
 
       if (!name?.trim()) {
         return res.status(400).json({
@@ -2166,7 +2220,10 @@ class TestManagementController {
         description_gujarati: description_gujarati?.trim() || null,
         hierarchy_level: hierarchyLevel,
         node_type: 'unset',
-        display_order: 0
+        display_order: 0,
+        negative_marking_enabled: negative_marking_enabled || false,
+        negative_marks_per_wrong: negative_marks_per_wrong || 0.25,
+        test_duration_minutes: test_duration_minutes || 60
       });
 
       // If parent exists, update its node_type to 'container'

@@ -3,7 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const router = require('./routes/index');
 const serverless = require("serverless-http");
-const fileUpload = require('express-fileupload');
+// Removed express-fileupload to avoid conflict with multer
 
 const { sequelize } = require('./models'); // Assuming your sequelize export is CommonJS
 const errorMiddleware = require('./utils/default/globalErrorHandler');
@@ -59,13 +59,7 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Configure file upload middleware
-app.use(fileUpload({
-  createParentPath: true,
-  limits: { 
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
-}));
+// File upload is handled by multer in individual controllers
 
 // Serve static files
 app.use('/uploads', express.static('uploads'));

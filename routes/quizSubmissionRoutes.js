@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { LeaderboardEntry, TestSeries, User, Test, TestSession, SubCategory, Category, sequelize } = require('../models');
+const { LeaderboardEntry, TestSeries, User, Test, TestSession, SubCategory, Category, Question, sequelize } = require('../models');
 
 /**
  * Simple quiz submission endpoint for frontend
@@ -80,29 +80,68 @@ router.post('/submit', async (req, res) => {
             console.log(`Created test series: ${testSeries.uuid}`);
         }
 
-        // Calculate score with negative marking if enabled
+        // Calculate score with category-level negative marking
         let obtainedMarks = correctAnswers; // 1 mark per correct answer
         let negativeMarks = 0;
         let finalScore = obtainedMarks;
         let percentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
 
-        // Check if test series has negative marking enabled
-        if (testSeries.has_negative_marking && wrongAnswers > 0) {
-            const negativeMarkValue = parseFloat(testSeries.negative_marks) || 0.25;
-            negativeMarks = wrongAnswers * negativeMarkValue;
+        // NEW: Apply category-level negative marking logic
+        if (wrongAnswers > 0) {
+            // Group wrong answers by category to apply different negative marking rules
+            const wrongAnswersByCategory = {};
+
+            for (const answer of answers) {
+                if (!answer.isCorrect && answer.questionId) {
+                    // Get the question and its category
+                    const question = await Question.findByPk(answer.questionId, {
+                        include: [{
+                            model: Category,
+                            as: 'category',
+                            attributes: ['id', 'negative_marking_enabled', 'negative_marks_per_wrong']
+                        }]
+                    });
+
+                    if (question && question.category) {
+                        const categoryId = question.category.id;
+                        if (!wrongAnswersByCategory[categoryId]) {
+                            wrongAnswersByCategory[categoryId] = {
+                                count: 0,
+                                negative_marking_enabled: question.category.negative_marking_enabled,
+                                negative_marks_per_wrong: question.category.negative_marks_per_wrong || 0.25
+                            };
+                        }
+                        wrongAnswersByCategory[categoryId].count++;
+                    }
+                }
+            }
+
+            // Calculate negative marks per category
+            let totalNegativeMarks = 0;
+            const categoryNegativeMarks = {};
+
+            for (const [categoryId, categoryData] of Object.entries(wrongAnswersByCategory)) {
+                if (categoryData.negative_marking_enabled) {
+                    const categoryNegativeMarksValue = categoryData.count * categoryData.negative_marks_per_wrong;
+                    categoryNegativeMarks[categoryId] = categoryNegativeMarksValue;
+                    totalNegativeMarks += categoryNegativeMarksValue;
+                }
+            }
+
+            negativeMarks = totalNegativeMarks;
             finalScore = Math.max(0, obtainedMarks - negativeMarks);
             percentage = totalQuestions > 0 ? Math.round((finalScore / totalQuestions) * 100) : 0;
 
-            console.log('✅ NEGATIVE MARKING APPLIED:', {
+            console.log('✅ CATEGORY-LEVEL NEGATIVE MARKING APPLIED:', {
                 obtainedMarks,
-                negativeMarks,
+                wrongAnswersByCategory,
+                categoryNegativeMarks,
+                totalNegativeMarks: negativeMarks,
                 finalScore,
-                percentage: percentage + '%',
-                negativeMarkValue
+                percentage: percentage + '%'
             });
         } else {
-            console.log('❌ NO NEGATIVE MARKING:', {
-                has_negative_marking: testSeries.has_negative_marking,
+            console.log('❌ NO WRONG ANSWERS - NO NEGATIVE MARKING NEEDED:', {
                 obtainedMarks,
                 finalScore,
                 percentage: percentage + '%'
@@ -137,8 +176,8 @@ router.post('/submit', async (req, res) => {
             duration_minutes: Math.ceil(totalTimeSpent / 60),
             total_questions: totalQuestions,
             passing_marks: Math.ceil(totalQuestions * 0.6), // 60% passing
-            negative_marking_enabled: testSeries.has_negative_marking || false,
-            negative_marks_per_wrong: testSeries.negative_marks || 0.25,
+            negative_marking_enabled: negativeMarks > 0, // True if any category had negative marking applied
+            negative_marks_per_wrong: 0, // Set to 0 since it now varies by category
             is_active: true,
             sub_category_id: subCategory.id
         });
@@ -200,11 +239,11 @@ router.post('/submit', async (req, res) => {
                 finalPercentage: percentage,
                 calculatedPercentage: percentage,
                 actualPercentage: percentage,
-                // Mark calculation info
+                // Mark calculation info (updated for category-level)
                 obtainedMarks: obtainedMarks,
-                negativeMarkingEnabled: testSeries.has_negative_marking,
+                negativeMarkingEnabled: negativeMarks > 0, // True if any category had negative marking
                 negativeMarksDeducted: negativeMarks,
-                negativeMarkValue: testSeries.negative_marks,
+                negativeMarkValue: 0, // Set to 0 since it now varies by category
                 finalScore: finalScore,
                 completionTime: new Date().toISOString(),
                 timestamp: Date.now(), // Cache buster

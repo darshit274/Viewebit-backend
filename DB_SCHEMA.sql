@@ -2,10 +2,10 @@
 -- version 5.2.2
 -- https://www.phpmyadmin.net/
 --
--- Hospite: 127.0.0.1:3306
--- Tempore del generation: Sep 27, 2025 a 12:49 PM
--- Version de servitor: 8.3.0
--- Version de PHP: 8.1.2-1ubuntu2.22
+-- Host: 127.0.0.1:3306
+-- Generation Time: Sep 28, 2025 at 05:14 PM
+-- Server version: 8.3.0
+-- PHP Version: 8.1.2-1ubuntu2.22
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -18,13 +18,13 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Base de datos: `xehe123`
+-- Database: `xehe123`
 --
 
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `admins`
+-- Table structure for table `admins`
 --
 
 CREATE TABLE `admins` (
@@ -44,7 +44,7 @@ CREATE TABLE `admins` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `categories`
+-- Table structure for table `categories`
 --
 
 CREATE TABLE `categories` (
@@ -61,13 +61,16 @@ CREATE TABLE `categories` (
   `display_order` int NOT NULL DEFAULT '0' COMMENT 'Order for display within same parent',
   `is_active` tinyint(1) DEFAULT '1',
   `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL
+  `updated_at` datetime NOT NULL,
+  `negative_marking_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether negative marking is enabled for wrong answers in this category',
+  `negative_marks_per_wrong` decimal(5,2) NOT NULL DEFAULT '0.25' COMMENT 'Number of marks to deduct for each wrong answer',
+  `test_duration_minutes` int NOT NULL DEFAULT '60' COMMENT 'Test duration in minutes for this category'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `exam_categories`
+-- Table structure for table `exam_categories`
 --
 
 CREATE TABLE `exam_categories` (
@@ -90,7 +93,7 @@ CREATE TABLE `exam_categories` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `exam_types`
+-- Table structure for table `exam_types`
 --
 
 CREATE TABLE `exam_types` (
@@ -106,7 +109,7 @@ CREATE TABLE `exam_types` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `hierarchy_categories`
+-- Table structure for table `hierarchy_categories`
 --
 
 CREATE TABLE `hierarchy_categories` (
@@ -142,7 +145,7 @@ CREATE TABLE `hierarchy_categories` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `leaderboard_entries`
+-- Table structure for table `leaderboard_entries`
 --
 
 CREATE TABLE `leaderboard_entries` (
@@ -170,7 +173,7 @@ CREATE TABLE `leaderboard_entries` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `new_tests`
+-- Table structure for table `new_tests`
 --
 
 CREATE TABLE `new_tests` (
@@ -229,7 +232,7 @@ CREATE TABLE `new_tests` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `new_test_series`
+-- Table structure for table `new_test_series`
 --
 
 CREATE TABLE `new_test_series` (
@@ -276,7 +279,7 @@ CREATE TABLE `new_test_series` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `notifications`
+-- Table structure for table `notifications`
 --
 
 CREATE TABLE `notifications` (
@@ -298,7 +301,7 @@ CREATE TABLE `notifications` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `pdfs`
+-- Table structure for table `pdfs`
 --
 
 CREATE TABLE `pdfs` (
@@ -332,7 +335,7 @@ CREATE TABLE `pdfs` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `pdf_categories`
+-- Table structure for table `pdf_categories`
 --
 
 CREATE TABLE `pdf_categories` (
@@ -351,7 +354,7 @@ CREATE TABLE `pdf_categories` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `questions`
+-- Table structure for table `questions`
 --
 
 CREATE TABLE `questions` (
@@ -388,7 +391,7 @@ CREATE TABLE `questions` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `question_imports`
+-- Table structure for table `question_imports`
 --
 
 CREATE TABLE `question_imports` (
@@ -414,7 +417,7 @@ CREATE TABLE `question_imports` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `SequelizeMeta`
+-- Table structure for table `SequelizeMeta`
 --
 
 CREATE TABLE `SequelizeMeta` (
@@ -424,7 +427,7 @@ CREATE TABLE `SequelizeMeta` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `subscription`
+-- Table structure for table `subscription`
 --
 
 CREATE TABLE `subscription` (
@@ -446,7 +449,7 @@ CREATE TABLE `subscription` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `sub_categories`
+-- Table structure for table `sub_categories`
 --
 
 CREATE TABLE `sub_categories` (
@@ -465,7 +468,7 @@ CREATE TABLE `sub_categories` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `tests`
+-- Table structure for table `tests`
 --
 
 CREATE TABLE `tests` (
@@ -507,7 +510,7 @@ CREATE TABLE `tests` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `test_series`
+-- Table structure for table `test_series`
 --
 
 CREATE TABLE `test_series` (
@@ -541,7 +544,7 @@ CREATE TABLE `test_series` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `test_sessions`
+-- Table structure for table `test_sessions`
 --
 
 CREATE TABLE `test_sessions` (
@@ -570,7 +573,7 @@ CREATE TABLE `test_sessions` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `users`
+-- Table structure for table `users`
 --
 
 CREATE TABLE `users` (
@@ -602,7 +605,7 @@ CREATE TABLE `users` (
 -- --------------------------------------------------------
 
 --
--- Structura de tabella `user_answers`
+-- Table structure for table `user_answers`
 --
 
 CREATE TABLE `user_answers` (
@@ -619,11 +622,11 @@ CREATE TABLE `user_answers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
--- Indices pro tabellas delite (dumped)
+-- Indexes for dumped tables
 --
 
 --
--- Indices pro tabella `admins`
+-- Indexes for table `admins`
 --
 ALTER TABLE `admins`
   ADD PRIMARY KEY (`id`),
@@ -633,7 +636,7 @@ ALTER TABLE `admins`
   ADD KEY `admins_is_active` (`isActive`);
 
 --
--- Indices pro tabella `categories`
+-- Indexes for table `categories`
 --
 ALTER TABLE `categories`
   ADD PRIMARY KEY (`id`),
@@ -643,7 +646,7 @@ ALTER TABLE `categories`
   ADD KEY `idx_categories_node_type` (`node_type`);
 
 --
--- Indices pro tabella `exam_categories`
+-- Indexes for table `exam_categories`
 --
 ALTER TABLE `exam_categories`
   ADD PRIMARY KEY (`id`),
@@ -654,14 +657,14 @@ ALTER TABLE `exam_categories`
   ADD KEY `exam_categories_uuid` (`uuid`);
 
 --
--- Indices pro tabella `exam_types`
+-- Indexes for table `exam_types`
 --
 ALTER TABLE `exam_types`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `code` (`code`);
 
 --
--- Indices pro tabella `hierarchy_categories`
+-- Indexes for table `hierarchy_categories`
 --
 ALTER TABLE `hierarchy_categories`
   ADD PRIMARY KEY (`id`),
@@ -675,7 +678,7 @@ ALTER TABLE `hierarchy_categories`
   ADD KEY `hierarchy_categories_display_order_index` (`display_order`);
 
 --
--- Indices pro tabella `leaderboard_entries`
+-- Indexes for table `leaderboard_entries`
 --
 ALTER TABLE `leaderboard_entries`
   ADD PRIMARY KEY (`id`),
@@ -689,7 +692,7 @@ ALTER TABLE `leaderboard_entries`
   ADD KEY `leaderboard_entries_rank` (`rank`);
 
 --
--- Indices pro tabella `new_tests`
+-- Indexes for table `new_tests`
 --
 ALTER TABLE `new_tests`
   ADD PRIMARY KEY (`id`),
@@ -704,7 +707,7 @@ ALTER TABLE `new_tests`
   ADD KEY `new_tests_availability_index` (`available_from`,`available_until`);
 
 --
--- Indices pro tabella `new_test_series`
+-- Indexes for table `new_test_series`
 --
 ALTER TABLE `new_test_series`
   ADD PRIMARY KEY (`id`),
@@ -714,7 +717,7 @@ ALTER TABLE `new_test_series`
   ADD KEY `new_test_series_created_by_index` (`created_by`);
 
 --
--- Indices pro tabella `notifications`
+-- Indexes for table `notifications`
 --
 ALTER TABLE `notifications`
   ADD PRIMARY KEY (`id`),
@@ -725,7 +728,7 @@ ALTER TABLE `notifications`
   ADD KEY `notifications_user_id_read_at` (`user_id`,`read_at`);
 
 --
--- Indices pro tabella `pdfs`
+-- Indexes for table `pdfs`
 --
 ALTER TABLE `pdfs`
   ADD PRIMARY KEY (`id`),
@@ -738,7 +741,7 @@ ALTER TABLE `pdfs`
   ADD KEY `pdfs_created_at` (`created_at`);
 
 --
--- Indices pro tabella `pdf_categories`
+-- Indexes for table `pdf_categories`
 --
 ALTER TABLE `pdf_categories`
   ADD PRIMARY KEY (`id`),
@@ -748,7 +751,7 @@ ALTER TABLE `pdf_categories`
   ADD KEY `pdf_categories_sort_order` (`sort_order`);
 
 --
--- Indices pro tabella `questions`
+-- Indexes for table `questions`
 --
 ALTER TABLE `questions`
   ADD PRIMARY KEY (`id`),
@@ -761,7 +764,7 @@ ALTER TABLE `questions`
   ADD KEY `idx_questions_category` (`category_id`);
 
 --
--- Indices pro tabella `question_imports`
+-- Indexes for table `question_imports`
 --
 ALTER TABLE `question_imports`
   ADD PRIMARY KEY (`id`),
@@ -772,14 +775,14 @@ ALTER TABLE `question_imports`
   ADD KEY `question_imports_created_at` (`created_at`);
 
 --
--- Indices pro tabella `SequelizeMeta`
+-- Indexes for table `SequelizeMeta`
 --
 ALTER TABLE `SequelizeMeta`
   ADD PRIMARY KEY (`name`),
   ADD UNIQUE KEY `name` (`name`);
 
 --
--- Indices pro tabella `subscription`
+-- Indexes for table `subscription`
 --
 ALTER TABLE `subscription`
   ADD PRIMARY KEY (`id`),
@@ -790,7 +793,7 @@ ALTER TABLE `subscription`
   ADD KEY `subscription_transaction_id` (`transaction_id`);
 
 --
--- Indices pro tabella `sub_categories`
+-- Indexes for table `sub_categories`
 --
 ALTER TABLE `sub_categories`
   ADD PRIMARY KEY (`id`),
@@ -798,7 +801,7 @@ ALTER TABLE `sub_categories`
   ADD KEY `category_id` (`category_id`);
 
 --
--- Indices pro tabella `tests`
+-- Indexes for table `tests`
 --
 ALTER TABLE `tests`
   ADD PRIMARY KEY (`id`),
@@ -813,7 +816,7 @@ ALTER TABLE `tests`
   ADD KEY `tests_display_order` (`display_order`);
 
 --
--- Indices pro tabella `test_series`
+-- Indexes for table `test_series`
 --
 ALTER TABLE `test_series`
   ADD PRIMARY KEY (`id`),
@@ -826,7 +829,7 @@ ALTER TABLE `test_series`
   ADD KEY `test_series_requires_subscription` (`requires_subscription`);
 
 --
--- Indices pro tabella `test_sessions`
+-- Indexes for table `test_sessions`
 --
 ALTER TABLE `test_sessions`
   ADD PRIMARY KEY (`id`),
@@ -840,7 +843,7 @@ ALTER TABLE `test_sessions`
   ADD KEY `test_sessions_completed_at` (`completed_at`);
 
 --
--- Indices pro tabella `users`
+-- Indexes for table `users`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`uuid`),
@@ -850,7 +853,7 @@ ALTER TABLE `users`
   ADD KEY `users_last_login` (`lastLogin`);
 
 --
--- Indices pro tabella `user_answers`
+-- Indexes for table `user_answers`
 --
 ALTER TABLE `user_answers`
   ADD PRIMARY KEY (`id`),
@@ -859,111 +862,111 @@ ALTER TABLE `user_answers`
   ADD KEY `user_answers_question_id` (`question_id`);
 
 --
--- AUTO_INCREMENT pro tabellas delite (dumped)
+-- AUTO_INCREMENT for dumped tables
 --
 
 --
--- AUTO_INCREMENT pro tabella `categories`
+-- AUTO_INCREMENT for table `categories`
 --
 ALTER TABLE `categories`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `exam_categories`
+-- AUTO_INCREMENT for table `exam_categories`
 --
 ALTER TABLE `exam_categories`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `exam_types`
+-- AUTO_INCREMENT for table `exam_types`
 --
 ALTER TABLE `exam_types`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `hierarchy_categories`
+-- AUTO_INCREMENT for table `hierarchy_categories`
 --
 ALTER TABLE `hierarchy_categories`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `leaderboard_entries`
+-- AUTO_INCREMENT for table `leaderboard_entries`
 --
 ALTER TABLE `leaderboard_entries`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `new_tests`
+-- AUTO_INCREMENT for table `new_tests`
 --
 ALTER TABLE `new_tests`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `new_test_series`
+-- AUTO_INCREMENT for table `new_test_series`
 --
 ALTER TABLE `new_test_series`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `notifications`
+-- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `pdf_categories`
+-- AUTO_INCREMENT for table `pdf_categories`
 --
 ALTER TABLE `pdf_categories`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `questions`
+-- AUTO_INCREMENT for table `questions`
 --
 ALTER TABLE `questions`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `sub_categories`
+-- AUTO_INCREMENT for table `sub_categories`
 --
 ALTER TABLE `sub_categories`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `tests`
+-- AUTO_INCREMENT for table `tests`
 --
 ALTER TABLE `tests`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `test_series`
+-- AUTO_INCREMENT for table `test_series`
 --
 ALTER TABLE `test_series`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT pro tabella `user_answers`
+-- AUTO_INCREMENT for table `user_answers`
 --
 ALTER TABLE `user_answers`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
 
 --
--- Limites pro tabellas delite (dumped)
+-- Constraints for dumped tables
 --
 
 --
--- Limites pro tabella `categories`
+-- Constraints for table `categories`
 --
 ALTER TABLE `categories`
   ADD CONSTRAINT `categories_ibfk_1` FOREIGN KEY (`parent_category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `exam_categories`
+-- Constraints for table `exam_categories`
 --
 ALTER TABLE `exam_categories`
   ADD CONSTRAINT `exam_categories_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `exam_categories` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `hierarchy_categories`
+-- Constraints for table `hierarchy_categories`
 --
 ALTER TABLE `hierarchy_categories`
   ADD CONSTRAINT `hierarchy_categories_ibfk_1` FOREIGN KEY (`test_series_id`) REFERENCES `new_test_series` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -971,7 +974,7 @@ ALTER TABLE `hierarchy_categories`
   ADD CONSTRAINT `hierarchy_categories_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL ON UPDATE SET NULL;
 
 --
--- Limites pro tabella `leaderboard_entries`
+-- Constraints for table `leaderboard_entries`
 --
 ALTER TABLE `leaderboard_entries`
   ADD CONSTRAINT `leaderboard_entries_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -980,7 +983,7 @@ ALTER TABLE `leaderboard_entries`
   ADD CONSTRAINT `leaderboard_entries_ibfk_4` FOREIGN KEY (`test_series_id`) REFERENCES `test_series` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `new_tests`
+-- Constraints for table `new_tests`
 --
 ALTER TABLE `new_tests`
   ADD CONSTRAINT `new_tests_ibfk_1` FOREIGN KEY (`test_series_id`) REFERENCES `new_test_series` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -988,32 +991,32 @@ ALTER TABLE `new_tests`
   ADD CONSTRAINT `new_tests_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL ON UPDATE SET NULL;
 
 --
--- Limites pro tabella `new_test_series`
+-- Constraints for table `new_test_series`
 --
 ALTER TABLE `new_test_series`
   ADD CONSTRAINT `new_test_series_ibfk_1` FOREIGN KEY (`created_by`) REFERENCES `admins` (`id`) ON DELETE SET NULL ON UPDATE SET NULL;
 
 --
--- Limites pro tabella `notifications`
+-- Constraints for table `notifications`
 --
 ALTER TABLE `notifications`
   ADD CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `pdfs`
+-- Constraints for table `pdfs`
 --
 ALTER TABLE `pdfs`
   ADD CONSTRAINT `pdfs_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `pdf_categories` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT `pdfs_ibfk_2` FOREIGN KEY (`exam_type_id`) REFERENCES `exam_types` (`id`);
 
 --
--- Limites pro tabella `questions`
+-- Constraints for table `questions`
 --
 ALTER TABLE `questions`
   ADD CONSTRAINT `questions_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `question_imports`
+-- Constraints for table `question_imports`
 --
 ALTER TABLE `question_imports`
   ADD CONSTRAINT `question_imports_ibfk_1` FOREIGN KEY (`admin_id`) REFERENCES `admins` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -1021,38 +1024,38 @@ ALTER TABLE `question_imports`
   ADD CONSTRAINT `question_imports_ibfk_3` FOREIGN KEY (`test_series_id`) REFERENCES `new_test_series` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `subscription`
+-- Constraints for table `subscription`
 --
 ALTER TABLE `subscription`
   ADD CONSTRAINT `subscription_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `sub_categories`
+-- Constraints for table `sub_categories`
 --
 ALTER TABLE `sub_categories`
   ADD CONSTRAINT `sub_categories_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `tests`
+-- Constraints for table `tests`
 --
 ALTER TABLE `tests`
   ADD CONSTRAINT `tests_ibfk_1` FOREIGN KEY (`sub_category_id`) REFERENCES `sub_categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `test_series`
+-- Constraints for table `test_series`
 --
 ALTER TABLE `test_series`
   ADD CONSTRAINT `test_series_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `exam_categories` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `test_sessions`
+-- Constraints for table `test_sessions`
 --
 ALTER TABLE `test_sessions`
   ADD CONSTRAINT `test_sessions_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`uuid`) ON DELETE CASCADE ON UPDATE CASCADE,
   ADD CONSTRAINT `test_sessions_ibfk_2` FOREIGN KEY (`test_id`) REFERENCES `tests` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
--- Limites pro tabella `user_answers`
+-- Constraints for table `user_answers`
 --
 ALTER TABLE `user_answers`
   ADD CONSTRAINT `user_answers_ibfk_1` FOREIGN KEY (`test_session_id`) REFERENCES `test_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,

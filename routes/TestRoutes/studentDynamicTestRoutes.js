@@ -524,7 +524,11 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
         model: TestSeries,
         as: 'testSeries',
         attributes: ['id', 'pricing_type']
-      }]
+      }],
+      attributes: [
+        'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati',
+        'test_duration_minutes', 'negative_marking_enabled', 'negative_marks_per_wrong'
+      ]
     });
 
     if (!category) {
@@ -634,6 +638,9 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
           name_gujarati: category.name_gujarati,
           description: category.description,
           description_gujarati: category.description_gujarati,
+          test_duration_minutes: category.test_duration_minutes,
+          negative_marking_enabled: category.negative_marking_enabled,
+          negative_marks_per_wrong: category.negative_marks_per_wrong,
         },
         questions: formattedQuestions,
         metadata: {

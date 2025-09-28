@@ -1,12 +1,13 @@
-const { 
-  TestSession, 
-  UserAnswer, 
+const {
+  TestSession,
+  UserAnswer,
   LeaderboardEntry,
-  Test, 
-  Question, 
-  User, 
+  Test,
+  Question,
+  User,
   TestSeries,
-  Category 
+  Category,
+  DynamicCategory
 } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
@@ -360,9 +361,10 @@ class TestResponseController {
     // Calculate results from user answers
     const answeredQuestionIds = userAnswers.map(ua => ua.question_id);
     
-    userAnswers.forEach(userAnswer => {
+    // Process each user answer (using for...of to handle async operations)
+    for (const userAnswer of userAnswers) {
       if (userAnswer.is_flagged) flaggedQuestions++;
-      
+
       if (!userAnswer.selected_option) {
         unanswered++;
       } else if (userAnswer.is_correct) {
@@ -370,13 +372,30 @@ class TestResponseController {
         obtainedMarks += userAnswer.question?.marks || 1;
       } else {
         wrongAnswers++;
-        // Check negative marking - first check test level, then test series level
-        const hasNegativeMarking = test.negative_marking_enabled || test.testSeries?.has_negative_marking;
-        const negativeMarkValue = test.negative_marks_per_wrong || test.testSeries?.negative_marks || 0.25;
+
+        // Check negative marking - Priority: Category Level → Test Level → Default
+        let hasNegativeMarking = false;
+        let negativeMarkValue = 0.25; // Default value
+
+        // First, check if question belongs to a Category with negative marking
+        if (userAnswer.question?.category_id) {
+          const category = await Category.findByPk(userAnswer.question.category_id);
+          if (category && category.negative_marking_enabled) {
+            hasNegativeMarking = true;
+            negativeMarkValue = category.negative_marks_per_wrong || 0.25;
+          }
+        }
+
+        // Fall back to test-level negative marking if no category setting
+        if (!hasNegativeMarking && test.negative_marking_enabled) {
+          hasNegativeMarking = true;
+          negativeMarkValue = test.negative_marks_per_wrong || 0.25;
+        }
 
         console.log('🔍 NEGATIVE MARKING DEBUG:', {
+          question_id: userAnswer.question?.id,
+          category_id: userAnswer.question?.category_id,
           test_negative_marking: test.negative_marking_enabled,
-          test_series_negative_marking: test.testSeries?.has_negative_marking,
           hasNegativeMarking,
           negativeMarkValue,
           wrongAnswers
@@ -389,9 +408,9 @@ class TestResponseController {
           console.log('❌ No negative marking applied');
         }
       }
-      
+
       totalMarks += userAnswer.question?.marks || 1;
-    });
+    }
 
     // Count questions that were never answered
     const allQuestionIds = test.questions?.map(q => q.id) || [];

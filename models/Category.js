@@ -54,6 +54,26 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       defaultValue: 0,
       allowNull: false
+    },
+    // NEGATIVE MARKING FIELDS (moved from test series level)
+    negative_marking_enabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether negative marking is enabled for wrong answers in this category'
+    },
+    negative_marks_per_wrong: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 0.25,
+      allowNull: false,
+      comment: 'Number of marks to deduct for each wrong answer'
+    },
+    // TEST TIMING FIELD (for question-holder categories)
+    test_duration_minutes: {
+      type: DataTypes.INTEGER,
+      defaultValue: 60,
+      allowNull: false,
+      comment: 'Test duration in minutes for this category'
     }
   }, {
     tableName: 'categories',
