@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('new_tests', {
       id: {
         type: Sequelize.INTEGER,
@@ -12,9 +12,7 @@ module.exports = {
       uuid: {
         type: Sequelize.CHAR(36),
         allowNull: false,
-        unique: true,
-        charset: 'utf8mb4',
-        collate: 'utf8mb4_bin'
+        unique: true
       },
       title: {
         type: Sequelize.STRING(200),
@@ -77,9 +75,9 @@ module.exports = {
         defaultValue: 0
       },
       is_free: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       price: {
         type: Sequelize.DECIMAL(10, 2),
@@ -87,23 +85,23 @@ module.exports = {
         defaultValue: 0.00
       },
       is_one_time: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       allows_pause: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       max_attempts: {
         type: Sequelize.INTEGER,
         allowNull: true
       },
       has_negative_marking: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       negative_marks: {
         type: Sequelize.DECIMAL(3, 2),
@@ -124,34 +122,34 @@ module.exports = {
         allowNull: true
       },
       show_results_immediately: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       show_correct_answers: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       show_explanations: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       supports_multilanguage: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       randomize_questions: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       randomize_options: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       instructions: {
         type: Sequelize.TEXT,
@@ -179,19 +177,19 @@ module.exports = {
         allowNull: true
       },
       is_active: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       is_featured: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       is_published: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       published_at: {
         type: Sequelize.DATE,
@@ -238,10 +236,14 @@ module.exports = {
         defaultValue: 0.00
       },
       created_by: {
-        type: Sequelize.STRING(255),
-        allowNull: true
-        // Note: Foreign key constraint removed to avoid data type conflicts
-        // The relationship will be handled at application level
+        type: Sequelize.CHAR(36),
+        allowNull: true,
+        references: {
+          model: 'admins',
+          key: 'id'
+        },
+        onDelete: 'SET NULL',
+        onUpdate: 'SET NULL'
       },
       created_at: {
         type: Sequelize.DATE,
@@ -254,6 +256,7 @@ module.exports = {
     });
 
     // Add indexes
+    await queryInterface.addIndex('new_tests', ['created_by'], { name: 'new_tests_created_by' });
     await queryInterface.addIndex('new_tests', ['test_series_id'], { name: 'new_tests_series_index' });
     await queryInterface.addIndex('new_tests', ['category_id'], { name: 'new_tests_category_index' });
     await queryInterface.addIndex('new_tests', ['test_type'], { name: 'new_tests_type_index' });
@@ -262,7 +265,7 @@ module.exports = {
     await queryInterface.addIndex('new_tests', ['available_from', 'available_until'], { name: 'new_tests_availability_index' });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('new_tests');
   }
 };

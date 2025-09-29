@@ -63,12 +63,22 @@ const upload = multer({
   }
 });
 
-// Middleware for single PDF upload
-const uploadSinglePDF = upload.single('pdf');
+// Middleware for single PDF upload - accepts any field name
+const uploadSinglePDF = upload.any();
 
 // Middleware wrapper with error handling
 const handlePDFUpload = (req, res, next) => {
+  console.log('=== PDF UPLOAD MIDDLEWARE STARTED ===');
+  console.log('Request received at:', new Date().toISOString());
+  console.log('Original req.body:', req.body);
+  console.log('Original req.files:', req.files);
+
   uploadSinglePDF(req, res, (err) => {
+    console.log('🔄 MULTER: Upload processing complete');
+    console.log('📋 MULTER: Final req.body:', req.body);
+    console.log('📁 MULTER: Final req.files:', req.files);
+    console.log('📄 MULTER: Final req.file:', req.file);
+
     if (err) {
       console.error('PDF upload error:', err);
       
@@ -99,8 +109,8 @@ const handlePDFUpload = (req, res, next) => {
       });
     }
     
-    if (!req.file) {
-      console.log('No file provided in request');
+    if (!req.files || req.files.length === 0) {
+      console.log('No files provided in request');
       return res.status(400).json({
         success: false,
         message: 'No PDF file provided'
@@ -108,10 +118,10 @@ const handlePDFUpload = (req, res, next) => {
     }
     
     console.log('File successfully uploaded by multer:', {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      path: req.file.path
+      originalname: req.files[0].originalname,
+      mimetype: req.files[0].mimetype,
+      size: req.files[0].size,
+      path: req.files[0].path
     });
     
     next();

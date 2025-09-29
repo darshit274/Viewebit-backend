@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('new_test_series', {
       id: {
         type: Sequelize.INTEGER,
@@ -12,9 +12,7 @@ module.exports = {
       uuid: {
         type: Sequelize.CHAR(36),
         allowNull: false,
-        unique: true,
-        charset: 'utf8mb4',
-        collate: 'utf8mb4_bin'
+        unique: true
       },
       name: {
         type: Sequelize.STRING(255),
@@ -58,19 +56,19 @@ module.exports = {
         defaultValue: 1
       },
       supports_pause_resume: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       supports_multilanguage: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       has_negative_marking: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       negative_marks: {
         type: Sequelize.DECIMAL(3, 2),
@@ -99,19 +97,19 @@ module.exports = {
         allowNull: true
       },
       is_active: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       is_featured: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       is_published: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       published_at: {
         type: Sequelize.DATE,
@@ -148,10 +146,14 @@ module.exports = {
         defaultValue: 0
       },
       created_by: {
-        type: Sequelize.STRING(255),
-        allowNull: true
-        // Note: Foreign key constraint removed to avoid data type conflicts
-        // The relationship will be handled at application level
+        type: Sequelize.CHAR(36),
+        allowNull: true,
+        references: {
+          model: 'admins',
+          key: 'id'
+        },
+        onDelete: 'SET NULL',
+        onUpdate: 'SET NULL'
       },
       pricing_type: {
         type: Sequelize.ENUM('free', 'paid'),
@@ -193,7 +195,7 @@ module.exports = {
     await queryInterface.addIndex('new_test_series', ['created_by'], { name: 'new_test_series_created_by_index' });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('new_test_series');
   }
 };

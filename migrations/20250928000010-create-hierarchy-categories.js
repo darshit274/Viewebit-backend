@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('hierarchy_categories', {
       id: {
         type: Sequelize.INTEGER,
@@ -12,9 +12,7 @@ module.exports = {
       uuid: {
         type: Sequelize.CHAR(36),
         allowNull: false,
-        unique: true,
-        charset: 'utf8mb4',
-        collate: 'utf8mb4_bin'
+        unique: true
       },
       name: {
         type: Sequelize.STRING(200),
@@ -95,14 +93,14 @@ module.exports = {
         allowNull: true
       },
       is_active: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       is_featured: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: false
+        defaultValue: 0
       },
       child_categories_count: {
         type: Sequelize.INTEGER,
@@ -125,10 +123,14 @@ module.exports = {
         defaultValue: 0
       },
       created_by: {
-        type: Sequelize.STRING(255),
-        allowNull: true
-        // Note: Foreign key constraint removed to avoid data type conflicts
-        // The relationship will be handled at application level
+        type: Sequelize.CHAR(36),
+        allowNull: true,
+        references: {
+          model: 'admins',
+          key: 'id'
+        },
+        onDelete: 'SET NULL',
+        onUpdate: 'SET NULL'
       },
       created_at: {
         type: Sequelize.DATE,
@@ -141,6 +143,7 @@ module.exports = {
     });
 
     // Add indexes
+    await queryInterface.addIndex('hierarchy_categories', ['created_by'], { name: 'hierarchy_categories_created_by' });
     await queryInterface.addIndex('hierarchy_categories', ['test_series_id', 'hierarchy_level'], { name: 'hierarchy_categories_series_level_index' });
     await queryInterface.addIndex('hierarchy_categories', ['parent_id'], { name: 'hierarchy_categories_parent_index' });
     await queryInterface.addIndex('hierarchy_categories', ['hierarchy_path'], { name: 'hierarchy_categories_path_index' });
@@ -148,7 +151,7 @@ module.exports = {
     await queryInterface.addIndex('hierarchy_categories', ['display_order'], { name: 'hierarchy_categories_display_order_index' });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('hierarchy_categories');
   }
 };

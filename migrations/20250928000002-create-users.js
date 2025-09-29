@@ -1,18 +1,12 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
-    // Check if users table exists
-    const tableExists = await queryInterface.tableExists('users');
-    
-    if (!tableExists) {
-      await queryInterface.createTable('users', {
+  async up(queryInterface, Sequelize) {
+    await queryInterface.createTable('users', {
       uuid: {
         type: Sequelize.CHAR(36),
         primaryKey: true,
-        allowNull: false,
-        charset: 'utf8mb4',
-        collate: 'utf8mb4_bin'
+        allowNull: false
       },
       username: {
         type: Sequelize.STRING(255),
@@ -45,14 +39,14 @@ module.exports = {
         allowNull: true
       },
       isActive: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: false,
-        defaultValue: true
+        defaultValue: 1
       },
       isEmailVerified: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: false,
-        defaultValue: false
+        defaultValue: 0
       },
       otpExpiry: {
         type: Sequelize.DATE,
@@ -69,9 +63,9 @@ module.exports = {
         defaultValue: 0
       },
       subscription_expiry_reminder_sent: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: false,
-        defaultValue: false
+        defaultValue: 0
       },
       fullName: {
         type: Sequelize.STRING(255),
@@ -111,51 +105,14 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
       }
-      });
+    });
 
-      // Add indexes only if table was created
-      try {
-        await queryInterface.addIndex('users', ['isActive'], { name: 'users_is_active' });
-      } catch (error) {
-        if (!error.message.includes('Duplicate key name')) {
-          throw error;
-        }
-        console.log('Index users_is_active already exists, skipping...');
-      }
-
-      try {
-        await queryInterface.addIndex('users', ['lastLogin'], { name: 'users_last_login' });
-      } catch (error) {
-        if (!error.message.includes('Duplicate key name')) {
-          throw error;
-        }
-        console.log('Index users_last_login already exists, skipping...');
-      }
-    } else {
-      console.log('Users table already exists, skipping table creation...');
-      
-      // Still try to add indexes if they don't exist
-      try {
-        await queryInterface.addIndex('users', ['isActive'], { name: 'users_is_active' });
-      } catch (error) {
-        if (!error.message.includes('Duplicate key name')) {
-          throw error;
-        }
-        console.log('Index users_is_active already exists, skipping...');
-      }
-
-      try {
-        await queryInterface.addIndex('users', ['lastLogin'], { name: 'users_last_login' });
-      } catch (error) {
-        if (!error.message.includes('Duplicate key name')) {
-          throw error;
-        }
-        console.log('Index users_last_login already exists, skipping...');
-      }
-    }
+    // Add indexes
+    await queryInterface.addIndex('users', ['isActive'], { name: 'users_is_active' });
+    await queryInterface.addIndex('users', ['lastLogin'], { name: 'users_last_login' });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('users');
   }
 };

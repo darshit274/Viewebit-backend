@@ -49,8 +49,12 @@ app.use((req, res, next) => {
 // Request logging middleware for debugging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.get('origin') || 'No origin'}`);
-  if (req.path.includes('/api/profile')) {
-    console.log('Headers:', req.headers);
+  if (req.path.includes('/upload')) {
+    console.log('🚨 UPLOAD REQUEST DETECTED:');
+    console.log('  Path:', req.path);
+    console.log('  Method:', req.method);
+    console.log('  Content-Type:', req.get('content-type'));
+    console.log('  Content-Length:', req.get('content-length'));
   }
   next();
 });

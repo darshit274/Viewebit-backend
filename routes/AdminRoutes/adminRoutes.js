@@ -45,7 +45,7 @@ router.patch('/users/:id/toggle-premium', adminAuth, adminController.toggleUserP
 // Questions management routes
 router.get('/questions', adminAuth, questionsController.getQuestions);
 router.get('/questions/stats', adminAuth, questionsController.getQuestionsStats);
-router.post('/questions/stats', adminAuth, questionsController.getQuestionsStats);
+router.post('/questions/stats', adminAuth, questionsController.upload.single('file'), questionsController.getQuestionsStats);
 
 // Question import status endpoint
 router.get('/questions/import/status/:importId', adminAuth, questionsController.getImportStatus);
@@ -78,8 +78,8 @@ router.post('/pdfs/upload', adminAuth, pdfController.uploadPdf);
 router.put('/pdfs/:id', adminAuth, pdfController.updatePdf);
 router.delete('/pdfs/:id', adminAuth, pdfController.deletePdf);
 
-// PDF list route (backward compatibility)
-router.get('/pdf/list', adminAuth, pdfController.getPdfs);
+// PDF list route (backward compatibility) - REMOVED due to conflict with pdfUploadRoutes
+// router.get('/pdf/list', adminAuth, pdfController.getPdfs);
 
 
 // Exam Types management routes

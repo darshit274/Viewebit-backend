@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1:3306
--- Generation Time: Sep 28, 2025 at 05:14 PM
+-- Generation Time: Sep 29, 2025 at 11:38 AM
 -- Server version: 8.3.0
 -- PHP Version: 8.1.2-1ubuntu2.22
 
@@ -18,7 +18,7 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Database: `xehe123`
+-- Database: `mocktale`
 --
 
 -- --------------------------------------------------------
@@ -60,11 +60,11 @@ CREATE TABLE `categories` (
   `hierarchy_level` int NOT NULL DEFAULT '0' COMMENT 'Depth level in hierarchy (0 = root, 1 = subcategory, etc.)',
   `display_order` int NOT NULL DEFAULT '0' COMMENT 'Order for display within same parent',
   `is_active` tinyint(1) DEFAULT '1',
-  `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL,
   `negative_marking_enabled` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether negative marking is enabled for wrong answers in this category',
   `negative_marks_per_wrong` decimal(5,2) NOT NULL DEFAULT '0.25' COMMENT 'Number of marks to deduct for each wrong answer',
-  `test_duration_minutes` int NOT NULL DEFAULT '60' COMMENT 'Test duration in minutes for this category'
+  `test_duration_minutes` int NOT NULL DEFAULT '60' COMMENT 'Test duration in minutes for this category',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -322,14 +322,14 @@ CREATE TABLE `pdfs` (
   `is_active` tinyint(1) DEFAULT '1',
   `is_featured` tinyint(1) DEFAULT '0',
   `uploaded_by` char(36) DEFAULT NULL COMMENT 'Admin who uploaded this PDF',
-  `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL,
   `price` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT 'Price for premium PDFs',
   `currency` varchar(10) NOT NULL DEFAULT 'INR' COMMENT 'Currency for pricing',
   `is_free` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Whether the PDF is free to access',
   `discount_percentage` decimal(5,2) NOT NULL DEFAULT '0.00' COMMENT 'Discount percentage if any',
   `subscription_required` tinyint(1) NOT NULL DEFAULT '0' COMMENT 'Whether subscription is required to access',
-  `preview_pages` int NOT NULL DEFAULT '0' COMMENT 'Number of preview pages available for free'
+  `preview_pages` int NOT NULL DEFAULT '0' COMMENT 'Number of preview pages available for free',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -441,9 +441,9 @@ CREATE TABLE `subscription` (
   `status` enum('pending','completed','failed','refunded') DEFAULT 'pending',
   `purchase_date` datetime NOT NULL,
   `expiry_date` datetime DEFAULT NULL,
+  `metadata` json DEFAULT NULL COMMENT 'Additional metadata for the subscription (payment details, PDF info, etc.)',
   `created_at` datetime NOT NULL,
-  `updated_at` datetime NOT NULL,
-  `metadata` json DEFAULT NULL COMMENT 'Additional metadata for the subscription (payment details, PDF info, etc.)'
+  `updated_at` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -670,7 +670,7 @@ ALTER TABLE `hierarchy_categories`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uuid` (`uuid`),
   ADD UNIQUE KEY `slug` (`slug`),
-  ADD KEY `created_by` (`created_by`),
+  ADD KEY `hierarchy_categories_created_by` (`created_by`),
   ADD KEY `hierarchy_categories_series_level_index` (`test_series_id`,`hierarchy_level`),
   ADD KEY `hierarchy_categories_parent_index` (`parent_id`),
   ADD KEY `hierarchy_categories_path_index` (`hierarchy_path`),
@@ -698,7 +698,7 @@ ALTER TABLE `new_tests`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uuid` (`uuid`),
   ADD UNIQUE KEY `slug` (`slug`),
-  ADD KEY `created_by` (`created_by`),
+  ADD KEY `new_tests_created_by` (`created_by`),
   ADD KEY `new_tests_series_index` (`test_series_id`),
   ADD KEY `new_tests_category_index` (`category_id`),
   ADD KEY `new_tests_type_index` (`test_type`),

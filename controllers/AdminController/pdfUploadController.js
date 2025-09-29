@@ -90,6 +90,13 @@ exports.createPdfCategory = async (req, res, next) => {
 // Upload PDF
 exports.uploadPdf = async (req, res, next) => {
   try {
+    console.log('🔍 DEBUG: PDF Upload Request Details:');
+    console.log('📋 req.body:', req.body);
+    console.log('📁 req.files:', req.files);
+    console.log('📄 req.file:', req.file);
+    console.log('🔑 req.admin:', req.admin?.id);
+    console.log('📝 Headers:', req.headers);
+
     const {
       title,
       description,
@@ -109,16 +116,16 @@ exports.uploadPdf = async (req, res, next) => {
     } = req.body;
     const adminId = req.admin?.id;
 
-    console.log('📤 PDF Upload using express-fileupload');
+    console.log('📤 PDF Upload using multer');
     console.log('📋 Request body:', req.body);
     console.log('📁 Files:', req.files);
 
-    // Check if file was uploaded using express-fileupload
-    if (!req.files || !req.files.pdf) {
+    // Check if file was uploaded using multer (any field name)
+    if (!req.files || req.files.length === 0) {
       return next(new ErrorHandler('No PDF file provided', 400));
     }
 
-    const uploadedFile = req.files.pdf;
+    const uploadedFile = req.files[0]; // Get the first (and should be only) file
 
     // Validate file type
     if (uploadedFile.mimetype !== 'application/pdf') {
@@ -156,19 +163,9 @@ exports.uploadPdf = async (req, res, next) => {
       validatedCategoryId = parseInt(category_id);
     }
 
-    // Create upload directory if it doesn't exist
-    const uploadsDir = path.join(__dirname, '../../uploads/pdfs');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
-    // Generate unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const filename = `pdf-${uniqueSuffix}.pdf`;
-    const filePath = path.join(uploadsDir, filename);
-
-    // Save file to disk
-    await uploadedFile.mv(filePath);
+    // File is already saved by multer middleware
+    const filePath = uploadedFile.path;
+    const filename = uploadedFile.filename;
 
     console.log('✅ File saved to:', filePath);
     console.log('📄 File size:', uploadedFile.size, 'bytes');
@@ -184,7 +181,7 @@ exports.uploadPdf = async (req, res, next) => {
         exam_type_id: exam_type_id ? parseInt(exam_type_id) : null,
         tags: tags ? JSON.parse(tags) : null,
         uploaded_by: adminId,
-        original_filename: uploadedFile.name,
+        original_filename: uploadedFile.originalname,
         file_path: filePath,
         file_size: uploadedFile.size,
         mime_type: uploadedFile.mimetype,

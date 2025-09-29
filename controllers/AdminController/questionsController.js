@@ -28,8 +28,11 @@ const upload = multer({
   fileFilter: function (req, file, cb) {
     const allowedTypes = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-      'application/vnd.ms-excel', // .xls  
-      'text/csv' // .csv
+      'application/vnd.ms-excel', // .xls
+      'text/csv', // .csv
+      'application/csv', // .csv alternative
+      'text/plain', // .csv sometimes detected as text/plain
+      'application/octet-stream' // .csv often detected as octet-stream
     ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
@@ -830,19 +833,21 @@ const validateImportData = async (data, categoryId) => {
 const handleFileUpload = async (req, res, next) => {
     try {
         console.log('📤 Starting file upload process...');
-        
-        // Check if file was uploaded
-        if (!req.files || !req.files.file) {
+
+        // Check if file was uploaded using multer
+        if (!req.file) {
             return next(new ErrorHandler('No file uploaded', 400));
         }
-        
-        const file = req.files.file;
+
+        const file = req.file;
         const categoryId = req.body.category_id;
         
         console.log('📄 File details:', {
-            name: file.name,
+            name: file.originalname,
             mimetype: file.mimetype,
             size: file.size,
+            filename: file.filename,
+            path: file.path,
             categoryId
         });
         
@@ -865,27 +870,18 @@ const handleFileUpload = async (req, res, next) => {
         }
         
         // Validate file type based on extension (more reliable than MIME type)
-        const fileExtension = path.extname(file.name).toLowerCase();
+        const fileExtension = path.extname(file.originalname).toLowerCase();
         const allowedExtensions = ['.xlsx', '.xls', '.csv'];
         
         if (!allowedExtensions.includes(fileExtension)) {
             return next(new ErrorHandler('Only Excel (.xlsx, .xls) and CSV files are allowed', 400));
         }
         
-        console.log(`✅ File validation passed: ${file.name} (${fileExtension})`);
+        console.log(`✅ File validation passed: ${file.originalname} (${fileExtension})`);
         
-        // Create temp directory if it doesn't exist
-        const tempDir = path.join(__dirname, '../../temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-        
-        // Save file temporarily
-        const tempFileName = `import_${Date.now()}_${file.name}`;
-        const tempFilePath = path.join(tempDir, tempFileName);
-        
-        await file.mv(tempFilePath);
-        console.log(`💾 File saved temporarily: ${tempFilePath}`);
+        // File is already saved by multer at file.path
+        const tempFilePath = file.path;
+        console.log(`💾 File uploaded and saved at: ${tempFilePath}`);
         
         try {
             // Parse the file
@@ -902,10 +898,10 @@ const handleFileUpload = async (req, res, next) => {
             const importRecord = await QuestionImport.create({
                 admin_id: req.admin.id,
                 category_id: categoryId,
-                filename: tempFileName, // Generated filename
-                original_filename: file.name, // Original filename from user
+                filename: file.filename, // Generated filename
+                original_filename: file.originalname, // Original filename from user
                 file_type: fileExtension === '.csv' ? 'csv' : 'excel', // Map extensions to ENUM values
-                file_name: file.name,
+                file_name: file.originalname,
                 file_size: file.size,
                 total_rows: rawData.length,
                 valid_rows: validQuestions.length,
@@ -1166,3 +1162,6 @@ exports.confirmImport = async (req, res, next) => {
         next(new ErrorHandler(`Failed to confirm import: ${error.message}`, 500));
     }
 };
+
+// Export the upload middleware for use in routes
+exports.upload = upload;

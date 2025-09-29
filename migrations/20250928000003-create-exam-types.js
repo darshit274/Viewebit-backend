@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('exam_types', {
       id: {
         type: Sequelize.INTEGER,
@@ -25,9 +25,9 @@ module.exports = {
         allowNull: true
       },
       is_active: {
-        type: Sequelize.BOOLEAN,
+        type: Sequelize.TINYINT(1),
         allowNull: true,
-        defaultValue: true
+        defaultValue: 1
       },
       created_at: {
         type: Sequelize.DATE,
@@ -40,7 +40,7 @@ module.exports = {
     });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('exam_types');
   }
 };

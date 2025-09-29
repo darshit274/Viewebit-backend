@@ -1,19 +1,22 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     await queryInterface.createTable('question_imports', {
       id: {
         type: Sequelize.CHAR(36),
         primaryKey: true,
-        allowNull: false,
-        charset: 'utf8mb4',
-        collate: 'utf8mb4_bin'
+        allowNull: false
       },
       admin_id: {
-        type: Sequelize.STRING(255),
-        allowNull: false
-        // Note: Foreign key constraint removed to avoid data type conflicts
+        type: Sequelize.CHAR(36),
+        allowNull: false,
+        references: {
+          model: 'admins',
+          key: 'id'
+        },
+        onDelete: 'CASCADE',
+        onUpdate: 'CASCADE'
       },
       category_id: {
         type: Sequelize.INTEGER,
@@ -104,7 +107,7 @@ module.exports = {
     await queryInterface.addIndex('question_imports', ['created_at'], { name: 'question_imports_created_at' });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     await queryInterface.dropTable('question_imports');
   }
 };
