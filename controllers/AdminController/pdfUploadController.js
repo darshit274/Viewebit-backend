@@ -138,6 +138,26 @@ exports.uploadPdf = async (req, res, next) => {
       return next(new ErrorHandler('File size must be less than 50MB', 400));
     }
 
+    // Validate minimum file size (PDFs are rarely < 100 bytes)
+    const minSize = 100;
+    if (uploadedFile.size < minSize) {
+      // Delete the uploaded file
+      if (fs.existsSync(uploadedFile.path)) {
+        fs.unlinkSync(uploadedFile.path);
+      }
+      return next(new ErrorHandler('Invalid PDF file. File is too small to be a valid PDF (minimum 100 bytes).', 400));
+    }
+
+    // Validate PDF signature (should start with '%PDF-')
+    const { validatePDFFile } = require('../../utils/pdfUpload');
+    if (!validatePDFFile(uploadedFile.path)) {
+      // Delete the uploaded file
+      if (fs.existsSync(uploadedFile.path)) {
+        fs.unlinkSync(uploadedFile.path);
+      }
+      return next(new ErrorHandler('Invalid PDF file. File does not have a valid PDF signature. Please upload a real PDF file, not a JSON or text file.', 400));
+    }
+
     // Support both course_id (new) and category_id (legacy) for backward compatibility
     const courseId = course_id || category_id;
 
