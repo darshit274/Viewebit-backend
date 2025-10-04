@@ -280,8 +280,9 @@ class QuestionImportController {
         // Validate each row
         jsonData.forEach((row, index) => {
           const rowNumber = index + 2; // +2 because index starts at 0 and we skip header
-          const validationResult = this.validateQuestionRow(row, rowNumber);
-          
+          const questionOrder = index + 1; // +1 because we want order to start from 1
+          const validationResult = this.validateQuestionRow(row, rowNumber, questionOrder);
+
           if (validationResult.errors.length > 0) {
             errors.push(...validationResult.errors);
           } else {
@@ -307,8 +308,9 @@ class QuestionImportController {
               // Validate each row
               csvData.forEach((row, index) => {
                 const rowNumber = index + 2;
-                const validationResult = this.validateQuestionRow(row, rowNumber);
-                
+                const questionOrder = index + 1; // +1 because we want order to start from 1
+                const validationResult = this.validateQuestionRow(row, rowNumber, questionOrder);
+
                 if (validationResult.errors.length > 0) {
                   errors.push(...validationResult.errors);
                 } else {
@@ -343,7 +345,7 @@ class QuestionImportController {
   }
 
   // Validate individual question row
-  validateQuestionRow(row, rowNumber) {
+  validateQuestionRow(row, rowNumber, questionOrder = null) {
     const errors = [];
     const question = {};
 
@@ -456,6 +458,11 @@ class QuestionImportController {
       question.correct_answer = row['Correct Answer'].toString().toUpperCase().trim();
       question.marks = marks;
       question.is_active = true;
+
+      // Preserve order from Excel
+      if (questionOrder !== null) {
+        question.question_order = questionOrder;
+      }
     }
 
     return { errors, question };

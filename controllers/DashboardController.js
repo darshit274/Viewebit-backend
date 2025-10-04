@@ -1,47 +1,104 @@
 const { Sequelize, Op } = require('sequelize');
 const db = require('../config/database');
-const { User } = require('../models');
+const {
+  User,
+  TestSession,
+  UserAnswer,
+  Subscription,
+  Pdfs,
+  LeaderboardEntry,
+  DynamicCategory,
+  TestSeries
+} = require('../models');
 
 class DashboardController {
   // Get dashboard statistics for a user
   static async getDashboardStats(req, res) {
     try {
-      // For now, just return demo data without database queries
+      const userId = req.user.id;
+      const userUuid = req.user.uuid;
+
+      // Get total completed test sessions
+      const completedTests = await TestSession.count({
+        where: {
+          user_id: userId,
+          status: 'completed'
+        }
+      });
+
+      // Get total test sessions (including ongoing)
+      const totalTestSessions = await TestSession.count({
+        where: { user_id: userId }
+      });
+
+      // Get total score from all completed tests
+      const totalScoreResult = await TestSession.sum('calculated_score', {
+        where: {
+          user_id: userId,
+          status: 'completed'
+        }
+      });
+      const totalScore = totalScoreResult || 0;
+
+      // Get user's rank from leaderboard
+      const leaderboardEntry = await LeaderboardEntry.findOne({
+        where: { user_id: userUuid },
+        order: [['score', 'DESC']]
+      });
+      const rank = leaderboardEntry?.rank || null;
+
+      // Get total users count for context
+      const totalStudents = await User.count();
+
+      // Get active subscriptions count
+      const activeSubscriptions = await Subscription.count({
+        where: {
+          user_id: userUuid,
+          status: 'completed',
+          [Op.or]: [
+            { expiry_date: null }, // No expiry
+            { expiry_date: { [Op.gte]: new Date() } } // Not expired
+          ]
+        }
+      });
+
+      // Get recent test sessions with details
+      const recentTestSessions = await TestSession.findAll({
+        where: {
+          user_id: userId,
+          status: 'completed'
+        },
+        order: [['completed_at', 'DESC']],
+        limit: 5,
+        attributes: ['id', 'calculated_score', 'total_questions', 'total_correct', 'completed_at', 'started_at']
+      });
+
+      // Format recent activity
+      const recentActivity = recentTestSessions.map((session, index) => {
+        const scorePercentage = session.total_questions > 0
+          ? Math.round((session.total_correct / session.total_questions) * 100)
+          : 0;
+
+        return {
+          id: index + 1,
+          sessionUuid: session.id,
+          type: 'test',
+          title: `Test ${index + 1}`,
+          date: session.completed_at || session.started_at,
+          score: session.total_correct || 0,
+          total: session.total_questions || 0,
+          percentage: scorePercentage
+        };
+      });
+
       const dashboardStats = {
-        totalTests: 25,
-        completedTests: Math.floor(Math.random() * 15) + 5, // 5-20 random
-        totalPdfs: 40,
-        downloadedPdfs: Math.floor(Math.random() * 20) + 8, // 8-28 random
-        rank: Math.floor(Math.random() * 100) + 10, // 10-110 random
-        totalStudents: 1547,
-        recentActivity: [
-          {
-            id: 1,
-            type: 'test',
-            title: 'Mathematics Practice Test - Set A',
-            date: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-            score: Math.floor(Math.random() * 30) + 70 // 70-100 random score
-          },
-          {
-            id: 2,
-            type: 'pdf',
-            title: 'Physics Formula Reference Guide',
-            date: new Date(Date.now() - Math.random() * 5 * 24 * 60 * 60 * 1000).toISOString()
-          },
-          {
-            id: 3,
-            type: 'test',
-            title: 'Chemistry Mock Test - Organic',
-            date: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000).toISOString(),
-            score: Math.floor(Math.random() * 25) + 75 // 75-100 random score
-          },
-          {
-            id: 4,
-            type: 'pdf',
-            title: 'Previous Year Question Papers',
-            date: new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000).toISOString()
-          }
-        ]
+        totalTests: totalTestSessions,
+        completedTests: completedTests,
+        totalScore: Math.round(totalScore),
+        rank: rank,
+        totalStudents: totalStudents,
+        activeSubscriptions: activeSubscriptions,
+        recentActivity: recentActivity
       };
 
       res.json({
@@ -54,7 +111,8 @@ class DashboardController {
       console.error('Dashboard stats error:', error);
       res.status(500).json({
         success: false,
-        message: 'Internal server error'
+        message: 'Internal server error',
+        error: error.message
       });
     }
   }

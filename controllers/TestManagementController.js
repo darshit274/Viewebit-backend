@@ -1612,10 +1612,15 @@ class TestManagementController {
         ];
       }
 
-      // Get paginated questions
+      // Get paginated questions - prioritize question_order if available
+      const orderArray = [[sortBy, sortOrder]];
+      if (sortBy !== 'question_order') {
+        orderArray.push(['question_order', 'ASC']);
+      }
+
       const { count, rows: questions } = await Question.findAndCountAll({
         where,
-        order: [[sortBy, sortOrder]],
+        order: orderArray,
         limit: parseInt(limit),
         offset
       });
@@ -1949,7 +1954,7 @@ class TestManagementController {
             as: 'questions',
             where: { is_active: true },
             required: false,
-            order: [['display_order', 'ASC'], ['created_at', 'ASC']]
+            order: [['question_order', 'ASC'], ['created_at', 'ASC']]
           },
           // Get parent for breadcrumb
           {

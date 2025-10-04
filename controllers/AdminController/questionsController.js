@@ -308,11 +308,25 @@ exports.getQuestions = async (req, res, next) => {
             whereClause.difficulty = difficulty;
         }
 
+        // Build order array - prioritize question_order if available
+        const orderArray = [];
+        if (sortBy === 'question_order' || sortBy === 'created_at') {
+            // If sorting by question_order or created_at, use question_order first, then created_at
+            orderArray.push(['question_order', 'ASC']);
+            if (sortBy !== 'question_order') {
+                orderArray.push([sortBy, sortOrder]);
+            }
+        } else {
+            // For other sorting fields, use the requested sort first, then question_order as secondary
+            orderArray.push([sortBy, sortOrder]);
+            orderArray.push(['question_order', 'ASC']);
+        }
+
         const { count, rows } = await Question.findAndCountAll({
             where: whereClause,
             limit,
             offset,
-            order: [[sortBy, sortOrder]],
+            order: orderArray,
             attributes: {
                 exclude: ['correct_answer'] // Don't send correct answer in list view
             }

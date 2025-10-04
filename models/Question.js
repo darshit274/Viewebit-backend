@@ -91,6 +91,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
+    question_order: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Order of question from Excel import or manual creation'
+    },
     
     created_at: {
       type: DataTypes.DATE,

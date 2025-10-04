@@ -427,7 +427,7 @@ router.get('/dynamic/categories/:uuid', optionalAuth, async (req, res) => {
           category_id: category.id,
           is_active: true
         },
-        order: [['display_order', 'ASC'], ['id', 'ASC']],
+        order: [['question_order', 'ASC'], ['id', 'ASC']],
         attributes: [
           'id', 'uuid', 'question_text', 'question_text_gujarati',
           'option_a', 'option_a_gujarati', 'option_b', 'option_b_gujarati',
@@ -568,7 +568,7 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
       WITH RECURSIVE category_tree AS (
         SELECT id, parent_category_id FROM categories WHERE id = ?
         UNION ALL
-        SELECT c.id, c.parent_category_id 
+        SELECT c.id, c.parent_category_id
         FROM categories c
         INNER JOIN category_tree ct ON c.parent_category_id = ct.id
         WHERE c.is_active = true
@@ -577,7 +577,7 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
              q.option_a, q.option_a_gujarati, q.option_b, q.option_b_gujarati,
              q.option_c, q.option_c_gujarati, q.option_d, q.option_d_gujarati,
              q.correct_answer, q.explanation, q.explanation_gujarati, q.marks,
-             q.display_order, q.category_id
+             q.question_order, q.category_id
       FROM questions q
       INNER JOIN category_tree ct ON q.category_id = ct.id
       WHERE q.is_active = true
@@ -586,7 +586,7 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
     if (shuffle === 'true') {
       questionsQuery += ' ORDER BY RAND()';
     } else {
-      questionsQuery += ' ORDER BY q.display_order ASC, q.id ASC';
+      questionsQuery += ' ORDER BY q.question_order ASC, q.id ASC';
     }
 
     const questions = await sequelize.query(questionsQuery, {
@@ -712,7 +712,7 @@ router.get('/dynamic/categories/:uuid/solutions', optionalAuth, async (req, res)
       WITH RECURSIVE category_tree AS (
         SELECT id, parent_category_id FROM categories WHERE id = ?
         UNION ALL
-        SELECT c.id, c.parent_category_id 
+        SELECT c.id, c.parent_category_id
         FROM categories c
         INNER JOIN category_tree ct ON c.parent_category_id = ct.id
         WHERE c.is_active = true
@@ -721,11 +721,11 @@ router.get('/dynamic/categories/:uuid/solutions', optionalAuth, async (req, res)
              q.option_a, q.option_a_gujarati, q.option_b, q.option_b_gujarati,
              q.option_c, q.option_c_gujarati, q.option_d, q.option_d_gujarati,
              q.correct_answer, q.explanation, q.explanation_gujarati, q.marks,
-             q.display_order
+             q.question_order
       FROM questions q
       INNER JOIN category_tree ct ON q.category_id = ct.id
       WHERE q.is_active = true
-      ORDER BY q.display_order ASC, q.id ASC
+      ORDER BY q.question_order ASC, q.id ASC
     `;
 
     const questions = await sequelize.query(questionsQuery, {

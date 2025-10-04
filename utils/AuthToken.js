@@ -28,13 +28,10 @@ exports.authToken = async (req, res, next) => {
     
     // Get the user from database to ensure complete user data
     const { User } = require('../models');
-    
+
     // Look up user by UUID (handle both old 'id' and new 'uuid' field)
     const userUuid = decoded.uuid || decoded.id;
     const user = await User.findOne({ where: { uuid: userUuid } });
-    
-    console.log('🔍 Auth Debug - Token payload:', { uuid: decoded.uuid, id: decoded.id, userUuid });
-    console.log('🔍 Auth Debug - User found:', !!user);
     
     if (!user) {
       return res.status(401).json({ 
