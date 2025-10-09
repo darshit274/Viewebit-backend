@@ -307,7 +307,7 @@ class TestManagementController {
       const { count, rows: testSeries } = await TestSeries.findAndCountAll({
         attributes: [
           'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 'is_active', 'created_at', 'updated_at',
-          'pricing_type', 'price', 'currency', 'demo_tests_count', 'subscription_duration_days',
+          'pricing_type', 'price', 'currency',
           'features', 'discount_percentage', 'is_featured', 'has_negative_marking', 'negative_marks'
         ],
         where,
@@ -353,8 +353,6 @@ class TestManagementController {
           pricing_type: series.pricing_type,
           price: series.price,
           currency: series.currency,
-          demo_tests_count: series.demo_tests_count,
-          subscription_duration_days: series.subscription_duration_days,
           features: series.features,
           discount_percentage: series.discount_percentage,
           is_featured: series.is_featured,
@@ -398,7 +396,7 @@ class TestManagementController {
         attributes: [
           'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 
           'is_active', 'created_at', 'updated_at', 'pricing_type', 'price', 'currency', 
-          'demo_tests_count', 'subscription_duration_days', 'features', 'discount_percentage', 
+          'features', 'discount_percentage', 
           'is_featured', 'difficulty_level', 'free_test_count', 'max_attempts_per_test', 
           'has_negative_marking', 'negative_marks', 'supports_pause_resume', 'supports_multilanguage'
         ]
@@ -429,15 +427,13 @@ class TestManagementController {
     try {
       const { 
         title, 
-        description, 
-        title_gujarati, 
-        description_gujarati, 
+        description,
+        title_gujarati,
+        description_gujarati,
         is_active,
         pricing_type,
         price,
         currency,
-        demo_tests_count,
-        subscription_duration_days,
         features,
         discount_percentage,
         is_featured,
@@ -460,8 +456,6 @@ class TestManagementController {
         pricing_type: pricing_type || 'free',
         price: price || 0.00,
         currency: currency || 'INR',
-        demo_tests_count: demo_tests_count || 0,
-        subscription_duration_days: subscription_duration_days || 365,
         features: features || [],
         discount_percentage: discount_percentage || 0.00,
         is_featured: is_featured || false,
@@ -488,8 +482,6 @@ class TestManagementController {
           pricing_type: testSeries.pricing_type,
           price: testSeries.price,
           currency: testSeries.currency,
-          demo_tests_count: testSeries.demo_tests_count,
-          subscription_duration_days: testSeries.subscription_duration_days,
           features: testSeries.features,
           discount_percentage: testSeries.discount_percentage,
           is_featured: testSeries.is_featured,
@@ -595,13 +587,11 @@ class TestManagementController {
         title, 
         description, 
         title_gujarati, 
-        description_gujarati, 
+        description_gujarati,
         is_active,
         pricing_type,
         price,
         currency,
-        demo_tests_count,
-        subscription_duration_days,
         features,
         discount_percentage,
         is_featured
@@ -629,8 +619,6 @@ class TestManagementController {
       if (pricing_type !== undefined) updateData.pricing_type = pricing_type;
       if (price !== undefined) updateData.price = price;
       if (currency !== undefined) updateData.currency = currency;
-      if (demo_tests_count !== undefined) updateData.demo_tests_count = demo_tests_count;
-      if (subscription_duration_days !== undefined) updateData.subscription_duration_days = subscription_duration_days;
       if (features !== undefined) updateData.features = features;
       if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
       if (is_featured !== undefined) updateData.is_featured = is_featured;
@@ -650,8 +638,6 @@ class TestManagementController {
         pricing_type: testSeries.pricing_type,
         price: testSeries.price,
         currency: testSeries.currency,
-        demo_tests_count: testSeries.demo_tests_count,
-        subscription_duration_days: testSeries.subscription_duration_days,
         features: testSeries.features,
         discount_percentage: testSeries.discount_percentage,
         is_featured: testSeries.is_featured,
@@ -932,7 +918,8 @@ class TestManagementController {
         is_active,
         negative_marking_enabled,
         negative_marks_per_wrong,
-        test_duration_minutes
+        test_duration_minutes,
+        is_free_in_paid_series
       } = req.body;
 
       const category = await Category.findOne({ where: { uuid: categoryId } });
@@ -963,6 +950,11 @@ class TestManagementController {
       // Add test duration field if provided
       if (test_duration_minutes !== undefined) {
         updateData.test_duration_minutes = test_duration_minutes;
+      }
+
+      // Add is_free_in_paid_series field if provided
+      if (is_free_in_paid_series !== undefined) {
+        updateData.is_free_in_paid_series = is_free_in_paid_series;
       }
 
       await category.update(updateData);
@@ -2064,7 +2056,9 @@ class TestManagementController {
           'node_type', 'parent_category_id', 'hierarchy_level',
           'display_order', 'createdAt', 'updatedAt',
           // Include negative marking and test timing fields
-          'negative_marking_enabled', 'negative_marks_per_wrong', 'test_duration_minutes'
+          'negative_marking_enabled', 'negative_marks_per_wrong', 'test_duration_minutes',
+          // Include free in paid series field
+          'is_free_in_paid_series'
         ],
         include: [
           // Include child categories count

@@ -450,14 +450,41 @@ const checkTestAccess = async (req, res, next) => {
   }
 };
 
-// Helper function to check user access
-async function checkUserTestSeriesAccess(userId, seriesId) {
+// Helper function to check user access (with category-level check)
+async function checkUserTestSeriesAccess(userId, seriesId, categoryId = null) {
   try {
     console.log('🔍 [SUBCATEGORY] Checking user access:', {
       userId: userId.substring(0, 8),
       seriesId,
+      categoryId: categoryId || 'N/A',
       timestamp: new Date().toISOString()
     });
+
+    // If categoryId is provided, check if it's a free-in-paid category
+    if (categoryId) {
+      const { Category } = require('../../models');
+      let category = await Category.findOne({
+        where: { uuid: categoryId },
+        attributes: ['id', 'uuid', 'is_free_in_paid_series', 'test_series_id']
+      });
+
+      if (!category && !isNaN(categoryId)) {
+        category = await Category.findOne({
+          where: { id: parseInt(categoryId) },
+          attributes: ['id', 'uuid', 'is_free_in_paid_series', 'test_series_id']
+        });
+      }
+
+      // If category is marked as free in paid series, grant access immediately
+      if (category && category.is_free_in_paid_series) {
+        console.log('✅ [FREE-IN-PAID] Category is marked as free:', {
+          categoryId: category.uuid,
+          userId: userId.substring(0, 8)
+        });
+        return { hasAccess: true, accessType: 'free_in_paid_series' };
+      }
+    }
+
     // Get test series
     let testSeries = await TestSeries.findOne({
       where: { uuid: seriesId },

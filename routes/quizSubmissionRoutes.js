@@ -80,11 +80,37 @@ router.post('/submit', async (req, res) => {
             console.log(`Created test series: ${testSeries.uuid}`);
         }
 
-        // Calculate score with category-level negative marking
-        let obtainedMarks = correctAnswers; // 1 mark per correct answer
+        // Calculate score with actual marks per question
+        let obtainedMarks = 0;
+        let totalMarks = 0;
+
+        // Calculate obtained marks and total marks from question data
+        for (const answer of answers) {
+            if (answer.questionId) {
+                const question = await Question.findByPk(answer.questionId, {
+                    attributes: ['id', 'marks']
+                });
+
+                if (question) {
+                    const questionMarks = question.marks || 1; // Default to 1 if not set
+                    totalMarks += questionMarks;
+
+                    if (answer.isCorrect) {
+                        obtainedMarks += questionMarks;
+                    }
+                }
+            }
+        }
+
+        // Fallback if no questions found (shouldn't happen)
+        if (totalMarks === 0) {
+            obtainedMarks = correctAnswers; // 1 mark per correct answer as fallback
+            totalMarks = totalQuestions; // 1 mark per question as fallback
+        }
+
         let negativeMarks = 0;
         let finalScore = obtainedMarks;
-        let percentage = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+        let percentage = totalMarks > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
 
         // NEW: Apply category-level negative marking logic
         if (wrongAnswers > 0) {
@@ -150,6 +176,22 @@ router.post('/submit', async (req, res) => {
 
         const score = finalScore;
 
+        // Calculate attempted marks for accuracy calculation
+        let attemptedMarks = 0;
+        for (const answer of answers) {
+            if (answer.questionId) {
+                const question = await Question.findByPk(answer.questionId, {
+                    attributes: ['id', 'marks']
+                });
+                if (question) {
+                    attemptedMarks += question.marks || 1;
+                }
+            }
+        }
+
+        // Calculate accuracy: (obtained marks / attempted marks) × 100
+        const accuracy = attemptedMarks > 0 ? Math.round((finalScore / attemptedMarks) * 100) : 0;
+
         // ALWAYS create a NEW category for this specific test series to ensure isolation
         const category = await Category.create({
             name: `Quiz Category - ${testSeriesId.slice(0, 8)}`,
@@ -182,7 +224,7 @@ router.post('/submit', async (req, res) => {
             sub_category_id: subCategory.id
         });
 
-        // Create a test session
+        // Create a test session with test history fields
         const testSession = await TestSession.create({
             id: uuidv4(),
             user_id: userId,
@@ -200,7 +242,15 @@ router.post('/submit', async (req, res) => {
             total_questions: totalQuestions,
             time_spent_seconds: totalTimeSpent,
             final_score: score,
-            percentage: percentage
+            percentage: percentage,
+            // Test history fields
+            test_name: test.title,
+            category_name: category.name,
+            total_marks: totalMarks,
+            obtained_marks: obtainedMarks,
+            negative_marks: negativeMarks,
+            attempted_questions: answers.length,
+            accuracy: accuracy
         });
 
         // Create leaderboard entry directly
@@ -239,7 +289,8 @@ router.post('/submit', async (req, res) => {
                 finalPercentage: percentage,
                 calculatedPercentage: percentage,
                 actualPercentage: percentage,
-                // Mark calculation info (updated for category-level)
+                // Mark calculation info (updated for variable marks per question)
+                totalMarks: totalMarks,
                 obtainedMarks: obtainedMarks,
                 negativeMarkingEnabled: negativeMarks > 0, // True if any category had negative marking
                 negativeMarksDeducted: negativeMarks,
@@ -252,11 +303,13 @@ router.post('/submit', async (req, res) => {
                 resultPercentage: percentage,
                 scorePercentage: percentage,
                 debug: {
+                    totalMarks,
                     obtainedMarks,
                     negativeMarks,
                     finalScore,
                     percentageCalculation: `(${finalScore}/${totalQuestions}) * 100 = ${percentage}%`,
                     correctAnswersOnly: `(${correctAnswers}/${totalQuestions}) * 100 = ${Math.round((correctAnswers/totalQuestions)*100)}%`,
+                    marksCalculation: `Total Marks: ${totalMarks}, Obtained: ${obtainedMarks}, After Negative: ${finalScore}`,
                     warning: "Frontend should use 'percentage' field, not calculate (correctAnswers/totalQuestions)*100"
                 }
             }

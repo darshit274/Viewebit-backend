@@ -62,7 +62,7 @@ class DynamicTestManagementController {
     const transaction = await sequelize.transaction();
     
     try {
-      const { 
+      const {
         testSeriesId,
         parentCategoryId,
         name,
@@ -73,6 +73,7 @@ class DynamicTestManagementController {
         difficulty_level,
         negative_marking_enabled,
         negative_marks_per_wrong,
+        is_free_in_paid_series,
         instructions,
         instructions_gujarati
       } = req.body;
@@ -112,6 +113,7 @@ class DynamicTestManagementController {
         difficulty_level: difficulty_level || 'medium',
         negative_marking_enabled: negative_marking_enabled || false,
         negative_marks_per_wrong: negative_marks_per_wrong || 0.25,
+        is_free_in_paid_series: is_free_in_paid_series || false,
         instructions,
         instructions_gujarati
       }, { transaction });

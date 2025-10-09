@@ -131,8 +131,8 @@ router.get('/test-series', optionalAuth, async (req, res) => {
       order: [['created_at', 'DESC']],
       attributes: [
         'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-        'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
-        'subscription_duration_days', 'discount_percentage', 'is_featured',
+        'is_active', 'pricing_type', 'price', 'currency',
+        'discount_percentage', 'is_featured',
         'created_at', 'updated_at'
       ],
     });
@@ -1062,8 +1062,7 @@ router.get('/test-series/:uuid/subscription-access', requireAuth, async (req, re
         data: {
           has_access: true,
           subscription_type: 'free',
-          can_access_demo: true,
-          demo_tests_remaining: testSeries.demo_tests_count || 0
+          can_access_demo: true
         }
       });
     }
@@ -1095,33 +1094,14 @@ router.get('/test-series/:uuid/subscription-access', requireAuth, async (req, re
       });
     }
 
-    // Check if user has already used demo tests
-    const demoTestsUsed = await TestSession.count({
-      where: {
-        user_id: req.user.id,
-        test_id: {
-          [Sequelize.Op.in]: sequelize.literal(`(
-            SELECT t.id FROM tests t
-            JOIN sub_categories sc ON t.sub_category_id = sc.id
-            JOIN categories c ON sc.category_id = c.id
-            WHERE c.test_series_id = ${testSeries.id}
-          )`)
-        },
-        is_demo: true
-      }
-    });
-
-    const demoTestsRemaining = Math.max(0, (testSeries.demo_tests_count || 0) - demoTestsUsed);
-
+    // No demo tests available - demo test feature removed
     res.json({
       success: true,
       data: {
         has_access: false,
         subscription_type: null,
         expires_at: null,
-        can_access_demo: demoTestsRemaining > 0,
-        demo_tests_remaining: demoTestsRemaining,
-        demo_tests_used: demoTestsUsed
+        can_access_demo: false
       }
     });
   } catch (error) {

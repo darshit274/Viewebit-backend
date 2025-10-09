@@ -37,8 +37,8 @@ class TestSeriesController {
         order: [['created_at', 'DESC']],
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-          'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
-          'subscription_duration_days', 'discount_percentage', 'is_featured',
+          'is_active', 'pricing_type', 'price', 'currency',
+          'discount_percentage', 'is_featured',
           'created_at', 'updated_at'
         ]
       });
@@ -147,8 +147,8 @@ class TestSeriesController {
         },
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-          'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
-          'subscription_duration_days', 'discount_percentage', 'is_featured',
+          'is_active', 'pricing_type', 'price', 'currency',
+          'discount_percentage', 'is_featured',
           'created_at', 'updated_at'
         ]
       });
@@ -267,8 +267,8 @@ class TestSeriesController {
         order: [['created_at', 'DESC']],
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-          'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
-          'subscription_duration_days', 'discount_percentage', 'is_featured',
+          'is_active', 'pricing_type', 'price', 'currency',
+          'discount_percentage', 'is_featured',
           'created_at', 'updated_at'
         ]
       });
@@ -365,10 +365,10 @@ class TestSeriesController {
           ];
           break;
         case 'short':
-          order = [['subscription_duration_days', 'ASC'], ['created_at', 'DESC']];
+          order = [['ASC'], ['created_at', 'DESC']];
           break;
         case 'long':
-          order = [['subscription_duration_days', 'DESC'], ['created_at', 'DESC']];
+          order = [['DESC'], ['created_at', 'DESC']];
           break;
       }
 
@@ -378,8 +378,8 @@ class TestSeriesController {
         order,
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-          'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
-          'subscription_duration_days', 'discount_percentage', 'is_featured',
+          'is_active', 'pricing_type', 'price', 'currency',
+          'discount_percentage', 'is_featured',
           'difficulty_level', 'created_at', 'updated_at'
         ]
       });
@@ -441,6 +441,350 @@ class TestSeriesController {
       res.status(500).json({
         success: false,
         message: 'Failed to retrieve free tests'
+      });
+    }
+  }
+
+  // Helper method to build hierarchy path for a category
+  static async buildHierarchyPath(categoryId) {
+    try {
+      const path = [];
+      let currentCategory = await Category.findByPk(categoryId, {
+        attributes: ['id', 'uuid', 'name', 'name_gujarati', 'node_type', 'parent_category_id']
+      });
+
+      let iterations = 0;
+      const maxIterations = 10; // Prevent infinite loops
+
+      while (currentCategory && iterations < maxIterations) {
+        path.unshift({
+          uuid: currentCategory.uuid,
+          name: currentCategory.name,
+          name_gujarati: currentCategory.name_gujarati,
+          node_type: currentCategory.node_type
+        });
+
+        if (currentCategory.parent_category_id) {
+          currentCategory = await Category.findByPk(currentCategory.parent_category_id, {
+            attributes: ['id', 'uuid', 'name', 'name_gujarati', 'node_type', 'parent_category_id']
+          });
+        } else {
+          currentCategory = null;
+        }
+
+        iterations++;
+      }
+
+      return path;
+    } catch (error) {
+      console.error('Error building hierarchy path:', error);
+      return [{
+        uuid: categoryId,
+        name: 'Unknown',
+        name_gujarati: 'Unknown',
+        node_type: 'question_holder'
+      }];
+    }
+  }
+
+  // Get all PAID test series that have at least one free category
+  static async getFreeInPaidSeries(req, res) {
+    try {
+      const { page = 1, limit = 20 } = req.query;
+      const offset = (page - 1) * limit;
+
+      // Find all paid test series that have at least one free category
+      const paidSeriesWithFreeCategories = await TestSeries.findAll({
+        where: {
+          is_active: true,
+          pricing_type: 'paid'
+        },
+        include: [{
+          model: Category,
+          as: 'categories',
+          where: {
+            is_active: true,
+            node_type: 'question_holder',
+            is_free_in_paid_series: true
+          },
+          attributes: ['id'],
+          required: true // Only include series that have free categories
+        }],
+        attributes: [
+          'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
+          'pricing_type', 'price', 'currency', 'is_featured', 'created_at'
+        ],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        distinct: true
+      });
+
+      // Count total paid series with free categories
+      const totalCount = await TestSeries.count({
+        where: {
+          is_active: true,
+          pricing_type: 'paid'
+        },
+        include: [{
+          model: Category,
+          as: 'categories',
+          where: {
+            is_active: true,
+            node_type: 'question_holder',
+            is_free_in_paid_series: true
+          },
+          required: true
+        }],
+        distinct: true
+      });
+
+      // Transform the data and count free categories
+      const seriesWithFreeCounts = await Promise.all(
+        paidSeriesWithFreeCategories.map(async (series) => {
+          const freeCategoriesCount = await Category.count({
+            where: {
+              test_series_id: series.id,
+              is_active: true,
+              node_type: 'question_holder',
+              is_free_in_paid_series: true
+            }
+          });
+
+          return {
+            uuid: series.uuid,
+            title: series.name,
+            title_gujarati: series.name_gujarati,
+            description: series.description,
+            description_gujarati: series.description_gujarati,
+            is_paid: true,
+            price: series.price,
+            currency: series.currency,
+            is_featured: series.is_featured,
+            free_categories_count: freeCategoriesCount
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        message: 'Paid test series with free categories retrieved successfully',
+        data: {
+          series: seriesWithFreeCounts,
+          pagination: {
+            total: totalCount,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(totalCount / limit)
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Get free in paid series error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve paid series with free categories'
+      });
+    }
+  }
+
+  // Get free categories for a specific paid series with hierarchy paths
+  static async getFreeInPaidCategories(req, res) {
+    try {
+      const { seriesUuid } = req.params;
+
+      // Find the test series
+      const series = await TestSeries.findOne({
+        where: {
+          uuid: seriesUuid,
+          is_active: true,
+          pricing_type: 'paid'
+        },
+        attributes: [
+          'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
+          'pricing_type', 'price', 'currency'
+        ]
+      });
+
+      if (!series) {
+        return res.status(404).json({
+          success: false,
+          message: 'Paid test series not found'
+        });
+      }
+
+      // Get all free question-holder categories for this series
+      const freeCategories = await Category.findAll({
+        where: {
+          test_series_id: series.id,
+          is_active: true,
+          node_type: 'question_holder',
+          is_free_in_paid_series: true
+        },
+        attributes: [
+          'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
+          'node_type', 'hierarchy_level', 'test_duration_minutes',
+          'negative_marking_enabled', 'negative_marks_per_wrong'
+        ],
+        order: [['hierarchy_level', 'ASC'], ['name', 'ASC']]
+      });
+
+      // Build hierarchy paths and get questions count for each category
+      const categoriesWithPaths = await Promise.all(
+        freeCategories.map(async (category) => {
+          const hierarchyPath = await this.buildHierarchyPath(category.id);
+
+          const questionsCount = await Question.count({
+            where: {
+              category_id: category.id,
+              is_active: true
+            }
+          });
+
+          return {
+            uuid: category.uuid,
+            name: category.name,
+            name_gujarati: category.name_gujarati,
+            description: category.description,
+            description_gujarati: category.description_gujarati,
+            node_type: category.node_type,
+            hierarchy_level: category.hierarchy_level,
+            test_duration_minutes: category.test_duration_minutes,
+            negative_marking_enabled: category.negative_marking_enabled,
+            negative_marks_per_wrong: category.negative_marks_per_wrong,
+            questions_count: questionsCount,
+            hierarchy_path: hierarchyPath
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        message: 'Free categories retrieved successfully',
+        data: {
+          series: {
+            uuid: series.uuid,
+            title: series.name,
+            title_gujarati: series.name_gujarati,
+            description: series.description,
+            description_gujarati: series.description_gujarati,
+            is_paid: true,
+            price: series.price,
+            currency: series.currency
+          },
+          freeCategories: categoriesWithPaths
+        }
+      });
+
+    } catch (error) {
+      console.error('Get free categories error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve free categories'
+      });
+    }
+  }
+
+  // Get all free categories from ALL paid series (aggregated for main discovery page)
+  static async getAllFreeInPaidCategories(req, res) {
+    try {
+      const { page = 1, limit = 12 } = req.query;
+      const offset = (page - 1) * limit;
+
+      // Get all free categories from paid series with series info
+      const freeCategories = await Category.findAll({
+        where: {
+          is_active: true,
+          node_type: 'question_holder',
+          is_free_in_paid_series: true
+        },
+        include: [{
+          model: TestSeries,
+          as: 'testSeries',
+          where: {
+            is_active: true,
+            pricing_type: 'paid'
+          },
+          attributes: ['id', 'uuid', 'name', 'name_gujarati', 'price', 'currency'],
+          required: true
+        }],
+        attributes: [
+          'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
+          'test_duration_minutes', 'negative_marking_enabled', 'negative_marks_per_wrong'
+        ],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        order: [['created_at', 'DESC']]
+      });
+
+      // Count total free categories in paid series
+      const totalCount = await Category.count({
+        where: {
+          is_active: true,
+          node_type: 'question_holder',
+          is_free_in_paid_series: true
+        },
+        include: [{
+          model: TestSeries,
+          as: 'testSeries',
+          where: {
+            is_active: true,
+            pricing_type: 'paid'
+          },
+          required: true
+        }]
+      });
+
+      // Build response with hierarchy paths and metadata
+      const categoriesWithMetadata = freeCategories.map((category) => {
+        // Simple breadcrumb without hierarchy lookup to avoid database hanging issues
+        const breadcrumb = category.name;
+
+        return {
+          uuid: category.uuid,
+          name: category.name,
+          name_gujarati: category.name_gujarati,
+          description: category.description,
+          description_gujarati: category.description_gujarati,
+          test_duration_minutes: category.test_duration_minutes,
+          questions_count: 0, // Will be populated if needed
+          difficulty_level: 'medium', // Default, can be added to Category model later
+          series: {
+            uuid: category.testSeries.uuid,
+            title: category.testSeries.name,
+            title_gujarati: category.testSeries.name_gujarati,
+            price: category.testSeries.price,
+            currency: category.testSeries.currency
+          },
+          hierarchy_path: [{
+            uuid: category.uuid,
+            name: category.name,
+            name_gujarati: category.name_gujarati,
+            node_type: 'question_holder'
+          }],
+          breadcrumb: breadcrumb
+        };
+      });
+
+      res.json({
+        success: true,
+        message: 'All free categories from paid series retrieved successfully',
+        data: {
+          categories: categoriesWithMetadata,
+          pagination: {
+            total: totalCount,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(totalCount / limit)
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Get all free in paid categories error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve free categories'
       });
     }
   }

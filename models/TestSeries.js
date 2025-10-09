@@ -46,16 +46,6 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'INR',
       allowNull: false
     },
-    demo_tests_count: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-      allowNull: false
-    },
-    subscription_duration_days: {
-      type: DataTypes.INTEGER,
-      defaultValue: 365,
-      allowNull: false
-    },
     features: {
       type: DataTypes.JSON,
       allowNull: true

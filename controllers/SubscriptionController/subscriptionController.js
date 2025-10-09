@@ -77,7 +77,7 @@ exports.getSubscriptionDetails = async (req, res, next) => {
             include: [{
                 model: TestSeries,
                 as: 'testSeries',
-                attributes: ['id', 'name', 'description', 'price', 'subscription_duration_days']
+                attributes: ['id', 'name', 'description', 'price']
             }]
         });
         
@@ -155,12 +155,10 @@ exports.createSubscription = async (req, res, next) => {
             return next(new ErrorHandler('Transaction ID already exists', 400));
         }
         
-        // Calculate expiry date based on test series duration
-        let expiryDate = null;
-        if (testSeries.subscription_duration_days) {
-            expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + testSeries.subscription_duration_days);
-        }
+        // Calculate expiry date - default to 365 days (1 year)
+        const DEFAULT_SUBSCRIPTION_DAYS = 365;
+        let expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + DEFAULT_SUBSCRIPTION_DAYS);
         
         // Create subscription
         const subscription = await Subscription.create({
@@ -610,13 +608,14 @@ exports.createManualSubscription = async (req, res, next) => {
             return next(new ErrorHandler('Transaction ID already exists', 400));
         }
         
-        // Use provided expiry date or calculate based on test series duration
+        // Use provided expiry date or calculate with default duration (365 days)
+        const DEFAULT_SUBSCRIPTION_DAYS = 365;
         let finalExpiryDate = null;
         if (expiry_date) {
             finalExpiryDate = new Date(expiry_date);
-        } else if (testSeries.subscription_duration_days) {
+        } else {
             finalExpiryDate = new Date();
-            finalExpiryDate.setDate(finalExpiryDate.getDate() + testSeries.subscription_duration_days);
+            finalExpiryDate.setDate(finalExpiryDate.getDate() + DEFAULT_SUBSCRIPTION_DAYS);
         }
         
         // Create subscription

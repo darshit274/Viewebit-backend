@@ -74,6 +74,13 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 60,
       allowNull: false,
       comment: 'Test duration in minutes for this category'
+    },
+    // FREE IN PAID SERIES FIELD (for question-holder categories)
+    is_free_in_paid_series: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'If true, this category quiz is free even if the parent test series is paid'
     }
   }, {
     tableName: 'categories',

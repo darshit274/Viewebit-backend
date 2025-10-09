@@ -106,6 +106,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 0.25,
       allowNull: false
     },
+    is_free_in_paid_series: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'If true, this category quiz is free even if the parent test series is paid'
+    },
     instructions: {
       type: DataTypes.TEXT,
       allowNull: true

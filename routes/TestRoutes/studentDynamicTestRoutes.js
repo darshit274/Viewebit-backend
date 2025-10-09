@@ -110,8 +110,8 @@ router.get('/dynamic/test-series', optionalAuth, async (req, res) => {
       order: [['created_at', 'DESC']],
       attributes: [
         'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-        'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
-        'subscription_duration_days', 'discount_percentage', 'is_featured',
+        'is_active', 'pricing_type', 'price', 'currency',
+        'discount_percentage', 'is_featured',
         'created_at', 'updated_at'
       ],
     });
@@ -202,8 +202,8 @@ router.get('/dynamic/test-series/:uuid', optionalAuth, async (req, res) => {
       where: { uuid, is_active: true },
       attributes: [
         'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-        'is_active', 'pricing_type', 'price', 'currency', 'demo_tests_count',
-        'subscription_duration_days', 'discount_percentage', 'is_featured',
+        'is_active', 'pricing_type', 'price', 'currency',
+        'discount_percentage', 'is_featured',
         'created_at', 'updated_at'
       ]
     });
@@ -523,7 +523,7 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
       include: [{
         model: TestSeries,
         as: 'testSeries',
-        attributes: ['id', 'pricing_type']
+        attributes: ['id', 'uuid', 'pricing_type']
       }],
       attributes: [
         'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati',
@@ -548,9 +548,9 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
         });
       }
 
-      // Use our new subscription access check logic
-      const accessCheck = await checkUserTestSeriesAccess(req.user.uuid, category.testSeries.id);
-      
+      // Use our new subscription access check logic (with category ID for free-in-paid check)
+      const accessCheck = await checkUserTestSeriesAccess(req.user.uuid, category.testSeries.uuid, uuid);
+
       if (!accessCheck.hasAccess) {
         return res.status(403).json({
           success: false,
@@ -671,7 +671,7 @@ router.get('/dynamic/categories/:uuid/solutions', optionalAuth, async (req, res)
       include: [{
         model: TestSeries,
         as: 'testSeries',
-        attributes: ['id', 'pricing_type']
+        attributes: ['id', 'uuid', 'pricing_type']
       }]
     });
 
@@ -692,9 +692,9 @@ router.get('/dynamic/categories/:uuid/solutions', optionalAuth, async (req, res)
         });
       }
 
-      // Use our new subscription access check logic
-      const accessCheck = await checkUserTestSeriesAccess(req.user.uuid, category.testSeries.id);
-      
+      // Use our new subscription access check logic (with category ID for free-in-paid check)
+      const accessCheck = await checkUserTestSeriesAccess(req.user.uuid, category.testSeries.uuid, uuid);
+
       if (!accessCheck.hasAccess) {
         return res.status(403).json({
           success: false,
