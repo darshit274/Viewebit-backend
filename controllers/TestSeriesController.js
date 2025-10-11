@@ -736,9 +736,17 @@ class TestSeriesController {
       });
 
       // Build response with hierarchy paths and metadata
-      const categoriesWithMetadata = freeCategories.map((category) => {
+      const categoriesWithMetadata = await Promise.all(freeCategories.map(async (category) => {
         // Simple breadcrumb without hierarchy lookup to avoid database hanging issues
         const breadcrumb = category.name;
+
+        // Count actual questions for this category
+        const questionsCount = await Question.count({
+          where: {
+            category_id: category.id,
+            is_active: true
+          }
+        });
 
         return {
           uuid: category.uuid,
@@ -747,7 +755,7 @@ class TestSeriesController {
           description: category.description,
           description_gujarati: category.description_gujarati,
           test_duration_minutes: category.test_duration_minutes,
-          questions_count: 0, // Will be populated if needed
+          questions_count: questionsCount,
           difficulty_level: 'medium', // Default, can be added to Category model later
           series: {
             uuid: category.testSeries.uuid,
@@ -764,7 +772,7 @@ class TestSeriesController {
           }],
           breadcrumb: breadcrumb
         };
-      });
+      }));
 
       res.json({
         success: true,

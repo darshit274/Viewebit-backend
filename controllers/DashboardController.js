@@ -7,7 +7,7 @@ const {
   Subscription,
   Pdfs,
   LeaderboardEntry,
-  DynamicCategory,
+  Category, // Using Category model instead of DynamicCategory
   TestSeries
 } = require('../models');
 
@@ -15,26 +15,27 @@ class DashboardController {
   // Get dashboard statistics for a user
   static async getDashboardStats(req, res) {
     try {
-      const userId = req.user.id;
       const userUuid = req.user.uuid;
 
       // Get total completed test sessions
       const completedTests = await TestSession.count({
         where: {
-          user_id: userId,
+          user_id: userUuid,
           status: 'completed'
         }
       });
 
-      // Get total test sessions (including ongoing)
-      const totalTestSessions = await TestSession.count({
-        where: { user_id: userId }
+      // Get total available tests (active categories)
+      const totalAvailableTests = await Category.count({
+        where: {
+          is_active: true
+        }
       });
 
       // Get total score from all completed tests
       const totalScoreResult = await TestSession.sum('calculated_score', {
         where: {
-          user_id: userId,
+          user_id: userUuid,
           status: 'completed'
         }
       });
@@ -65,7 +66,7 @@ class DashboardController {
       // Get recent test sessions with details
       const recentTestSessions = await TestSession.findAll({
         where: {
-          user_id: userId,
+          user_id: userUuid,
           status: 'completed'
         },
         order: [['completed_at', 'DESC']],
@@ -92,7 +93,7 @@ class DashboardController {
       });
 
       const dashboardStats = {
-        totalTests: totalTestSessions,
+        totalTests: totalAvailableTests,
         completedTests: completedTests,
         totalScore: Math.round(totalScore),
         rank: rank,

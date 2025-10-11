@@ -55,7 +55,7 @@ router.get('/', requireAuth, async (req, res) => {
 
         console.log(`📚 Fetching GROUPED test history for user: ${userId}`);
 
-        // Get all completed test sessions for this user with FULL HIERARCHY
+        // First, get all sessions to check which system they belong to
         const allSessions = await TestSession.findAll({
             where: {
                 user_id: userId,
@@ -65,71 +65,133 @@ router.get('/', requireAuth, async (req, res) => {
             attributes: [
                 'id', 'test_id', 'completed_at', 'started_at',
                 'calculated_score', 'total_questions',
-                'total_correct', 'total_wrong', 'total_unanswered'
+                'total_correct', 'total_wrong', 'total_unanswered',
+                'test_name', 'category_name', 'session_data' // session_data contains category UUID
             ],
-            include: [{
-                model: Test,
-                as: 'test',
-                attributes: ['id', 'title', 'uuid', 'title_gujarati', 'is_free_in_paid_series'],
-                include: [{
-                    model: SubCategory,
-                    as: 'subCategory',
-                    attributes: ['id', 'name', 'uuid'],
-                    include: [{
-                        model: Category,
-                        as: 'category',
-                        attributes: ['id', 'name', 'uuid', 'name_gujarati', 'test_series_id'],
-                        include: [{
-                            model: TestSeries,
-                            as: 'testSeries',
-                            attributes: ['id', 'name', 'uuid', 'name_gujarati', 'pricing_type']
-                        }]
-                    }]
-                }]
-            }],
             order: [['completed_at', 'DESC']]
         });
 
-        // Group sessions by test_id
+        // Group sessions by category UUID from session_data
         const groupedTests = {};
+        const categoryCache = {}; // Cache category lookups
 
-        allSessions.forEach(session => {
-            const testId = session.test_id;
+        for (const session of allSessions) {
+            // Check if this is from the new DynamicCategory system
+            let categoryUuid = session.session_data?.category_uuid;
 
-            if (!groupedTests[testId]) {
-                // Extract hierarchy information
-                const test = session.test;
-                const subCategory = test?.subCategory;
-                const category = subCategory?.category;
-                const testSeries = category?.testSeries;
+            // For OLD tests without session_data, try to find category UUID from Test → Category → TestSeries
+            if (!categoryUuid && session.test_id) {
+                const oldTest = await Test.findByPk(session.test_id, {
+                    include: [{
+                        model: SubCategory,
+                        as: 'subCategory',
+                        include: [{
+                            model: Category,
+                            as: 'category',
+                            include: [{
+                                model: TestSeries,
+                                as: 'testSeries',
+                                attributes: ['uuid']
+                            }]
+                        }]
+                    }]
+                });
 
-                // Build hierarchy path
-                const hierarchyParts = [];
-                if (testSeries?.name) hierarchyParts.push(testSeries.name);
-                if (category?.name) hierarchyParts.push(category.name);
-                if (subCategory?.name) hierarchyParts.push(subCategory.name);
+                // The TestSeries UUID IS the category UUID in the old system!
+                if (oldTest?.subCategory?.category?.testSeries?.uuid) {
+                    categoryUuid = oldTest.subCategory.category.testSeries.uuid;
+                }
+            }
 
-                const hierarchyPath = hierarchyParts.length > 0
-                    ? hierarchyParts.join(' → ')
-                    : 'General';
+            // Use category UUID as grouping key if available, otherwise fall back to test_id
+            const groupKey = categoryUuid || session.test_id;
 
-                groupedTests[testId] = {
-                    testId: testId,
-                    testName: test?.title || 'Quiz Test',
-                    testNameGujarati: test?.title_gujarati,
-                    testUuid: test?.uuid,
+            if (!groupedTests[groupKey]) {
+                // Try to get Category info if UUID exists
+                let categoryInfo = null;
+                if (categoryUuid) {
+                    // Check cache first
+                    if (!categoryCache[categoryUuid]) {
+                        categoryCache[categoryUuid] = await Category.findOne({
+                            where: { uuid: categoryUuid, is_active: true },
+                            include: [{
+                                model: TestSeries,
+                                as: 'testSeries',
+                                attributes: ['id', 'uuid', 'name', 'name_gujarati', 'pricing_type']
+                            }],
+                            attributes: [
+                                'id', 'uuid', 'name', 'name_gujarati', 'description',
+                                'description_gujarati', 'hierarchy_level', 'parent_category_id',
+                                'test_series_id', 'is_free_in_paid_series'
+                            ]
+                        });
+                    }
+                    categoryInfo = categoryCache[categoryUuid];
+                }
+
+                // Build hierarchy if we have category info
+                let hierarchyPath = 'General';
+                let testName = 'Quiz Test';
+                let testNameGujarati = null;
+                let testSeriesName = 'General';
+                let testSeriesNameGujarati = null;
+                let testSeriesUuid = null;
+                let pricingType = 'free';
+                let isFreeInPaidSeries = false;
+
+                if (categoryInfo) {
+                    testName = categoryInfo.name;
+                    testNameGujarati = categoryInfo.name_gujarati;
+                    testSeriesName = categoryInfo.testSeries?.name || 'General';
+                    testSeriesNameGujarati = categoryInfo.testSeries?.name_gujarati;
+                    testSeriesUuid = categoryInfo.testSeries?.uuid;
+                    pricingType = categoryInfo.testSeries?.pricing_type || 'free';
+                    isFreeInPaidSeries = categoryInfo.is_free_in_paid_series || false;
+
+                    // Build breadcrumb hierarchy
+                    const hierarchyParts = [];
+                    if (categoryInfo.testSeries?.name) {
+                        hierarchyParts.push(categoryInfo.testSeries.name);
+                    }
+
+                    // Build parent hierarchy
+                    let currentParentId = categoryInfo.parent_category_id;
+                    const parentNames = [];
+                    while (currentParentId) {
+                        const parent = await Category.findByPk(currentParentId, {
+                            attributes: ['id', 'name', 'parent_category_id']
+                        });
+                        if (parent) {
+                            parentNames.unshift(parent.name);
+                            currentParentId = parent.parent_category_id;
+                        } else {
+                            break;
+                        }
+                    }
+                    hierarchyParts.push(...parentNames);
+                    hierarchyParts.push(categoryInfo.name);
+
+                    hierarchyPath = hierarchyParts.join(' → ');
+                }
+
+                groupedTests[groupKey] = {
+                    testId: groupKey,
+                    categoryUuid: categoryUuid,
+                    testName: testName,
+                    testNameGujarati: testNameGujarati,
+                    testUuid: categoryUuid,
                     // Hierarchy information
-                    testSeriesName: testSeries?.name || 'General',
-                    testSeriesNameGujarati: testSeries?.name_gujarati,
-                    testSeriesUuid: testSeries?.uuid,
-                    categoryName: category?.name || 'General',
-                    categoryNameGujarati: category?.name_gujarati,
-                    categoryUuid: category?.uuid,
-                    subCategoryName: subCategory?.name,
-                    subCategoryUuid: subCategory?.uuid,
+                    testSeriesName: testSeriesName,
+                    testSeriesNameGujarati: testSeriesNameGujarati,
+                    testSeriesUuid: testSeriesUuid,
+                    categoryName: testName, // Same as test name in new system
+                    categoryNameGujarati: testNameGujarati,
+                    categoryUuid: categoryUuid,
+                    subCategoryName: null,
+                    subCategoryUuid: null,
                     hierarchyPath: hierarchyPath,
-                    isFreeInPaidSeries: test?.is_free_in_paid_series || false,
-                    pricingType: testSeries?.pricing_type || 'free',
+                    isFreeInPaidSeries: isFreeInPaidSeries,
+                    pricingType: pricingType,
                     // Attempt tracking
                     attempts: [],
                     latestAttempt: null,
@@ -145,7 +207,7 @@ router.get('/', requireAuth, async (req, res) => {
                 : 0;
 
             // Add this session to attempts
-            groupedTests[testId].attempts.push({
+            groupedTests[groupKey].attempts.push({
                 sessionId: session.id,
                 completedAt: session.completed_at,
                 score: parseFloat(session.calculated_score || 0),
@@ -156,14 +218,14 @@ router.get('/', requireAuth, async (req, res) => {
             });
 
             // Update best score if this is better
-            if (percentage > groupedTests[testId].bestPercentage) {
-                groupedTests[testId].bestScore = parseFloat(session.calculated_score || 0);
-                groupedTests[testId].bestPercentage = percentage;
+            if (percentage > groupedTests[groupKey].bestPercentage) {
+                groupedTests[groupKey].bestScore = parseFloat(session.calculated_score || 0);
+                groupedTests[groupKey].bestPercentage = percentage;
             }
 
             // Set latest attempt (first one due to DESC order)
-            if (!groupedTests[testId].latestAttempt) {
-                groupedTests[testId].latestAttempt = {
+            if (!groupedTests[groupKey].latestAttempt) {
+                groupedTests[groupKey].latestAttempt = {
                     sessionId: session.id,
                     completedAt: session.completed_at,
                     score: parseFloat(session.calculated_score || 0),
@@ -173,8 +235,8 @@ router.get('/', requireAuth, async (req, res) => {
                 };
             }
 
-            groupedTests[testId].totalAttempts++;
-        });
+            groupedTests[groupKey].totalAttempts++;
+        }
 
         // Convert to array and sort
         let groupedArray = Object.values(groupedTests);
@@ -255,9 +317,10 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 /**
- * Get all attempts for a specific test
+ * Get all attempts for a specific test (grouped by category UUID)
  * GET /api/test-history/test/:testId/attempts
- * Returns all attempts the user made on this specific test
+ * Returns all attempts the user made on this specific test/category
+ * testId can be either a category UUID or a numeric test_id (for backward compatibility)
  */
 router.get('/test/:testId/attempts', requireAuth, async (req, res) => {
     try {
@@ -266,26 +329,109 @@ router.get('/test/:testId/attempts', requireAuth, async (req, res) => {
 
         console.log(`📊 Fetching all attempts for test ${testId} by user: ${userId}`);
 
-        // Get all sessions for this specific test
-        const sessions = await TestSession.findAll({
-            where: {
-                user_id: userId,
-                test_id: testId,
-                status: 'completed',
-                is_completed: true
-            },
-            attributes: [
-                'id', 'completed_at', 'started_at',
-                'calculated_score', 'total_questions',
-                'total_correct', 'total_wrong', 'total_unanswered'
-            ],
-            include: [{
-                model: Test,
-                as: 'test',
-                attributes: ['id', 'title', 'uuid']
-            }],
-            order: [['completed_at', 'DESC']]
-        });
+        // Check if testId is a UUID (category UUID) or numeric (old test_id)
+        const isUuid = testId.includes('-') && testId.length > 10;
+
+        let sessions = [];
+        let testName = 'Quiz Test';
+        let testUuid = null;
+
+        if (isUuid) {
+            // NEW SYSTEM: testId is a category UUID
+            console.log(`🆕 Searching by category UUID: ${testId}`);
+
+            // Get all sessions where session_data.category_uuid matches
+            const allUserSessions = await TestSession.findAll({
+                where: {
+                    user_id: userId,
+                    status: 'completed',
+                    is_completed: true
+                },
+                attributes: [
+                    'id', 'test_id', 'completed_at', 'started_at',
+                    'calculated_score', 'total_questions',
+                    'total_correct', 'total_wrong', 'total_unanswered',
+                    'session_data'
+                ],
+                order: [['completed_at', 'DESC']]
+            });
+
+            // Filter sessions that match this category UUID
+            sessions = allUserSessions.filter(session => {
+                return session.session_data?.category_uuid === testId;
+            });
+
+            // Also check for old tests that might belong to this category
+            const oldTests = await Test.findAll({
+                include: [{
+                    model: SubCategory,
+                    as: 'subCategory',
+                    include: [{
+                        model: Category,
+                        as: 'category',
+                        include: [{
+                            model: TestSeries,
+                            as: 'testSeries',
+                            where: { uuid: testId },
+                            attributes: ['uuid', 'name']
+                        }]
+                    }]
+                }]
+            });
+
+            // If found old tests, add their sessions too
+            if (oldTests.length > 0) {
+                const oldTestIds = oldTests.map(t => t.id);
+                const oldSessions = allUserSessions.filter(session =>
+                    oldTestIds.includes(session.test_id) && !session.session_data?.category_uuid
+                );
+                sessions.push(...oldSessions);
+
+                // Get test name from TestSeries
+                testName = oldTests[0]?.subCategory?.category?.testSeries?.name || testName;
+            }
+
+            // Try to get category name
+            const category = await Category.findOne({
+                where: { uuid: testId },
+                attributes: ['name', 'uuid']
+            });
+
+            if (category) {
+                testName = category.name;
+                testUuid = category.uuid;
+            }
+
+        } else {
+            // OLD SYSTEM: testId is a numeric test_id
+            console.log(`🔙 Searching by numeric test_id: ${testId}`);
+
+            sessions = await TestSession.findAll({
+                where: {
+                    user_id: userId,
+                    test_id: testId,
+                    status: 'completed',
+                    is_completed: true
+                },
+                attributes: [
+                    'id', 'completed_at', 'started_at',
+                    'calculated_score', 'total_questions',
+                    'total_correct', 'total_wrong', 'total_unanswered',
+                    'session_data'
+                ],
+                include: [{
+                    model: Test,
+                    as: 'test',
+                    attributes: ['id', 'title', 'uuid']
+                }],
+                order: [['completed_at', 'DESC']]
+            });
+
+            if (sessions.length > 0 && sessions[0].test) {
+                testName = sessions[0].test.title;
+                testUuid = sessions[0].test.uuid;
+            }
+        }
 
         if (sessions.length === 0) {
             return res.json({
@@ -293,7 +439,7 @@ router.get('/test/:testId/attempts', requireAuth, async (req, res) => {
                 message: 'No attempts found for this test',
                 data: {
                     testId: testId,
-                    testName: 'Unknown Test',
+                    testName: testName,
                     attempts: []
                 }
             });
@@ -333,8 +479,8 @@ router.get('/test/:testId/attempts', requireAuth, async (req, res) => {
             message: 'All attempts retrieved successfully',
             data: {
                 testId: testId,
-                testName: sessions[0].test?.title || 'Quiz Test',
-                testUuid: sessions[0].test?.uuid,
+                testName: testName,
+                testUuid: testUuid || testId,
                 totalAttempts: attempts.length,
                 attempts: attempts
             }

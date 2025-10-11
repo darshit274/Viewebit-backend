@@ -250,7 +250,12 @@ router.post('/submit', async (req, res) => {
             obtained_marks: obtainedMarks,
             negative_marks: negativeMarks,
             attempted_questions: answers.length,
-            accuracy: accuracy
+            accuracy: accuracy,
+            // IMPORTANT: Store the actual DynamicCategory UUID for test history grouping
+            session_data: {
+                category_uuid: testSeriesId, // This is the DynamicCategory UUID from frontend
+                submission_source: 'dynamic_category_quiz'
+            }
         });
 
         // Create leaderboard entry directly

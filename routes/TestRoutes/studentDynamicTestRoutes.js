@@ -325,9 +325,10 @@ router.get('/dynamic/categories/:uuid', optionalAuth, async (req, res) => {
         attributes: ['id', 'uuid', 'name', 'pricing_type', 'is_active']
       }],
       attributes: [
-        'id', 'uuid', 'test_series_id', 'parent_category_id', 'name', 'description', 
-        'name_gujarati', 'description_gujarati', 'node_type', 'hierarchy_level', 
-        'display_order', 'created_at', 'updated_at'
+        'id', 'uuid', 'test_series_id', 'parent_category_id', 'name', 'description',
+        'name_gujarati', 'description_gujarati', 'node_type', 'hierarchy_level',
+        'display_order', 'test_duration_minutes', 'negative_marking_enabled',
+        'negative_marks_per_wrong', 'created_at', 'updated_at'
       ]
     });
 
