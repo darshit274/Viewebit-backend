@@ -734,30 +734,51 @@ router.get('/dynamic/categories/:uuid/solutions', optionalAuth, async (req, res)
       type: Sequelize.QueryTypes.SELECT
     });
 
-    // Format solutions based on language preference
+    // Format solutions based on language preference with intelligent fallback
     const solutions = questions.map(question => {
+      // Helper function for smart language selection with fallback
+      const selectLanguage = (englishValue, gujaratiValue) => {
+        if (language === 'gujarati') {
+          // Prefer Gujarati, fallback to English if Gujarati not available
+          return gujaratiValue || englishValue || 'Content not available';
+        } else if (language === 'english') {
+          // Prefer English, fallback to Gujarati if English not available
+          return englishValue || gujaratiValue || 'Content not available';
+        } else if (language === 'both') {
+          // Return both if requested
+          return { english: englishValue, gujarati: gujaratiValue };
+        }
+        // Default: prefer English with fallback
+        return englishValue || gujaratiValue || 'Content not available';
+      };
+
       const formatted = {
         id: question.id,
         uuid: question.uuid,
-        question_text: language === 'gujarati' && question.question_text_gujarati 
-          ? question.question_text_gujarati 
-          : question.question_text,
+        question_text: selectLanguage(question.question_text, question.question_text_gujarati),
         correct_answer: question.correct_answer,
-        explanation: language === 'gujarati' && question.explanation_gujarati 
-          ? question.explanation_gujarati 
-          : question.explanation,
+        explanation: selectLanguage(question.explanation, question.explanation_gujarati),
         marks: question.marks,
         options: {}
       };
 
-      // Format options based on language
+      // Format options based on language with fallback
       ['A', 'B', 'C', 'D'].forEach(option => {
         const optionKey = `option_${option.toLowerCase()}`;
         const gujaratiKey = `${optionKey}_gujarati`;
-        formatted.options[option] = language === 'gujarati' && question[gujaratiKey]
-          ? question[gujaratiKey]
-          : question[optionKey];
+        formatted.options[option] = selectLanguage(question[optionKey], question[gujaratiKey]);
       });
+
+      // If language is 'both', include both language fields
+      if (language === 'both') {
+        formatted.question_text_gujarati = question.question_text_gujarati;
+        formatted.explanation_gujarati = question.explanation_gujarati;
+        ['A', 'B', 'C', 'D'].forEach(option => {
+          const optionKey = `option_${option.toLowerCase()}`;
+          const gujaratiKey = `${optionKey}_gujarati`;
+          formatted[`${optionKey}_gujarati`] = question[gujaratiKey];
+        });
+      }
 
       return formatted;
     });

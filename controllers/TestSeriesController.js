@@ -737,8 +737,11 @@ class TestSeriesController {
 
       // Build response with hierarchy paths and metadata
       const categoriesWithMetadata = await Promise.all(freeCategories.map(async (category) => {
-        // Simple breadcrumb without hierarchy lookup to avoid database hanging issues
-        const breadcrumb = category.name;
+        // Build breadcrumb: Series Name → Category Name
+        const breadcrumb = `${category.testSeries.name} → ${category.name}`;
+        const breadcrumbGujarati = category.testSeries.name_gujarati && category.name_gujarati
+          ? `${category.testSeries.name_gujarati} → ${category.name_gujarati}`
+          : breadcrumb;
 
         // Count actual questions for this category
         const questionsCount = await Question.count({
@@ -764,13 +767,22 @@ class TestSeriesController {
             price: category.testSeries.price,
             currency: category.testSeries.currency
           },
-          hierarchy_path: [{
-            uuid: category.uuid,
-            name: category.name,
-            name_gujarati: category.name_gujarati,
-            node_type: 'question_holder'
-          }],
-          breadcrumb: breadcrumb
+          hierarchy_path: [
+            {
+              uuid: category.testSeries.uuid,
+              name: category.testSeries.name,
+              name_gujarati: category.testSeries.name_gujarati,
+              node_type: 'test_series'
+            },
+            {
+              uuid: category.uuid,
+              name: category.name,
+              name_gujarati: category.name_gujarati,
+              node_type: 'question_holder'
+            }
+          ],
+          breadcrumb: breadcrumb,
+          breadcrumb_gujarati: breadcrumbGujarati
         };
       }));
 

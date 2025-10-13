@@ -13,7 +13,8 @@ router.post('/submit', async (req, res) => {
             testSeriesId, // This is actually the UUID from the frontend URL
             answers = [],
             totalTimeSpent = 120,
-            markedForReviewCount = 0
+            markedForReviewCount = 0,
+            totalQuestions: frontendTotalQuestions // Get actual total questions from frontend
         } = req.body;
 
         console.log('Quiz submission received:', {
@@ -21,18 +22,25 @@ router.post('/submit', async (req, res) => {
             testSeriesId,
             answersCount: answers.length,
             totalTimeSpent,
-            markedForReviewCount
+            markedForReviewCount,
+            frontendTotalQuestions
         });
 
         // Calculate score from answers
-        const totalQuestions = answers.length;
+        // IMPORTANT: totalQuestions should be the ACTUAL total, not just answered questions
+        const totalQuestions = frontendTotalQuestions || answers.length;
+        const answeredQuestions = answers.length;
         const correctAnswers = answers.filter(answer => answer.isCorrect).length;
-        const wrongAnswers = totalQuestions - correctAnswers;
+        // wrongAnswers = answered questions that are INCORRECT (not including unanswered)
+        const wrongAnswers = answeredQuestions - correctAnswers;
+        const unansweredQuestions = totalQuestions - answeredQuestions;
 
         console.log('🧮 QUIZ SCORE CALCULATION:', {
             totalQuestions,
+            answeredQuestions,
             correctAnswers,
-            wrongAnswers
+            wrongAnswers,
+            unansweredQuestions
         });
 
         // Find or create user
@@ -237,7 +245,7 @@ router.post('/submit', async (req, res) => {
             calculated_score: score,
             total_correct: correctAnswers,
             total_wrong: wrongAnswers,
-            total_unanswered: Math.max(0, totalQuestions - answers.length),
+            total_unanswered: unansweredQuestions,
             total_marked_for_review: markedForReviewCount,
             total_questions: totalQuestions,
             time_spent_seconds: totalTimeSpent,
@@ -249,7 +257,7 @@ router.post('/submit', async (req, res) => {
             total_marks: totalMarks,
             obtained_marks: obtainedMarks,
             negative_marks: negativeMarks,
-            attempted_questions: answers.length,
+            attempted_questions: answeredQuestions,
             accuracy: accuracy,
             // IMPORTANT: Store the actual DynamicCategory UUID for test history grouping
             session_data: {
@@ -270,7 +278,7 @@ router.post('/submit', async (req, res) => {
             total_questions: totalQuestions,
             correct_answers: correctAnswers,
             wrong_answers: wrongAnswers,
-            unanswered: 0,
+            unanswered: unansweredQuestions,
             time_taken_seconds: totalTimeSpent,
             rank: 1, // Will be recalculated
             percentile: 100, // Will be recalculated
@@ -287,8 +295,10 @@ router.post('/submit', async (req, res) => {
                 leaderboardEntryId: leaderboardEntry.id,
                 score: score,
                 totalQuestions: totalQuestions,
+                answeredQuestions: answeredQuestions,
                 correctAnswers: correctAnswers,
                 wrongAnswers: wrongAnswers,
+                unansweredQuestions: unansweredQuestions,
                 percentage: percentage,
                 // Alternative field names in case frontend uses different keys
                 finalPercentage: percentage,
