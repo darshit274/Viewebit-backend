@@ -225,7 +225,7 @@ router.get('/dynamic/test-series/:uuid', optionalAuth, async (req, res) => {
       order: [['display_order', 'ASC'], ['name', 'ASC']],
       attributes: [
         'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-        'node_type', 'hierarchy_level', 'display_order', 'created_at', 'updated_at'
+        'node_type', 'hierarchy_level', 'display_order', 'is_free_in_paid_series', 'created_at', 'updated_at'
       ]
     });
 
@@ -328,7 +328,7 @@ router.get('/dynamic/categories/:uuid', optionalAuth, async (req, res) => {
         'id', 'uuid', 'test_series_id', 'parent_category_id', 'name', 'description',
         'name_gujarati', 'description_gujarati', 'node_type', 'hierarchy_level',
         'display_order', 'test_duration_minutes', 'negative_marking_enabled',
-        'negative_marks_per_wrong', 'created_at', 'updated_at'
+        'negative_marks_per_wrong', 'is_free_in_paid_series', 'created_at', 'updated_at'
       ]
     });
 
@@ -374,7 +374,7 @@ router.get('/dynamic/categories/:uuid', optionalAuth, async (req, res) => {
       order: [['display_order', 'ASC'], ['name', 'ASC']],
       attributes: [
         'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
-        'node_type', 'hierarchy_level', 'display_order', 'created_at', 'updated_at'
+        'node_type', 'hierarchy_level', 'display_order', 'is_free_in_paid_series', 'created_at', 'updated_at'
       ]
     });
 

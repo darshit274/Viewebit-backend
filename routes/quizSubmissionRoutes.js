@@ -11,6 +11,7 @@ router.post('/submit', async (req, res) => {
         const {
             userId,
             testSeriesId, // This is actually the UUID from the frontend URL
+            categoryUuid, // ← ADDED: Actual test/category UUID for history
             answers = [],
             totalTimeSpent = 120,
             markedForReviewCount = 0,
@@ -20,6 +21,7 @@ router.post('/submit', async (req, res) => {
         console.log('Quiz submission received:', {
             userId,
             testSeriesId,
+            categoryUuid, // ← ADDED for debugging
             answersCount: answers.length,
             totalTimeSpent,
             markedForReviewCount,
@@ -261,7 +263,7 @@ router.post('/submit', async (req, res) => {
             accuracy: accuracy,
             // IMPORTANT: Store the actual DynamicCategory UUID for test history grouping
             session_data: {
-                category_uuid: testSeriesId, // This is the DynamicCategory UUID from frontend
+                category_uuid: categoryUuid || testSeriesId, // Use categoryUuid if provided, fallback to testSeriesId
                 submission_source: 'dynamic_category_quiz'
             }
         });
