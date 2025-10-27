@@ -32,9 +32,10 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: true
     },
     pricing_type: {
-      type: DataTypes.ENUM('free', 'paid'),
+      type: DataTypes.ENUM('free', 'paid', 'previous_years_question_papers'),
       defaultValue: 'free',
-      allowNull: false
+      allowNull: false,
+      comment: 'Type of test series: free, paid, or previous years question papers'
     },
     price: {
       type: DataTypes.DECIMAL(10, 2),

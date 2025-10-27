@@ -42,8 +42,8 @@ exports.authToken = async (req, res, next) => {
 
     // Add complete user info to request object
     req.user = {
-      id: user.uuid,       // Use UUID as ID since it's the primary key
-      uuid: user.uuid,     // User UUID (primary key) 
+      id: user.id,         // Integer ID for foreign key relations
+      uuid: user.uuid,     // User UUID (primary key)
       email: user.email,
       username: user.username,
       isEmailVerified: user.isEmailVerified

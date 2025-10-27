@@ -28,6 +28,11 @@ class TestSeriesController {
 
       if (pricing_type) {
         where.pricing_type = pricing_type;
+      } else {
+        // Exclude PYQs from default listing (show only free and paid)
+        where.pricing_type = {
+          [Op.ne]: 'previous_years_question_papers'
+        };
       }
 
       const { count, rows } = await TestSeries.findAndCountAll({
@@ -441,6 +446,150 @@ class TestSeriesController {
       res.status(500).json({
         success: false,
         message: 'Failed to retrieve free tests'
+      });
+    }
+  }
+
+  // Get Previous Years Question Papers (pricing_type = 'previous_years_question_papers')
+  static async getPreviousYearsTests(req, res) {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        search,
+        difficulty,
+        sort = 'newest',
+        is_featured
+      } = req.query;
+      const userId = req.user?.id;
+
+      const offset = (page - 1) * limit;
+      const where = {
+        is_active: true,
+        pricing_type: 'previous_years_question_papers' // Only PYQ tests
+      };
+
+      // Add search filter
+      if (search) {
+        where[Op.or] = [
+          { name: { [Op.like]: `%${search}%` } },
+          { name_gujarati: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+          { description_gujarati: { [Op.like]: `%${search}%` } }
+        ];
+      }
+
+      // Add difficulty filter if provided
+      if (difficulty && difficulty !== 'all') {
+        where.difficulty_level = difficulty;
+      }
+
+      // Add featured filter if provided
+      if (is_featured === 'true' || is_featured === true) {
+        where.is_featured = true;
+      }
+
+      // Set up sorting
+      let order = [['created_at', 'DESC']]; // default newest
+      switch (sort) {
+        case 'oldest':
+          order = [['created_at', 'ASC']];
+          break;
+        case 'popular':
+          order = [['is_featured', 'DESC'], ['created_at', 'DESC']];
+          break;
+        case 'easy':
+          order = [
+            [Sequelize.literal("CASE WHEN difficulty_level = 'beginner' THEN 1 WHEN difficulty_level = 'intermediate' THEN 2 ELSE 3 END"), 'ASC'],
+            ['created_at', 'DESC']
+          ];
+          break;
+        case 'hard':
+          order = [
+            [Sequelize.literal("CASE WHEN difficulty_level = 'advanced' THEN 1 WHEN difficulty_level = 'intermediate' THEN 2 ELSE 3 END"), 'ASC'],
+            ['created_at', 'DESC']
+          ];
+          break;
+      }
+
+      const { count, rows: pyqTests } = await TestSeries.findAndCountAll({
+        where,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        order,
+        attributes: [
+          'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
+          'is_active', 'pricing_type', 'price', 'currency',
+          'discount_percentage', 'is_featured',
+          'difficulty_level', 'created_at', 'updated_at'
+        ]
+      });
+
+      // Transform data to match frontend expectations
+      const transformedTests = await Promise.all(
+        pyqTests.map(async (test) => {
+          // Count categories/tests for this PYQ series
+          const categoriesCount = await Category.count({
+            where: {
+              test_series_id: test.id,
+              is_active: true
+            }
+          });
+
+          // Count total questions
+          const questionsCount = await Question.count({
+            include: [{
+              model: Category,
+              as: 'category',
+              where: {
+                test_series_id: test.id,
+                is_active: true
+              },
+              required: true
+            }]
+          });
+
+          return {
+            id: test.id,
+            uuid: test.uuid,
+            title: test.name,
+            name: test.name,
+            description: test.description,
+            name_gujarati: test.name_gujarati,
+            description_gujarati: test.description_gujarati,
+            difficulty_level: test.difficulty_level || 'intermediate',
+            total_tests: categoriesCount,
+            total_questions: questionsCount || 0,
+            estimated_duration: 120, // Default 2 hours for PYQ papers
+            is_active: test.is_active,
+            is_featured: test.is_featured,
+            hasAccess: true, // PYQs are free to access
+            created_at: test.created_at,
+            updated_at: test.updated_at
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        message: 'Previous years question papers retrieved successfully',
+        data: {
+          tests: transformedTests,
+          pagination: {
+            currentPage: parseInt(page),
+            totalPages: Math.ceil(count / limit),
+            totalItems: count,
+            itemsPerPage: parseInt(limit),
+            hasMore: count > (page * limit)
+          }
+        }
+      });
+
+    } catch (error) {
+      console.error('Get previous years tests error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve previous years question papers'
       });
     }
   }

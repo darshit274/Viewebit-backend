@@ -38,6 +38,9 @@ router.get('/featured', optionalAuth, TestSeriesController.getFeaturedTestSeries
 // Free tests endpoint
 router.get('/free', optionalAuth, TestSeriesController.getFreeTests);
 
+// Previous Years Question Papers endpoint
+router.get('/previous-years', optionalAuth, TestSeriesController.getPreviousYearsTests);
+
 // Free in Paid Series endpoints (order matters: specific routes before parameterized routes)
 router.get('/free-in-paid/all', optionalAuth, TestSeriesController.getAllFreeInPaidCategories);
 router.get('/free-in-paid', optionalAuth, TestSeriesController.getFreeInPaidSeries);

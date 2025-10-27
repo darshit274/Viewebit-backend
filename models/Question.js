@@ -131,6 +131,14 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'question_id',
       as: 'userAnswers'
     });
+
+    // Question reports for this question
+    if (models.QuestionReport) {
+      Question.hasMany(models.QuestionReport, {
+        foreignKey: 'question_id',
+        as: 'reports'
+      });
+    }
   };
 
   return Question;

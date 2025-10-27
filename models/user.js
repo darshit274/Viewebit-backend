@@ -51,10 +51,29 @@ module.exports = (sequelize, DataTypes) => {
           as: 'leaderboardEntries'
         });
       }
+
+      // Question reports submitted by this user
+      if (models.QuestionReport) {
+        User.hasMany(models.QuestionReport, {
+          foreignKey: 'user_id',
+          as: 'submittedReports'
+        });
+
+        // Question reports reviewed by this user (admin)
+        User.hasMany(models.QuestionReport, {
+          foreignKey: 'reviewed_by',
+          as: 'reviewedReports'
+        });
+      }
     }
   }
 
   User.init({
+    id: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      unique: true
+    },
     uuid: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
