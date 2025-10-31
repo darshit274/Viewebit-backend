@@ -120,7 +120,8 @@ router.post('/submit', async (req, res) => {
 
         let negativeMarks = 0;
         let finalScore = obtainedMarks;
-        let percentage = totalMarks > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+        // Accuracy/Percentage = (correct answers / attempted questions) × 100
+        let percentage = answeredQuestions > 0 ? Math.round((correctAnswers / answeredQuestions) * 100) : 0;
 
         // NEW: Apply category-level negative marking logic
         if (wrongAnswers > 0) {
@@ -166,7 +167,8 @@ router.post('/submit', async (req, res) => {
 
             negativeMarks = totalNegativeMarks;
             finalScore = Math.max(0, obtainedMarks - negativeMarks);
-            percentage = totalQuestions > 0 ? Math.round((finalScore / totalQuestions) * 100) : 0;
+            // Percentage stays the same - it's based on correct/attempted, not final score
+            // percentage is already calculated above as (correctAnswers / answeredQuestions) × 100
 
             console.log('✅ CATEGORY-LEVEL NEGATIVE MARKING APPLIED:', {
                 obtainedMarks,
@@ -199,8 +201,9 @@ router.post('/submit', async (req, res) => {
             }
         }
 
-        // Calculate accuracy: (obtained marks / attempted marks) × 100
-        const accuracy = attemptedMarks > 0 ? Math.round((finalScore / attemptedMarks) * 100) : 0;
+        // Calculate accuracy: (correct answers / attempted questions) × 100
+        // This is the same as percentage - both represent accuracy
+        const accuracy = percentage;
 
         // ALWAYS create a NEW category for this specific test series to ensure isolation
         const category = await Category.create({
@@ -324,10 +327,11 @@ router.post('/submit', async (req, res) => {
                     obtainedMarks,
                     negativeMarks,
                     finalScore,
-                    percentageCalculation: `(${finalScore}/${totalQuestions}) * 100 = ${percentage}%`,
-                    correctAnswersOnly: `(${correctAnswers}/${totalQuestions}) * 100 = ${Math.round((correctAnswers/totalQuestions)*100)}%`,
+                    accuracyCalculation: `Accuracy = (${correctAnswers}/${answeredQuestions}) × 100 = ${percentage}%`,
+                    scoreCalculation: `Score = (1 × ${correctAnswers}) - (0.25 × ${wrongAnswers}) = ${correctAnswers} - ${negativeMarks.toFixed(2)} = ${finalScore}`,
+                    wrongAnswersCalculation: `Wrong = Attempted - Correct = ${answeredQuestions} - ${correctAnswers} = ${wrongAnswers}`,
                     marksCalculation: `Total Marks: ${totalMarks}, Obtained: ${obtainedMarks}, After Negative: ${finalScore}`,
-                    warning: "Frontend should use 'percentage' field, not calculate (correctAnswers/totalQuestions)*100"
+                    warning: "Frontend should use 'percentage', 'wrongAnswers', and 'finalScore' fields from backend"
                 }
             }
         });

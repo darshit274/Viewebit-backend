@@ -766,33 +766,44 @@ const parseImportFile = async (filepath, fileType) => {
     }
 };
 
+// Helper function to convert line breaks from Excel to HTML <br> tags
+const convertLineBreaksToHTML = (text) => {
+    if (!text || typeof text !== 'string') {
+        return text;
+    }
+    // Replace \r\n (Windows) or \n (Unix) with <br> tags
+    // This makes bulk imported questions consistent with manually entered questions (HTML editor)
+    return text.replace(/\r?\n/g, '<br>');
+};
+
 // Helper function to validate import data
 const validateImportData = async (data, categoryId) => {
     const validQuestions = [];
     const errors = [];
-    
+
     console.log(`🔍 Validating ${data.length} rows...`);
-    
+
     for (let i = 0; i < data.length; i++) {
         const row = data[i];
         const rowNumber = i + 2; // Excel row number (accounting for header)
-        
+
         try {
-            // Required fields mapping
+            // Required fields mapping - Convert line breaks to HTML <br> tags
+            // This ensures bulk imported questions display the same as manually entered questions
             const questionData = {
-                question_text: row['Question Text (English)'],
-                question_text_gujarati: row['Question Text (Gujarati)'] || null,
-                option_a: row['Option A (English)'],
-                option_a_gujarati: row['Option A (Gujarati)'] || null,
-                option_b: row['Option B (English)'],
-                option_b_gujarati: row['Option B (Gujarati)'] || null,
-                option_c: row['Option C (English)'],
-                option_c_gujarati: row['Option C (Gujarati)'] || null,
-                option_d: row['Option D (English)'],
-                option_d_gujarati: row['Option D (Gujarati)'] || null,
+                question_text: convertLineBreaksToHTML(row['Question Text (English)']),
+                question_text_gujarati: convertLineBreaksToHTML(row['Question Text (Gujarati)']) || null,
+                option_a: convertLineBreaksToHTML(row['Option A (English)']),
+                option_a_gujarati: convertLineBreaksToHTML(row['Option A (Gujarati)']) || null,
+                option_b: convertLineBreaksToHTML(row['Option B (English)']),
+                option_b_gujarati: convertLineBreaksToHTML(row['Option B (Gujarati)']) || null,
+                option_c: convertLineBreaksToHTML(row['Option C (English)']),
+                option_c_gujarati: convertLineBreaksToHTML(row['Option C (Gujarati)']) || null,
+                option_d: convertLineBreaksToHTML(row['Option D (English)']),
+                option_d_gujarati: convertLineBreaksToHTML(row['Option D (Gujarati)']) || null,
                 correct_answer: row['Correct Answer'],
-                explanation: row['Explanation (English)'] || null,
-                explanation_gujarati: row['Explanation (Gujarati)'] || null,
+                explanation: convertLineBreaksToHTML(row['Explanation (English)']) || null,
+                explanation_gujarati: convertLineBreaksToHTML(row['Explanation (Gujarati)']) || null,
                 marks: parseInt(row['Marks']) || 1,
                 category_id: parseInt(categoryId),
                 is_active: true

@@ -201,9 +201,10 @@ router.get('/', requireAuth, async (req, res) => {
                 };
             }
 
-            // Calculate percentage for this session
-            const percentage = session.total_questions > 0
-                ? Math.round((session.calculated_score / session.total_questions) * 100)
+            // ✅ Calculate accuracy correctly: (correct / attempted) × 100
+            const attempted = session.total_correct + session.total_wrong;
+            const percentage = attempted > 0
+                ? Math.round((session.total_correct / attempted) * 100)
                 : 0;
 
             // Add this session to attempts
@@ -455,8 +456,9 @@ router.get('/test/:testId/attempts', requireAuth, async (req, res) => {
             const seconds = timeSpentSeconds % 60;
 
             const attempted = session.total_correct + session.total_wrong;
-            const percentage = session.total_questions > 0
-                ? Math.round((session.calculated_score / session.total_questions) * 100)
+            // ✅ Calculate accuracy correctly: (correct / attempted) × 100
+            const percentage = attempted > 0
+                ? Math.round((session.total_correct / attempted) * 100)
                 : 0;
 
             return {
@@ -537,10 +539,13 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
         // Calculate attempted questions
         const attempted = session.total_correct + session.total_wrong;
 
-        // Calculate percentage
-        const percentage = session.total_questions > 0
-            ? Math.round((session.calculated_score / session.total_questions) * 100)
+        // ✅ CORRECT FORMULA: Accuracy = (correct / attempted) × 100
+        const accuracy = attempted > 0
+            ? Math.round((session.total_correct / attempted) * 100)
             : 0;
+
+        // Calculate negative marks
+        const negativeMarks = session.total_wrong * 0.25;
 
         // Return detailed result
         res.json({
@@ -553,19 +558,19 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
                 testUuid: session.test?.uuid,
                 categoryName: 'General', // Default value
                 completedAt: session.completed_at,
-                totalQuestions: session.total_questions || 0,
-                attempted: attempted,
-                correct: session.total_correct || 0,
-                wrong: session.total_wrong || 0,
-                notAttempted: session.total_unanswered || 0,
-                markedForReview: session.total_marked_for_review || 0,
-                totalMarks: session.total_questions || 0, // Assuming 1 mark per question
-                obtainedMarks: session.calculated_score || 0,
-                negativeMarks: 0, // Default value
-                finalScore: parseFloat(session.calculated_score || 0),
-                percentage: percentage,
-                accuracy: percentage, // Using percentage as accuracy for now
-                timeSpent: timeSpentSeconds
+                totalQuestions: parseInt(session.total_questions) || 0,
+                attempted: parseInt(attempted),
+                correct: parseInt(session.total_correct) || 0,
+                wrong: parseInt(session.total_wrong) || 0,
+                notAttempted: parseInt(session.total_unanswered) || 0,
+                markedForReview: parseInt(session.total_marked_for_review) || 0,
+                totalMarks: parseInt(session.total_questions) || 0, // Assuming 1 mark per question
+                obtainedMarks: parseFloat(session.calculated_score) || 0,
+                negativeMarks: parseFloat(negativeMarks.toFixed(2)),
+                finalScore: parseFloat(session.calculated_score) || 0,
+                percentage: parseInt(accuracy), // ✅ Now using correct accuracy value
+                accuracy: parseInt(accuracy), // ✅ Accuracy = (correct/attempted) × 100
+                timeSpent: parseInt(timeSpentSeconds)
             }
         });
 
