@@ -89,6 +89,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
       allowNull: false
+    },
+    validity_days: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 365,
+      comment: 'Number of days the course is valid after purchase'
     }
   }, {
     tableName: 'new_test_series',

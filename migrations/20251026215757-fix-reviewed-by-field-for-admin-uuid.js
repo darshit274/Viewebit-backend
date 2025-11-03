@@ -3,11 +3,15 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // First, remove the foreign key constraint (ibfk_3 based on error message)
-    await queryInterface.removeConstraint(
-      'question_reports',
-      'question_reports_ibfk_3'
-    );
+    // Try to remove the foreign key constraint if it exists
+    try {
+      await queryInterface.removeConstraint(
+        'question_reports',
+        'question_reports_ibfk_3'
+      );
+    } catch (error) {
+      console.log('Constraint question_reports_ibfk_3 does not exist, skipping removal');
+    }
 
     // Change the column type from INTEGER to VARCHAR to support Admin UUIDs
     await queryInterface.changeColumn('question_reports', 'reviewed_by', {

@@ -14,6 +14,89 @@ const {
 const AuthToken = require('../../utils/AuthToken');
 const { checkUserTestSeriesAccess } = require('../SubscriptionRoutes/subscriptionAccess');
 
+// =====================================================
+// HELPER FUNCTIONS FOR RECURSIVE OPERATIONS
+// =====================================================
+
+/**
+ * Recursively get all descendant category IDs for a given category
+ * This replaces WITH RECURSIVE CTE queries that db4free.net cannot handle
+ * @param {number} categoryId - The parent category ID
+ * @returns {Promise<number[]>} Array of all category IDs (including the parent)
+ */
+async function getAllDescendantCategoryIds(categoryId) {
+  const categoryIds = [categoryId];
+  const queue = [categoryId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+
+    // Find all direct children
+    const children = await Category.findAll({
+      where: {
+        parent_category_id: currentId,
+        is_active: true
+      },
+      attributes: ['id']
+    });
+
+    // Add children to queue and result array
+    for (const child of children) {
+      categoryIds.push(child.id);
+      queue.push(child.id);
+    }
+  }
+
+  return categoryIds;
+}
+
+/**
+ * Count total questions across a category and all its descendants
+ * @param {number} categoryId - The category ID to count questions for
+ * @returns {Promise<number>} Total question count
+ */
+async function countQuestionsRecursive(categoryId) {
+  const categoryIds = await getAllDescendantCategoryIds(categoryId);
+
+  const count = await Question.count({
+    where: {
+      category_id: { [Sequelize.Op.in]: categoryIds },
+      is_active: true
+    }
+  });
+
+  return count;
+}
+
+/**
+ * Get all questions from a category and its descendants
+ * @param {number} categoryId - The category ID
+ * @param {boolean} shuffle - Whether to shuffle the results
+ * @returns {Promise<Array>} Array of questions
+ */
+async function getQuestionsRecursive(categoryId, shuffle = false) {
+  const categoryIds = await getAllDescendantCategoryIds(categoryId);
+
+  const questions = await Question.findAll({
+    where: {
+      category_id: { [Sequelize.Op.in]: categoryIds },
+      is_active: true
+    },
+    order: shuffle
+      ? sequelize.random()
+      : [['question_order', 'ASC'], ['id', 'ASC']],
+    attributes: [
+      'id', 'uuid', 'question_text', 'question_text_gujarati',
+      'option_a', 'option_a_gujarati', 'option_b', 'option_b_gujarati',
+      'option_c', 'option_c_gujarati', 'option_d', 'option_d_gujarati',
+      'correct_answer', 'explanation', 'explanation_gujarati', 'marks',
+      'question_order', 'category_id'
+    ]
+  });
+
+  return questions.map(q => q.toJSON());
+}
+
 // Middleware for optional authentication
 const optionalAuth = async (req, res, next) => {
   try {
@@ -240,35 +323,21 @@ router.get('/dynamic/test-series/:uuid', optionalAuth, async (req, res) => {
         });
 
         const questions_count = await Question.count({
-          where: { 
+          where: {
             category_id: category.id,
-            is_active: true 
+            is_active: true
           }
         });
 
         // Count total questions recursively (including subcategories)
-        const totalQuestions = await sequelize.query(`
-          WITH RECURSIVE category_tree AS (
-            SELECT id, parent_category_id FROM categories WHERE id = ?
-            UNION ALL
-            SELECT c.id, c.parent_category_id 
-            FROM categories c
-            INNER JOIN category_tree ct ON c.parent_category_id = ct.id
-          )
-          SELECT COUNT(q.id) as total
-          FROM questions q
-          INNER JOIN category_tree ct ON q.category_id = ct.id
-          WHERE q.is_active = true
-        `, {
-          replacements: [category.id],
-          type: Sequelize.QueryTypes.SELECT
-        });
+        // Using JavaScript recursion instead of WITH RECURSIVE to avoid db4free.net temp table errors
+        const total_questions_count = await countQuestionsRecursive(category.id);
 
         return {
           ...category.toJSON(),
           subcategories_count,
           questions_count,
-          total_questions_count: totalQuestions[0]?.total || 0,
+          total_questions_count,
           has_subcategories: subcategories_count > 0,
           has_questions: questions_count > 0,
         };
@@ -390,31 +459,14 @@ router.get('/dynamic/categories/:uuid', optionalAuth, async (req, res) => {
           });
 
           // Count total questions recursively (including all descendant categories)
-          const totalQuestionsRecursive = await sequelize.query(`
-            WITH RECURSIVE category_tree AS (
-              SELECT id, parent_category_id FROM categories WHERE id = ?
-              UNION ALL
-              SELECT c.id, c.parent_category_id 
-              FROM categories c
-              INNER JOIN category_tree ct ON c.parent_category_id = ct.id
-              WHERE c.is_active = true
-            )
-            SELECT COUNT(q.id) as total
-            FROM questions q
-            INNER JOIN category_tree ct ON q.category_id = ct.id
-            WHERE q.is_active = true
-          `, {
-            replacements: [subcat.id],
-            type: Sequelize.QueryTypes.SELECT
-          });
-
-          const total_questions_recursive = totalQuestionsRecursive[0]?.total || 0;
+          // Using JavaScript recursion instead of WITH RECURSIVE to avoid db4free.net temp table errors
+          const total_questions_recursive = await countQuestionsRecursive(subcat.id);
 
           return {
             ...subcat.toJSON(),
             subcategories_count,
             questions_count,
-            total_questions_recursive: parseInt(total_questions_recursive),
+            total_questions_recursive,
             has_subcategories: subcategories_count > 0,
             has_questions: questions_count > 0,
             has_questions_recursive: total_questions_recursive > 0,
@@ -445,25 +497,8 @@ router.get('/dynamic/categories/:uuid', optionalAuth, async (req, res) => {
     }
 
     // Calculate total questions in this category recursively
-    const totalQuestionsInCategory = await sequelize.query(`
-      WITH RECURSIVE category_tree AS (
-        SELECT id, parent_category_id FROM categories WHERE id = ?
-        UNION ALL
-        SELECT c.id, c.parent_category_id 
-        FROM categories c
-        INNER JOIN category_tree ct ON c.parent_category_id = ct.id
-        WHERE c.is_active = true
-      )
-      SELECT COUNT(q.id) as total
-      FROM questions q
-      INNER JOIN category_tree ct ON q.category_id = ct.id
-      WHERE q.is_active = true
-    `, {
-      replacements: [category.id],
-      type: Sequelize.QueryTypes.SELECT
-    });
-
-    const total_questions_recursive = parseInt(totalQuestionsInCategory[0]?.total || 0);
+    // Using JavaScript recursion instead of WITH RECURSIVE to avoid db4free.net temp table errors
+    const total_questions_recursive = await countQuestionsRecursive(category.id);
 
     // Check subscription
     let is_subscribed = false;
@@ -565,35 +600,8 @@ router.get('/dynamic/categories/:uuid/questions', optionalAuth, async (req, res)
     }
 
     // Get all questions from this category and all its descendant categories recursively
-    let questionsQuery = `
-      WITH RECURSIVE category_tree AS (
-        SELECT id, parent_category_id FROM categories WHERE id = ?
-        UNION ALL
-        SELECT c.id, c.parent_category_id
-        FROM categories c
-        INNER JOIN category_tree ct ON c.parent_category_id = ct.id
-        WHERE c.is_active = true
-      )
-      SELECT q.id, q.uuid, q.question_text, q.question_text_gujarati,
-             q.option_a, q.option_a_gujarati, q.option_b, q.option_b_gujarati,
-             q.option_c, q.option_c_gujarati, q.option_d, q.option_d_gujarati,
-             q.correct_answer, q.explanation, q.explanation_gujarati, q.marks,
-             q.question_order, q.category_id
-      FROM questions q
-      INNER JOIN category_tree ct ON q.category_id = ct.id
-      WHERE q.is_active = true
-    `;
-
-    if (shuffle === 'true') {
-      questionsQuery += ' ORDER BY RAND()';
-    } else {
-      questionsQuery += ' ORDER BY q.question_order ASC, q.id ASC';
-    }
-
-    const questions = await sequelize.query(questionsQuery, {
-      replacements: [category.id],
-      type: Sequelize.QueryTypes.SELECT
-    });
+    // Using JavaScript recursion instead of WITH RECURSIVE to avoid db4free.net temp table errors
+    const questions = await getQuestionsRecursive(category.id, shuffle === 'true');
 
     // Format questions to include both languages for smart frontend selection
     const formattedQuestions = questions.map(question => {
@@ -709,30 +717,8 @@ router.get('/dynamic/categories/:uuid/solutions', optionalAuth, async (req, res)
     }
 
     // Get all questions from this category and all its descendant categories recursively
-    const questionsQuery = `
-      WITH RECURSIVE category_tree AS (
-        SELECT id, parent_category_id FROM categories WHERE id = ?
-        UNION ALL
-        SELECT c.id, c.parent_category_id
-        FROM categories c
-        INNER JOIN category_tree ct ON c.parent_category_id = ct.id
-        WHERE c.is_active = true
-      )
-      SELECT q.id, q.uuid, q.question_text, q.question_text_gujarati,
-             q.option_a, q.option_a_gujarati, q.option_b, q.option_b_gujarati,
-             q.option_c, q.option_c_gujarati, q.option_d, q.option_d_gujarati,
-             q.correct_answer, q.explanation, q.explanation_gujarati, q.marks,
-             q.question_order
-      FROM questions q
-      INNER JOIN category_tree ct ON q.category_id = ct.id
-      WHERE q.is_active = true
-      ORDER BY q.question_order ASC, q.id ASC
-    `;
-
-    const questions = await sequelize.query(questionsQuery, {
-      replacements: [category.id],
-      type: Sequelize.QueryTypes.SELECT
-    });
+    // Using JavaScript recursion instead of WITH RECURSIVE to avoid db4free.net temp table errors
+    const questions = await getQuestionsRecursive(category.id, false);
 
     // Format solutions based on language preference with intelligent fallback
     const solutions = questions.map(question => {

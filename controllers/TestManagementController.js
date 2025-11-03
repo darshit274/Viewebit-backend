@@ -308,7 +308,7 @@ class TestManagementController {
         attributes: [
           'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 'is_active', 'created_at', 'updated_at',
           'pricing_type', 'price', 'currency',
-          'features', 'discount_percentage', 'is_featured', 'has_negative_marking', 'negative_marks'
+          'features', 'discount_percentage', 'is_featured', 'has_negative_marking', 'negative_marks', 'validity_days'
         ],
         where,
         order: [[sortBy, sortOrder]],
@@ -358,6 +358,7 @@ class TestManagementController {
           is_featured: series.is_featured,
           has_negative_marking: series.has_negative_marking,
           negative_marks: series.negative_marks,
+          validity_days: series.validity_days,
           created_at: series.created_at,
           updated_at: series.updated_at,
           categories_count: series.categories ? series.categories.length : 0
@@ -394,11 +395,11 @@ class TestManagementController {
       const testSeries = await TestSeries.findOne({
         where: { uuid },
         attributes: [
-          'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 
-          'is_active', 'created_at', 'updated_at', 'pricing_type', 'price', 'currency', 
-          'features', 'discount_percentage', 
-          'is_featured', 'difficulty_level', 'free_test_count', 'max_attempts_per_test', 
-          'has_negative_marking', 'negative_marks', 'supports_pause_resume', 'supports_multilanguage'
+          'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati',
+          'is_active', 'created_at', 'updated_at', 'pricing_type', 'price', 'currency',
+          'features', 'discount_percentage',
+          'is_featured', 'difficulty_level', 'free_test_count', 'max_attempts_per_test',
+          'has_negative_marking', 'negative_marks', 'supports_pause_resume', 'supports_multilanguage', 'validity_days'
         ]
       });
 
@@ -425,8 +426,8 @@ class TestManagementController {
   // Create new test series
   async createTestSeries(req, res) {
     try {
-      const { 
-        title, 
+      const {
+        title,
         description,
         title_gujarati,
         description_gujarati,
@@ -444,7 +445,8 @@ class TestManagementController {
         negative_marking_value,
         one_time_completion,
         max_attempts,
-        auto_submit_on_expire
+        auto_submit_on_expire,
+        validity_days
       } = req.body;
 
       const testSeries = await TestSeries.create({
@@ -465,7 +467,8 @@ class TestManagementController {
         max_attempts_per_test: max_attempts || 1, // Use existing field name
         // Negative marking removed from test series level - now handled at category level
         supports_pause_resume: true,
-        supports_multilanguage: true
+        supports_multilanguage: true,
+        validity_days: validity_days || 365 // Default to 365 days (1 year)
       });
 
       // Transform response to match frontend expectations
@@ -493,6 +496,7 @@ class TestManagementController {
           one_time_completion: testSeries.one_time_completion,
           max_attempts: testSeries.max_attempts,
           auto_submit_on_expire: testSeries.auto_submit_on_expire,
+          validity_days: testSeries.validity_days,
           created_at: testSeries.created_at,
           updated_at: testSeries.updated_at
         },
@@ -583,10 +587,10 @@ class TestManagementController {
   async updateTestSeries(req, res) {
     try {
       const { uuid } = req.params;
-      const { 
-        title, 
-        description, 
-        title_gujarati, 
+      const {
+        title,
+        description,
+        title_gujarati,
         description_gujarati,
         is_active,
         pricing_type,
@@ -594,7 +598,8 @@ class TestManagementController {
         currency,
         features,
         discount_percentage,
-        is_featured
+        is_featured,
+        validity_days
       } = req.body;
 
       const testSeries = await TestSeries.findOne({ 
@@ -622,6 +627,7 @@ class TestManagementController {
       if (features !== undefined) updateData.features = features;
       if (discount_percentage !== undefined) updateData.discount_percentage = discount_percentage;
       if (is_featured !== undefined) updateData.is_featured = is_featured;
+      if (validity_days !== undefined) updateData.validity_days = validity_days;
       // Negative marking fields removed - now handled at category level
 
       await testSeries.update(updateData);
@@ -643,6 +649,7 @@ class TestManagementController {
         is_featured: testSeries.is_featured,
         has_negative_marking: testSeries.has_negative_marking,
         negative_marks: testSeries.negative_marks,
+        validity_days: testSeries.validity_days,
         created_at: testSeries.created_at,
         updated_at: testSeries.updated_at
       };
@@ -2268,12 +2275,39 @@ class TestManagementController {
         explanation_gujarati
       } = req.body;
 
-      // Validate required fields
-      if (!question_text?.trim() || !option_a?.trim() || !option_b?.trim() || 
-          !option_c?.trim() || !option_d?.trim() || !correct_answer) {
+      // Smart validation: Check if we have content in at least one language
+      const hasEnglishQuestion = question_text?.trim();
+      const hasGujaratiQuestion = question_text_gujarati?.trim();
+
+      if (!hasEnglishQuestion && !hasGujaratiQuestion) {
         return res.status(400).json({
           success: false,
-          message: 'All question fields are required'
+          message: 'Question text is required in English or Gujarati or both'
+        });
+      }
+
+      // Validate options - at least one language required for each option
+      const optionPairs = [
+        { en: option_a?.trim(), gu: option_a_gujarati?.trim(), label: 'Option A' },
+        { en: option_b?.trim(), gu: option_b_gujarati?.trim(), label: 'Option B' },
+        { en: option_c?.trim(), gu: option_c_gujarati?.trim(), label: 'Option C' },
+        { en: option_d?.trim(), gu: option_d_gujarati?.trim(), label: 'Option D' }
+      ];
+
+      for (const pair of optionPairs) {
+        if (!pair.en && !pair.gu) {
+          return res.status(400).json({
+            success: false,
+            message: `${pair.label} is required in English or Gujarati or both`
+          });
+        }
+      }
+
+      // Validate correct answer
+      if (!correct_answer) {
+        return res.status(400).json({
+          success: false,
+          message: 'Correct answer is required'
         });
       }
 
@@ -2362,12 +2396,39 @@ class TestManagementController {
         explanation_gujarati
       } = req.body;
 
-      // Validate required fields
-      if (!question_text?.trim() || !option_a?.trim() || !option_b?.trim() || 
-          !option_c?.trim() || !option_d?.trim() || !correct_answer) {
+      // Smart validation: Check if we have content in at least one language
+      const hasEnglishQuestion = question_text?.trim();
+      const hasGujaratiQuestion = question_text_gujarati?.trim();
+
+      if (!hasEnglishQuestion && !hasGujaratiQuestion) {
         return res.status(400).json({
           success: false,
-          message: 'All question fields are required'
+          message: 'Question text is required in English or Gujarati or both'
+        });
+      }
+
+      // Validate options - at least one language required for each option
+      const optionPairs = [
+        { en: option_a?.trim(), gu: option_a_gujarati?.trim(), label: 'Option A' },
+        { en: option_b?.trim(), gu: option_b_gujarati?.trim(), label: 'Option B' },
+        { en: option_c?.trim(), gu: option_c_gujarati?.trim(), label: 'Option C' },
+        { en: option_d?.trim(), gu: option_d_gujarati?.trim(), label: 'Option D' }
+      ];
+
+      for (const pair of optionPairs) {
+        if (!pair.en && !pair.gu) {
+          return res.status(400).json({
+            success: false,
+            message: `${pair.label} is required in English or Gujarati or both`
+          });
+        }
+      }
+
+      // Validate correct answer
+      if (!correct_answer) {
+        return res.status(400).json({
+          success: false,
+          message: 'Correct answer is required'
         });
       }
 
