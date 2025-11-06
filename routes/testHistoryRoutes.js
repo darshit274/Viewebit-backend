@@ -207,6 +207,14 @@ router.get('/', requireAuth, async (req, res) => {
                 ? Math.round((session.total_correct / attempted) * 100)
                 : 0;
 
+            // Calculate time taken for this session
+            const timeSpentSeconds = session.started_at && session.completed_at
+                ? Math.floor((new Date(session.completed_at) - new Date(session.started_at)) / 1000)
+                : 0;
+            const minutes = Math.floor(timeSpentSeconds / 60);
+            const seconds = timeSpentSeconds % 60;
+            const timeTaken = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
             // Add this session to attempts
             groupedTests[groupKey].attempts.push({
                 sessionId: session.id,
@@ -232,7 +240,8 @@ router.get('/', requireAuth, async (req, res) => {
                     score: parseFloat(session.calculated_score || 0),
                     percentage: percentage,
                     totalQuestions: session.total_questions,
-                    attempted: session.total_correct + session.total_wrong
+                    attempted: session.total_correct + session.total_wrong,
+                    timeTaken: timeTaken
                 };
             }
 
@@ -288,8 +297,8 @@ router.get('/', requireAuth, async (req, res) => {
             // Additional info
             totalQuestions: test.latestAttempt.totalQuestions,
             attempted: test.latestAttempt.attempted,
-            // Timing (calculated on detail page)
-            timeTaken: '0:00'
+            // Timing
+            timeTaken: test.latestAttempt.timeTaken
         }));
 
         res.json({
