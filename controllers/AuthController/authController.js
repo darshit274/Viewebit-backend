@@ -104,8 +104,10 @@ exports.register = async (req, res, next) => {
         });
 
     } catch (err) {
+        console.error('Registration error:', err);
+        console.error('Registration error stack:', err.stack);
         const error = new ErrorHandler(
-            'Error while Register User', 500
+            'Error while Register User: ' + err.message, 500
         );
         return next(error);
     }
