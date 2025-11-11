@@ -15,7 +15,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false
     },
-    parent_category_id: {
+    parent_id: {
       type: DataTypes.INTEGER,
       allowNull: true,
       comment: 'Self-referencing for hierarchy - null for root categories'
@@ -121,63 +121,19 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     }
   }, {
-    tableName: 'dynamic_categories',
+    tableName: 'hierarchy_categories',
     underscored: true,
     timestamps: true,
     hooks: {
       // Before create, set hierarchy level based on parent
       beforeCreate: async (category, options) => {
-        if (category.parent_category_id) {
-          const parent = await DynamicCategory.findByPk(category.parent_category_id);
+        if (category.parent_id) {
+          const parent = await DynamicCategory.findByPk(category.parent_id);
           if (parent) {
             category.hierarchy_level = parent.hierarchy_level + 1;
           }
         } else {
           category.hierarchy_level = 0; // Root level
-        }
-      },
-
-      // After create, update parent's subcategories count
-      afterCreate: async (category, options) => {
-        if (category.parent_category_id) {
-          await DynamicCategory.increment(
-            { subcategories_count: 1, has_subcategories: true },
-            { where: { id: category.parent_category_id } }
-          );
-          
-          // Update parent node type to container if it was unset
-          const parent = await DynamicCategory.findByPk(category.parent_category_id);
-          if (parent && parent.node_type === 'unset') {
-            await parent.update({ 
-              node_type: 'container',
-              has_subcategories: true 
-            });
-          }
-
-          // Update total questions count up the hierarchy
-          await DynamicCategory.updateTotalQuestionsCount(category.parent_category_id);
-        }
-      },
-
-      // After destroy, update parent's counts
-      afterDestroy: async (category, options) => {
-        if (category.parent_category_id) {
-          await DynamicCategory.decrement(
-            'subcategories_count',
-            { where: { id: category.parent_category_id } }
-          );
-          
-          // Check if parent still has subcategories
-          const parent = await DynamicCategory.findByPk(category.parent_category_id);
-          if (parent && parent.subcategories_count <= 0) {
-            await parent.update({ 
-              has_subcategories: false,
-              node_type: parent.has_questions ? 'question_holder' : 'unset'
-            });
-          }
-
-          // Update total questions count up the hierarchy
-          await DynamicCategory.updateTotalQuestionsCount(category.parent_category_id);
         }
       }
     }
@@ -186,12 +142,12 @@ module.exports = (sequelize, DataTypes) => {
   DynamicCategory.associate = function(models) {
     // Self-referencing relationship
     DynamicCategory.belongsTo(models.DynamicCategory, {
-      foreignKey: 'parent_category_id',
+      foreignKey: 'parent_id',
       as: 'parentCategory'
     });
 
     DynamicCategory.hasMany(models.DynamicCategory, {
-      foreignKey: 'parent_category_id',
+      foreignKey: 'parent_id',
       as: 'subcategories'
     });
 
@@ -248,8 +204,8 @@ module.exports = (sequelize, DataTypes) => {
       await category.update({ total_questions_count: totalCount });
 
       // Update parent if exists
-      if (category.parent_category_id) {
-        await this.updateTotalQuestionsCount(category.parent_category_id);
+      if (category.parent_id) {
+        await this.updateTotalQuestionsCount(category.parent_id);
       }
     }
   };
@@ -298,9 +254,9 @@ module.exports = (sequelize, DataTypes) => {
     }
 
     return this.findAll({
-      where: { 
+      where: {
         test_series_id: testSeriesId,
-        parent_category_id: null // Root categories only
+        parent_id: null // Root categories only
       },
       include: includeOptions,
       order: [['display_order', 'ASC']]

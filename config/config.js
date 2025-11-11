@@ -34,11 +34,11 @@ module.exports = {
     pool: {
       max: 5,
       min: 0,
-      acquire: 60000, // Increased from 20s to 60s for db4free.net
+      // acquire: 60000, // Increased from 20s to 60s for db4free.net
       idle: 10000,
     },
     dialectOptions: {
-      connectTimeout: 60000, // Increased from 30s to 60s for db4free.net
+      // connectTimeout: 60000, // Increased from 30s to 60s for db4free.net
       ssl: {
         require: false,
         rejectUnauthorized: false,

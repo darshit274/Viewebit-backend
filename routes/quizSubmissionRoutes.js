@@ -61,34 +61,50 @@ router.post('/submit', async (req, res) => {
             console.log(`Created user for quiz submission: ${user.uuid}`);
         }
 
-        // Find or create test series
-        let testSeries = await TestSeries.findOne({ where: { uuid: testSeriesId } });
-
-        console.log('🔍 TEST SERIES DATABASE VALUES:', {
-            uuid: testSeries?.uuid,
-            has_negative_marking: testSeries?.has_negative_marking,
-            negative_marks: testSeries?.negative_marks,
-            negativeMarksType: typeof testSeries?.negative_marks
+        // Find the actual Category by UUID (frontend sends category UUID as testSeriesId)
+        const category = await Category.findOne({
+            where: { uuid: testSeriesId },
+            include: [{
+                model: TestSeries,
+                as: 'testSeries'
+            }]
         });
 
-        if (!testSeries) {
-            testSeries = await TestSeries.create({
-                uuid: testSeriesId,
-                name: `Quiz Series - ${testSeriesId.slice(0, 8)}`,
-                name_gujarati: 'ક્વિઝ શ્રેણી',
-                description: 'Quiz series created from frontend submission',
-                description_gujarati: 'ફ્રન્ટએન્ડ સબમિશનથી બનાવેલ ક્વિઝ શ્રેણી',
-                price: 0.00,
-                pricing_type: 'free',
-                difficulty_level: 'beginner',
-                is_active: 1,
-                is_published: 1,
-                published_at: new Date(),
-                has_negative_marking: false,  // Default to disabled
-                negative_marks: 0.25         // Default value
+        if (!category) {
+            console.error(`❌ Category not found for UUID: ${testSeriesId}`);
+            return res.status(404).json({
+                success: false,
+                message: 'Category not found',
+                error: `No category found with UUID: ${testSeriesId}`
             });
-            console.log(`Created test series: ${testSeries.uuid}`);
         }
+
+        console.log('✅ Found category:', {
+            categoryId: category.id,
+            categoryName: category.name,
+            categoryUuid: category.uuid,
+            testSeriesId: category.test_series_id,
+            testSeriesName: category.testSeries?.name
+        });
+
+        // Use the existing test series from the category
+        const testSeries = category.testSeries;
+
+        if (!testSeries) {
+            console.error(`❌ TestSeries not found for category: ${category.name}`);
+            return res.status(404).json({
+                success: false,
+                message: 'Test series not found for this category'
+            });
+        }
+
+        console.log('🔍 TEST SERIES DATABASE VALUES:', {
+            uuid: testSeries.uuid,
+            name: testSeries.name,
+            has_negative_marking: testSeries.has_negative_marking,
+            negative_marks: testSeries.negative_marks,
+            negativeMarksType: typeof testSeries.negative_marks
+        });
 
         // Calculate score with actual marks per question
         let obtainedMarks = 0;
@@ -205,37 +221,42 @@ router.post('/submit', async (req, res) => {
         // This is the same as percentage - both represent accuracy
         const accuracy = percentage;
 
-        // ALWAYS create a NEW category for this specific test series to ensure isolation
-        const category = await Category.create({
-            name: `Quiz Category - ${testSeriesId.slice(0, 8)}`,
-            description: `Category for test series ${testSeriesId}`,
-            test_series_id: testSeries.id,
-            exam_type: 'quiz',
-            is_active: true
+        // Use the existing category (already fetched above with testSeries)
+        // No need to create fake categories anymore!
+
+        // Find or create a subcategory for this category (for backward compatibility with Test model)
+        let subCategory = await SubCategory.findOne({
+            where: { category_id: category.id }
         });
 
-        // ALWAYS create a NEW subcategory for this specific category to ensure isolation
-        const subCategory = await SubCategory.create({
-            category_id: category.id,
-            name: `Quiz SubCategory - ${testSeriesId.slice(0, 8)}`,
-            description: `SubCategory for test series ${testSeriesId}`,
-            is_active: true
-        });
+        if (!subCategory) {
+            // Create a default subcategory if none exists (one-time per category)
+            subCategory = await SubCategory.create({
+                category_id: category.id,
+                name: `${category.name} - Questions`,
+                description: `Questions for ${category.name}`,
+                is_active: true
+            });
+            console.log(`✅ Created default subcategory for category: ${category.name}`);
+        }
 
-        // Create a simple test record (required for LeaderboardEntry)
+        // Create a test session record (required for LeaderboardEntry and history)
+        // Use the category name for better identification
         const test = await Test.create({
             uuid: uuidv4(), // Use proper UUID format
-            title: `Quiz Test - ${new Date().toLocaleDateString()}`,
-            subtitle: 'Frontend quiz submission',
-            instructions: 'Quiz taken through frontend',
-            duration_minutes: Math.ceil(totalTimeSpent / 60),
+            title: category.name, // Use actual category name instead of generic "Quiz Test"
+            subtitle: category.description || 'Quiz submission',
+            instructions: category.instructions || 'Quiz taken through frontend',
+            duration_minutes: category.test_duration_minutes || Math.ceil(totalTimeSpent / 60),
             total_questions: totalQuestions,
             passing_marks: Math.ceil(totalQuestions * 0.6), // 60% passing
-            negative_marking_enabled: negativeMarks > 0, // True if any category had negative marking applied
-            negative_marks_per_wrong: 0, // Set to 0 since it now varies by category
+            negative_marking_enabled: category.negative_marking_enabled || negativeMarks > 0,
+            negative_marks_per_wrong: category.negative_marks_per_wrong || 0,
             is_active: true,
             sub_category_id: subCategory.id
         });
+
+        console.log(`✅ Created test session record: ${test.title}`);
 
         // Create a test session with test history fields
         const testSession = await TestSession.create({
