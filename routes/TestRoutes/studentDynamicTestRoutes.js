@@ -229,6 +229,7 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
         "is_featured",
         "created_at",
         "updated_at",
+        "validity_days",
       ],
     });
 
