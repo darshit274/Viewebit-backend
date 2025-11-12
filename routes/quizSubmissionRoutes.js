@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
-const { LeaderboardEntry, TestSeries, User, Test, TestSession, SubCategory, Category, Question, sequelize } = require('../models');
+const { LeaderboardEntry, TestSeries, User, Test, TestSession, SubCategory, Category, Question, UserAnswer, sequelize } = require('../models');
 
 /**
  * Simple quiz submission endpoint for frontend
@@ -356,6 +356,31 @@ router.post('/submit', async (req, res) => {
                 submission_source: 'dynamic_category_quiz'
             }
         });
+
+        console.log(`✅ Created TestSession: ${testSession.id}`);
+
+        // Save individual answers to UserAnswer table
+        // This enables session-based solution retrieval and tracking user progress
+        try {
+            const answerPromises = answers.map(async (answer) => {
+                return await UserAnswer.create({
+                    test_session_id: testSession.id,
+                    question_id: answer.questionId,
+                    selected_option: answer.selectedOption, // Can be null for not attempted
+                    is_correct: answer.isCorrect || false,
+                    is_flagged: answer.markedForReview || false, // Save marked for review status
+                    is_visited: answer.selectedOption !== null, // Track if question was visited
+                    time_spent: answer.timeSpent || 0
+                });
+            });
+
+            await Promise.all(answerPromises);
+            console.log(`✅ Saved ${answers.length} UserAnswer records for session ${testSession.id}`);
+        } catch (userAnswerError) {
+            console.error('Error saving UserAnswer records:', userAnswerError);
+            // Don't fail the submission if UserAnswer save fails
+            // The TestSession and leaderboard entry are already created
+        }
 
         // Create leaderboard entry directly
         const leaderboardEntry = await LeaderboardEntry.create({

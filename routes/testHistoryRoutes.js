@@ -641,9 +641,17 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
                     'option_d', 'option_d_gujarati',
                     'correct_answer', 'explanation', 'explanation_gujarati',
                     'marks'
-                ]
+                ],
+                required: false, // LEFT JOIN instead of INNER JOIN
+                separate: false  // Don't run separate query
             }],
-            order: [['created_at', 'ASC']]
+            attributes: [
+                'id', 'test_session_id', 'question_id',
+                'selected_option', 'is_correct', 'is_flagged',
+                'is_visited', 'time_spent', 'created_at'
+            ],
+            order: [['created_at', 'ASC']],
+            raw: false  // Don't flatten results
         });
 
         // Format solutions
@@ -655,20 +663,21 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
                 questionId: question.id,
                 questionText: question.question_text,
                 questionTextGujarati: question.question_text_gujarati,
-                options: [
-                    { label: 'A', text: question.option_a, gujarati: question.option_a_gujarati },
-                    { label: 'B', text: question.option_b, gujarati: question.option_b_gujarati },
-                    { label: 'C', text: question.option_c, gujarati: question.option_c_gujarati },
-                    { label: 'D', text: question.option_d, gujarati: question.option_d_gujarati }
-                ],
+                options: {
+                    A: question.option_a,
+                    B: question.option_b,
+                    C: question.option_c,
+                    D: question.option_d
+                },
                 correctAnswer: question.correct_answer,
-                userAnswer: userAnswer.selected_option,
+                userAnswer: userAnswer.selected_option, // Can be NULL for not attempted
                 isCorrect: userAnswer.is_correct,
+                isMarked: userAnswer.is_flagged || false, // ✅ Include marked for review status
                 explanation: question.explanation,
                 explanationGujarati: question.explanation_gujarati,
                 marks: parseFloat(question.marks || 1),
                 negativeMarks: 0, // Default value
-                timeSpent: 0 // Default value
+                timeSpent: userAnswer.time_spent || 0
             };
         }).filter(q => q !== null);
 
@@ -676,7 +685,8 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
             success: true,
             message: 'Test solutions retrieved successfully',
             data: {
-                testName: session.test?.title || 'Quiz Test',
+                testName: session.test?.title || session.test_name || 'Quiz Test',
+                categoryName: session.category_name || 'Test Category',
                 totalQuestions: solutions.length,
                 solutions: solutions
             }
