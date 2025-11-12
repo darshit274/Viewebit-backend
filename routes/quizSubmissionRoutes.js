@@ -61,34 +61,90 @@ router.post('/submit', async (req, res) => {
             console.log(`Created user for quiz submission: ${user.uuid}`);
         }
 
-        // Find the actual Category by UUID (frontend sends category UUID as testSeriesId)
-        const category = await Category.findOne({
-            where: { uuid: testSeriesId },
-            include: [{
-                model: TestSeries,
-                as: 'testSeries'
-            }]
-        });
+        // Handle both mobile app and web app flows:
+        // 1. Mobile app: sends TestSeries UUID as testSeriesId + Category UUID as categoryUuid
+        // 2. Web app: sends Category UUID as testSeriesId (no categoryUuid)
 
+        let category = null;
+        let testSeries = null;
+
+        // Try to find category using categoryUuid first (mobile app flow)
+        if (categoryUuid) {
+            console.log('🔍 Mobile app flow: Finding category by categoryUuid:', categoryUuid);
+            category = await Category.findOne({
+                where: { uuid: categoryUuid },
+                include: [{
+                    model: TestSeries,
+                    as: 'testSeries'
+                }]
+            });
+
+            if (category) {
+                testSeries = category.testSeries;
+                console.log('✅ Found category via categoryUuid:', {
+                    categoryId: category.id,
+                    categoryName: category.name,
+                    categoryUuid: category.uuid,
+                    testSeriesName: testSeries?.name
+                });
+            }
+        }
+
+        // If not found by categoryUuid, try testSeriesId as Category UUID (web app flow)
         if (!category) {
-            console.error(`❌ Category not found for UUID: ${testSeriesId}`);
+            console.log('🔍 Web app flow: Finding category by testSeriesId as Category UUID:', testSeriesId);
+            category = await Category.findOne({
+                where: { uuid: testSeriesId },
+                include: [{
+                    model: TestSeries,
+                    as: 'testSeries'
+                }]
+            });
+
+            if (category) {
+                testSeries = category.testSeries;
+                console.log('✅ Found category via testSeriesId:', {
+                    categoryId: category.id,
+                    categoryName: category.name,
+                    categoryUuid: category.uuid,
+                    testSeriesName: testSeries?.name
+                });
+            }
+        }
+
+        // If still not found, try testSeriesId as actual TestSeries UUID (mobile app with correct flow)
+        if (!testSeries) {
+            console.log('🔍 Alternative flow: Finding TestSeries by testSeriesId as TestSeries UUID:', testSeriesId);
+            testSeries = await TestSeries.findOne({
+                where: { uuid: testSeriesId }
+            });
+
+            if (testSeries && categoryUuid) {
+                // We have TestSeries but need the Category
+                category = await Category.findOne({
+                    where: { uuid: categoryUuid },
+                    include: [{
+                        model: TestSeries,
+                        as: 'testSeries'
+                    }]
+                });
+
+                console.log('✅ Found TestSeries and Category separately:', {
+                    testSeriesName: testSeries.name,
+                    categoryName: category?.name
+                });
+            }
+        }
+
+        // Final validation
+        if (!category) {
+            console.error(`❌ Category not found. testSeriesId: ${testSeriesId}, categoryUuid: ${categoryUuid}`);
             return res.status(404).json({
                 success: false,
                 message: 'Category not found',
-                error: `No category found with UUID: ${testSeriesId}`
+                error: `No category found with testSeriesId: ${testSeriesId} or categoryUuid: ${categoryUuid}`
             });
         }
-
-        console.log('✅ Found category:', {
-            categoryId: category.id,
-            categoryName: category.name,
-            categoryUuid: category.uuid,
-            testSeriesId: category.test_series_id,
-            testSeriesName: category.testSeries?.name
-        });
-
-        // Use the existing test series from the category
-        const testSeries = category.testSeries;
 
         if (!testSeries) {
             console.error(`❌ TestSeries not found for category: ${category.name}`);
@@ -97,6 +153,15 @@ router.post('/submit', async (req, res) => {
                 message: 'Test series not found for this category'
             });
         }
+
+        console.log('✅ Final resolved data:', {
+            categoryId: category.id,
+            categoryName: category.name,
+            categoryUuid: category.uuid,
+            testSeriesId: testSeries.id,
+            testSeriesName: testSeries.name,
+            testSeriesUuid: testSeries.uuid
+        });
 
         console.log('🔍 TEST SERIES DATABASE VALUES:', {
             uuid: testSeries.uuid,
