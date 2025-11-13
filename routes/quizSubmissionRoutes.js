@@ -408,6 +408,7 @@ router.post('/submit', async (req, res) => {
             success: true,
             message: 'Quiz submitted successfully!',
             data: {
+                sessionId: testSession.id,  // ✅ ADD: TestSession UUID for solutions API
                 leaderboardEntryId: leaderboardEntry.id,
                 score: score,
                 totalQuestions: totalQuestions,
