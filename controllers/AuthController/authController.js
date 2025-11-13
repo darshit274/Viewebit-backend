@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { User, TestSession, Test } = require('../../models'); // Adjust the path as necessary
+const { User, TestSession, Test, sequelize } = require('../../models'); // ✅ Add sequelize instance
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { sendMail } = require("../../utils/verifyEmail");
@@ -35,8 +35,16 @@ exports.register = async (req, res, next) => {
         }
         const otp = generate4DigitOTP();
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
-        
+
+        // ✅ FIX: Generate id manually (trigger is broken due to table self-reference)
+        const maxIdResult = await User.findOne({
+            attributes: [[sequelize.fn('MAX', sequelize.col('id')), 'maxId']],
+            raw: true
+        });
+        const nextId = (maxIdResult?.maxId || 0) + 1;
+
         const newUser = await User.create({
+            id: nextId, // ✅ FIX: Explicitly provide id
             username: finalUsername,
             email,
             phone: finalPhone,
