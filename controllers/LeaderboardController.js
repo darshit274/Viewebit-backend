@@ -402,30 +402,51 @@ class LeaderboardController {
       const { testSeriesId } = req.params;
       const { limit = 20 } = req.query;
 
-      console.log(`Fetching leaderboard for test series: ${testSeriesId}`);
+      console.log(`🔍 Fetching leaderboard for UUID: ${testSeriesId}`);
 
       let leaderboardData = [];
 
       try {
-        // First, find the test series by UUID to get its ID
-        const testSeries = await TestSeries.findOne({
+        // ✅ SMART UUID DETECTION: Check if UUID is test series OR category
+        let testSeries = await TestSeries.findOne({
           where: { uuid: testSeriesId },
           attributes: ["id", "name", "uuid"],
         });
 
+        // If not found as test series, check if it's a category UUID
         if (!testSeries) {
-          return res.json({
-            success: true,
-            message: "No participants found for this test series yet",
-            data: [],
-            testSeriesId,
-            metadata: {
-              total: 0,
-              limit: parseInt(limit),
-              dataSource: "empty",
-              message: "Be the first to take a test in this series!",
-            },
+          console.log(`❌ Not found as test series UUID, checking if it's a category UUID...`);
+
+          const { Category } = require("../models");
+          const category = await Category.findOne({
+            where: { uuid: testSeriesId },
+            include: [{
+              model: TestSeries,
+              as: 'testSeries',
+              attributes: ['id', 'name', 'uuid']
+            }]
           });
+
+          if (category && category.testSeries) {
+            testSeries = category.testSeries;
+            console.log(`✅ Found as category UUID! Using parent test series: ${testSeries.name} (${testSeries.uuid})`);
+          } else {
+            console.log(`❌ UUID not found as test series OR category`);
+            return res.json({
+              success: true,
+              message: "No participants found for this test series yet",
+              data: [],
+              testSeriesId,
+              metadata: {
+                total: 0,
+                limit: parseInt(limit),
+                dataSource: "empty",
+                message: "Be the first to take a test in this series!",
+              },
+            });
+          }
+        } else {
+          console.log(`✅ Found as test series UUID: ${testSeries.name}`);
         }
 
         // Find all tests that belong to this test series
@@ -551,32 +572,34 @@ class LeaderboardController {
           `Found ${allEntries.length} entries for test series ${testSeriesId}`
         );
 
-        // Group by user and get best score for each user
-        const userBestScores = {};
+        // ✅ FIXED: Group by user and get FIRST ATTEMPT (earliest completion_date) instead of best score
+        const userFirstAttempts = {};
         allEntries.forEach((entry) => {
           const userId = entry.user_id;
           if (
-            !userBestScores[userId] ||
-            entry.score > userBestScores[userId].score
+            !userFirstAttempts[userId] ||
+            new Date(entry.completion_date) < new Date(userFirstAttempts[userId].completion_date)
           ) {
-            userBestScores[userId] = {
+            userFirstAttempts[userId] = {
               ...entry.toJSON(),
-              user: entry.user.toJSON(),
+              user: entry.user ? entry.user.toJSON() : { username: 'Unknown User' },
             };
           }
         });
 
-        // Convert to array and sort by score
-        const detailedEntries = Object.values(userBestScores)
+        // Convert to array and sort by FIRST ATTEMPT score (DESC), then by completion date (ASC)
+        const detailedEntries = Object.values(userFirstAttempts)
           .sort((a, b) => {
+            // Primary: Score descending (higher score ranks better)
             if (b.score !== a.score) return b.score - a.score;
+            // Tiebreaker: Earlier completion wins
             return new Date(a.completion_date) - new Date(b.completion_date);
           })
           .slice(0, parseInt(limit));
 
         if (detailedEntries.length > 0) {
           console.log(
-            `Found ${detailedEntries.length} unique users for test series`
+            `✅ Found ${detailedEntries.length} unique users for test series (ranked by FIRST ATTEMPT)`
           );
           leaderboardData = detailedEntries.map((entry, index) => ({
             rank: index + 1,
@@ -587,7 +610,7 @@ class LeaderboardController {
             correctAnswers: entry.correct_answers || 0,
             totalQuestions: entry.total_questions || 0,
             timeTaken: entry.time_taken_seconds || 0,
-            completionDate: entry.completion_date,
+            completionDate: entry.completion_date, // This is the first attempt date
             avatar: entry.user.avatarUrl || entry.user.profileImage || null,
             testSeriesName: entry.testSeries?.name,
             isDemo: false,
@@ -612,7 +635,7 @@ class LeaderboardController {
               `Looking for test sessions for test series ID: ${testSeries.id}`
             );
 
-            // Get test sessions for tests in this specific test series
+            // Get ALL test sessions for tests in this specific test series
             const testSessions = await TestSession.findAll({
               where: {
                 is_completed: true,
@@ -635,24 +658,44 @@ class LeaderboardController {
                 },
               ],
               order: [
-                ["calculated_score", "DESC"],
-                ["completed_at", "ASC"],
+                ["completed_at", "ASC"], // ✅ FIXED: Order by completion time to get chronological attempts
               ],
-              limit: parseInt(limit),
             });
 
             console.log(
               `Found ${testSessions.length} completed test sessions for this test series`
             );
-            if (testSessions.length > 0) {
-              console.log(
-                "Sample test session:",
-                JSON.stringify(testSessions[0], null, 2)
-              );
-            }
 
             if (testSessions.length > 0) {
-              leaderboardData = testSessions.map((session, index) => ({
+              // ✅ FIXED: Group by user and get FIRST ATTEMPT only
+              const userFirstAttempts = {};
+              testSessions.forEach((session) => {
+                const userId = session.user_id;
+                if (
+                  !userFirstAttempts[userId] ||
+                  new Date(session.completed_at) < new Date(userFirstAttempts[userId].completed_at)
+                ) {
+                  userFirstAttempts[userId] = session;
+                }
+              });
+
+              // Convert to array and sort by FIRST ATTEMPT score
+              const sortedSessions = Object.values(userFirstAttempts)
+                .sort((a, b) => {
+                  // Primary: Score descending
+                  if (b.calculated_score !== a.calculated_score) {
+                    return parseFloat(b.calculated_score) - parseFloat(a.calculated_score);
+                  }
+                  // Tiebreaker: Earlier completion wins
+                  return new Date(a.completed_at) - new Date(b.completed_at);
+                })
+                .slice(0, parseInt(limit));
+
+              console.log(
+                `✅ Found ${sortedSessions.length} unique users (ranked by FIRST ATTEMPT) - Fallback from TestSession`
+              );
+
+              leaderboardData = sortedSessions.map((session, index) => ({
                 rank: index + 1,
                 userId: session.user_id,
                 name: session.user.username,
@@ -673,7 +716,7 @@ class LeaderboardController {
                       new Date(session.started_at)) /
                       1000
                   ) || 0,
-                completionDate: session.completed_at,
+                completionDate: session.completed_at, // This is the first attempt date
                 avatar:
                   session.user.avatarUrl || session.user.profileImage || null,
                 testSeriesName: testSeries.name,

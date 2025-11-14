@@ -350,8 +350,15 @@ class DynamicTestManagementController {
       const { categoryId } = req.params;
       const { language = 'english' } = req.query;
 
-      // Validate category exists and is a question holder
-      const category = await DynamicCategory.findByPk(categoryId);
+      // Validate category exists and is a question holder (include TestSeries for UUID)
+      const category = await DynamicCategory.findByPk(categoryId, {
+        include: [{
+          model: TestSeries,
+          as: 'testSeries',
+          attributes: ['id', 'uuid', 'name']
+        }]
+      });
+
       if (!category) {
         return res.status(404).json({
           success: false,
@@ -368,18 +375,29 @@ class DynamicTestManagementController {
 
       const questions = await DynamicQuestion.getFormattedQuestions(categoryId, language);
 
-      res.json({
+      const responseData = {
         success: true,
         data: {
           category: {
             id: category.id,
             uuid: category.uuid,
             name: category.name,
-            node_type: category.node_type
+            node_type: category.node_type,
+            test_series_id: category.test_series_id, // Numeric ID for backward compatibility
+            test_series_uuid: category.testSeries?.uuid // ✅ ADD: Test series UUID for leaderboard API
           },
           questions
         }
+      };
+
+      console.log('🔍 [Backend] Returning category data:', {
+        category_uuid: category.uuid,
+        test_series_id: category.test_series_id,
+        test_series_uuid: category.testSeries?.uuid,
+        has_testSeries: !!category.testSeries
       });
+
+      res.json(responseData);
 
     } catch (error) {
       console.error('Error fetching questions:', error);
