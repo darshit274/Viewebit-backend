@@ -538,23 +538,13 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
                 message: 'Test session not found or access denied'
             });
         }
-
+console.log(session,"jjjjjjjjjjjjjjjj")
         // Calculate time spent
         let timeSpentSeconds = 0;
         if (session.started_at && session.completed_at) {
             timeSpentSeconds = Math.floor((new Date(session.completed_at) - new Date(session.started_at)) / 1000);
         }
 
-        // Calculate attempted questions
-        const attempted = session.total_correct + session.total_wrong;
-
-        // ✅ CORRECT FORMULA: Accuracy = (correct / attempted) × 100
-        const accuracy = attempted > 0
-            ? Math.round((session.total_correct / attempted) * 100)
-            : 0;
-
-        // Calculate negative marks
-        const negativeMarks = session.total_wrong * 0.25;
 
         // Return detailed result
         res.json({
@@ -568,18 +558,19 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
                 categoryName: 'General', // Default value
                 completedAt: session.completed_at,
                 totalQuestions: parseInt(session.total_questions) || 0,
-                attempted: parseInt(attempted),
+                attempted: parseInt(session.attempted_questions) || 0,
                 correct: parseInt(session.total_correct) || 0,
                 wrong: parseInt(session.total_wrong) || 0,
                 notAttempted: parseInt(session.total_unanswered) || 0,
                 markedForReview: parseInt(session.total_marked_for_review) || 0,
                 totalMarks: parseInt(session.total_questions) || 0, // Assuming 1 mark per question
-                obtainedMarks: parseFloat(session.calculated_score) || 0,
-                negativeMarks: parseFloat(negativeMarks.toFixed(2)),
-                finalScore: parseFloat(session.calculated_score) || 0,
-                percentage: parseInt(accuracy), // ✅ Now using correct accuracy value
-                accuracy: parseInt(accuracy), // ✅ Accuracy = (correct/attempted) × 100
-                timeSpent: parseInt(timeSpentSeconds)
+                obtainedMarks: parseFloat(session.obtained_marks) || 0,
+                negativeMarks: parseFloat(session.negative_marks),
+                negativeMarksPerWrong: parseFloat(session.negative_marks_per_wrong),
+                finalScore: parseFloat(session.final_score) || 0,
+                percentage: parseInt(session.percentage), // ✅ Now using correct accuracy value
+                accuracy: parseInt(session.accuracy), // ✅ Accuracy = (correct/attempted) × 100
+                // timeSpent: parseInt(timeSpentSeconds)
             }
         });
 

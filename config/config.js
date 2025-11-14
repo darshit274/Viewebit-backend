@@ -38,7 +38,7 @@ module.exports = {
       idle: 10000,
     },
     dialectOptions: {
-      connectTimeout: 60000, // Increased from 30s to 60s for db4free.net
+      // connectTimeout: 60000, // Increased from 30s to 60s for db4free.net
       ssl: {
         require: false,
         rejectUnauthorized: false,

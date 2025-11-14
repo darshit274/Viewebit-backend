@@ -31,12 +31,12 @@ router.post('/submit', async (req, res) => {
         // Calculate score from answers
         // IMPORTANT: totalQuestions should be the ACTUAL total, not just answered questions
         const totalQuestions = frontendTotalQuestions || answers.length;
-        const answeredQuestions = answers.length;
+        const answeredQuestions = answers.filter(answer => answer.selectedOption).length;
         const correctAnswers = answers.filter(answer => answer.isCorrect).length;
         // wrongAnswers = answered questions that are INCORRECT (not including unanswered)
         const wrongAnswers = answeredQuestions - correctAnswers;
         const unansweredQuestions = totalQuestions - answeredQuestions;
-
+        
         console.log('🧮 QUIZ SCORE CALCULATION:', {
             totalQuestions,
             answeredQuestions,
@@ -204,6 +204,7 @@ router.post('/submit', async (req, res) => {
         // Accuracy/Percentage = (correct answers / attempted questions) × 100
         let percentage = answeredQuestions > 0 ? Math.round((correctAnswers / answeredQuestions) * 100) : 0;
 
+        let negative_marks_per_wrong=0;
         // NEW: Apply category-level negative marking logic
         if (wrongAnswers > 0) {
             // Group wrong answers by category to apply different negative marking rules
@@ -230,6 +231,7 @@ router.post('/submit', async (req, res) => {
                             };
                         }
                         wrongAnswersByCategory[categoryId].count++;
+                        negative_marks_per_wrong=question.category.negative_marks_per_wrong;
                     }
                 }
             }
@@ -284,7 +286,7 @@ router.post('/submit', async (req, res) => {
 
         // Calculate accuracy: (correct answers / attempted questions) × 100
         // This is the same as percentage - both represent accuracy
-        const accuracy = percentage;
+        const accuracy = answeredQuestions > 0 ? Math.round((correctAnswers / answeredQuestions) * 100) : 0;
 
         // Use the existing category (already fetched above with testSeries)
         // No need to create fake categories anymore!
@@ -322,7 +324,6 @@ router.post('/submit', async (req, res) => {
         });
 
         console.log(`✅ Created test session record: ${test.title}`);
-
         // Create a test session with test history fields
         const testSession = await TestSession.create({
             id: uuidv4(),
@@ -350,6 +351,7 @@ router.post('/submit', async (req, res) => {
             negative_marks: negativeMarks,
             attempted_questions: answeredQuestions,
             accuracy: accuracy,
+            negative_marks_per_wrong: negative_marks_per_wrong,
             // IMPORTANT: Store the actual DynamicCategory UUID for test history grouping
             session_data: {
                 category_uuid: categoryUuid || testSeriesId, // Use categoryUuid if provided, fallback to testSeriesId
