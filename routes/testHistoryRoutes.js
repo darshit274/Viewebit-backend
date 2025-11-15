@@ -538,7 +538,6 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
                 message: 'Test session not found or access denied'
             });
         }
-console.log(session,"jjjjjjjjjjjjjjjj")
         // Calculate time spent
         let timeSpentSeconds = 0;
         if (session.started_at && session.completed_at) {
@@ -570,7 +569,7 @@ console.log(session,"jjjjjjjjjjjjjjjj")
                 finalScore: parseFloat(session.final_score) || 0,
                 percentage: parseInt(session.percentage), // ✅ Now using correct accuracy value
                 accuracy: parseInt(session.accuracy), // ✅ Accuracy = (correct/attempted) × 100
-                // timeSpent: parseInt(timeSpentSeconds)
+                timeSpent: parseInt(timeSpentSeconds)
             }
         });
 

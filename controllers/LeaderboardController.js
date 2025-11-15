@@ -216,6 +216,7 @@ class LeaderboardController {
             leaderboardData.length > 0 && leaderboardData[0].isDemo
               ? "demo"
               : "real",
+          userUuid: req.user?.uuid,
         },
       });
     } catch (error) {
@@ -773,6 +774,7 @@ class LeaderboardController {
           total: leaderboardData.length,
           limit: parseInt(limit),
           dataSource: "real",
+          currentUserData: req.decodedToken
         },
       });
     } catch (error) {
