@@ -589,6 +589,15 @@ router.get('/:sessionId', requireAuth, async (req, res) => {
  * Requires authentication - user ID extracted from JWT token
  */
 router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
+    const language = req.query.language || 'both';
+
+    // Helper function to choose English/Gujarati text
+    const getText = (eng, guj) => {
+        if (language === "gujarati") return guj ?? eng;
+        return eng ?? guj;
+        // return { english: eng, gujarati: guj };  // For "both"
+    };
+
     try {
         const userId = req.user.uuid;
         const { sessionId } = req.params;
@@ -651,26 +660,53 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
 
             return {
                 questionId: question.id,
-                questionText: question.question_text,
+
+                // Language-based question text
+                questionText: getText(
+                    question.question_text,
+                    question.question_text_gujarati
+                ),
+
                 questionTextGujarati: question.question_text_gujarati,
+                questionTextEnglish: question.question_text_gujarati,
+
+                // Language-based options
                 options: {
+                    A: getText(question.option_a, question.option_a_gujarati),
+                    B: getText(question.option_b, question.option_b_gujarati),
+                    C: getText(question.option_c, question.option_c_gujarati),
+                    D: getText(question.option_d, question.option_d_gujarati),
+                },
+                optionsEnglish: {
                     A: question.option_a,
                     B: question.option_b,
                     C: question.option_c,
-                    D: question.option_d
+                    D: question.option_d,
                 },
+                optionsGujarati: {
+                    A: question.option_a_gujarati,
+                    B: question.option_b_gujarati,
+                    C: question.option_c_gujarati,
+                    D: question.option_d_gujarati,
+                },
+
                 correctAnswer: question.correct_answer,
                 userAnswer: userAnswer.selected_option, // Can be NULL for not attempted
                 isCorrect: userAnswer.is_correct,
                 isMarked: userAnswer.is_flagged || false, // ✅ Include marked for review status
-                explanation: question.explanation,
+                explanation: getText(
+                    question.explanation,
+                    question.explanation_gujarati
+                ),
                 explanationGujarati: question.explanation_gujarati,
+                explanationEnglish: question.explanation,
                 marks: parseFloat(question.marks || 1),
                 negativeMarks: 0, // Default value
                 timeSpent: userAnswer.time_spent || 0
             };
         }).filter(q => q !== null);
 
+        // Send response
         res.json({
             success: true,
             message: 'Test solutions retrieved successfully',
@@ -678,7 +714,7 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
                 testName: session.test?.title || session.test_name || 'Quiz Test',
                 categoryName: session.category_name || 'Test Category',
                 totalQuestions: solutions.length,
-                solutions: solutions
+                solutions
             }
         });
 
@@ -691,5 +727,6 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
         });
     }
 });
+
 
 module.exports = router;
