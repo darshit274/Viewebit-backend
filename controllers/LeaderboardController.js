@@ -602,6 +602,7 @@ class LeaderboardController {
           console.log(
             `✅ Found ${detailedEntries.length} unique users for test series (ranked by FIRST ATTEMPT)`
           );
+          const totalUser = detailedEntries.length
           leaderboardData = detailedEntries.map((entry, index) => ({
             rank: index + 1,
             userId: entry.user_id,
@@ -614,6 +615,7 @@ class LeaderboardController {
             completionDate: entry.completion_date, // This is the first attempt date
             avatar: entry.user.avatarUrl || entry.user.profileImage || null,
             testSeriesName: entry.testSeries?.name,
+            percentile: (((totalUser - (index + 1) + 1) / totalUser) * 100).toFixed(2),
             isDemo: false,
           }));
         } else {
@@ -706,7 +708,7 @@ class LeaderboardController {
                 percentage: Math.round(
                   ((session.total_correct || 0) /
                     (session.total_questions || 1)) *
-                    100
+                  100
                 ),
                 correctAnswers: session.total_correct || 0,
                 totalQuestions: session.total_questions || 0,
@@ -715,7 +717,7 @@ class LeaderboardController {
                   Math.round(
                     (new Date(session.completed_at) -
                       new Date(session.started_at)) /
-                      1000
+                    1000
                   ) || 0,
                 completionDate: session.completed_at, // This is the first attempt date
                 avatar:
