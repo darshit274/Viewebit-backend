@@ -697,6 +697,7 @@ class LeaderboardController {
               console.log(
                 `✅ Found ${sortedSessions.length} unique users (ranked by FIRST ATTEMPT) - Fallback from TestSession`
               );
+              const totalUser = sortedSessions?.length
 
               leaderboardData = sortedSessions.map((session, index) => ({
                 rank: index + 1,
@@ -713,6 +714,8 @@ class LeaderboardController {
                 correctAnswers: session.total_correct || 0,
                 totalQuestions: session.total_questions || 0,
                 wrongAnswers: session.total_wrong || 0,
+                percentile: (((totalUser - (index + 1) + 1) / totalUser) * 100).toFixed(2),
+
                 timeTaken:
                   Math.round(
                     (new Date(session.completed_at) -
