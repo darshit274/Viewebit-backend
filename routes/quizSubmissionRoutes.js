@@ -36,7 +36,7 @@ router.post('/submit', async (req, res) => {
         // wrongAnswers = answered questions that are INCORRECT (not including unanswered)
         const wrongAnswers = answeredQuestions - correctAnswers;
         const unansweredQuestions = totalQuestions - answeredQuestions;
-        
+
         console.log('🧮 QUIZ SCORE CALCULATION:', {
             totalQuestions,
             answeredQuestions,
@@ -204,14 +204,14 @@ router.post('/submit', async (req, res) => {
         // Accuracy/Percentage = (correct answers / attempted questions) × 100
         let percentage = answeredQuestions > 0 ? Math.round((correctAnswers / answeredQuestions) * 100) : 0;
 
-        let negative_marks_per_wrong=0;
+        let negative_marks_per_wrong = 0;
         // NEW: Apply category-level negative marking logic
         if (wrongAnswers > 0) {
             // Group wrong answers by category to apply different negative marking rules
             const wrongAnswersByCategory = {};
 
             for (const answer of answers) {
-                if (!answer.isCorrect && answer.questionId) {
+                if (!answer.isCorrect && answer.questionId && answer.selectedOption) {
                     // Get the question and its category
                     const question = await Question.findByPk(answer.questionId, {
                         include: [{
@@ -231,7 +231,7 @@ router.post('/submit', async (req, res) => {
                             };
                         }
                         wrongAnswersByCategory[categoryId].count++;
-                        negative_marks_per_wrong=question.category.negative_marks_per_wrong;
+                        negative_marks_per_wrong = question.category.negative_marks_per_wrong;
                     }
                 }
             }
@@ -249,7 +249,7 @@ router.post('/submit', async (req, res) => {
             }
 
             negativeMarks = totalNegativeMarks;
-            finalScore = Math.max(0, obtainedMarks - negativeMarks);
+            finalScore = obtainedMarks - negativeMarks;
             // Percentage stays the same - it's based on correct/attempted, not final score
             // percentage is already calculated above as (correctAnswers / answeredQuestions) × 100
 
@@ -341,7 +341,7 @@ router.post('/submit', async (req, res) => {
             total_marked_for_review: markedForReviewCount,
             total_questions: totalQuestions,
             time_spent_seconds: totalTimeSpent,
-            final_score: score,
+            final_score: finalScore?? score,
             percentage: percentage,
             // Test history fields
             test_name: test.title,
@@ -392,6 +392,7 @@ router.post('/submit', async (req, res) => {
             test_series_id: null, // Set to null to avoid foreign key issues for now
             category_id: null,
             score: score,
+            final_score: finalScore,
             percentage: percentage,
             total_questions: totalQuestions,
             correct_answers: correctAnswers,

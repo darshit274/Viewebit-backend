@@ -47,6 +47,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 0.00
     },
+    final_score: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0.00
+    },
     percentage: {
       type: DataTypes.DECIMAL(5, 2),
       allowNull: false,

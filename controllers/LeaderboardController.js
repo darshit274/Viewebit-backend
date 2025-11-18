@@ -606,14 +606,15 @@ class LeaderboardController {
           leaderboardData = detailedEntries.map((entry, index) => ({
             rank: index + 1,
             userId: entry.user_id,
-            name: entry.user?.username || "Unknown User",
-            totalScore: Math.round(parseFloat(entry.score) || 0),
-            percentage: parseFloat(entry.percentage) || 0,
-            correctAnswers: entry.correct_answers || 0,
-            totalQuestions: entry.total_questions || 0,
-            timeTaken: entry.time_taken_seconds || 0,
+            name: entry.user?.username ?? "Unknown User",
+            totalScore: parseFloat(entry.score) ?? 0,
+            finalScore: parseFloat(entry.final_score ?? 0),
+            percentage: parseFloat(entry.percentage) ?? 0,
+            correctAnswers: entry.correct_answers ?? 0,
+            totalQuestions: entry.total_questions ?? 0,
+            timeTaken: entry.time_taken_seconds ?? 0,
             completionDate: entry.completion_date, // This is the first attempt date
-            avatar: entry.user.avatarUrl || entry.user.profileImage || null,
+            avatar: entry.user.avatarUrl ?? entry.user.profileImage ?? null,
             testSeriesName: entry.testSeries?.name,
             percentile: (((totalUser - (index + 1) + 1) / totalUser) * 100).toFixed(2),
             isDemo: false,
@@ -706,6 +707,7 @@ class LeaderboardController {
                 totalScore: Math.round(
                   parseFloat(session.calculated_score) || 0
                 ),
+                finalScore: session.final_score,
                 percentage: Math.round(
                   ((session.total_correct || 0) /
                     (session.total_questions || 1)) *
