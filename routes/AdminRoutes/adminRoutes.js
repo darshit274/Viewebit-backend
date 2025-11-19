@@ -11,6 +11,8 @@ const { adminAuth, requireRole } = require('../../utils/AdminAuth');
 
 // Public routes (no authentication required)
 router.post('/login', adminController.login);
+router.post('/verify-otp', adminController.verifyOTP);
+router.post('/resend-otp', adminController.resendOTP);
 
 // Protected routes (authentication required)
 router.post('/logout', adminAuth, adminController.logout);

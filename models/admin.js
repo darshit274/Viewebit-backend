@@ -54,6 +54,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.JSON,
       allowNull: true,
       defaultValue: {}
+    },
+    otp: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    otpExpiry: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   }, {
     sequelize,

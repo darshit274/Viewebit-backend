@@ -3,8 +3,9 @@ const { Admin, User, Subscription, TestSeries } = require('../../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { Op } = require('sequelize');
+const { sendMail } = require("../../utils/verifyEmail");
 
-// Admin login
+// Admin login - Step 1: Verify credentials and send OTP
 exports.login = async (req, res, next) => {
     try {
         const { email, password } = req.body;
@@ -26,15 +27,103 @@ exports.login = async (req, res, next) => {
             return next(new ErrorHandler('Invalid email or password', 401));
         }
 
-        // Update last login
+        // Generate 6-digit OTP
+        function generate6DigitOTP() {
+            return Math.floor(100000 + Math.random() * 900000);
+        }
+        const otp = generate6DigitOTP();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+        // Save OTP to admin record
+        admin.otp = otp.toString();
+        admin.otpExpiry = otpExpiry;
+        await admin.save();
+
+        // Send OTP via email
+        try {
+            await sendMail({
+                receiver: email,
+                subject: `MockTale Admin - Login Verification Code`,
+                content: 'content',
+                service: null,
+                host: "smtp.gmail.com",
+                htmlContent: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f6f8;">
+                  <div style="max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <h2 style="color: #333; text-align: center;">Admin Login Verification</h2>
+                    <p>Hi <strong>${admin.name}</strong>,</p>
+                    <p>Use the following code to complete your admin login:</p>
+                    <h1 style="text-align: center; color: #007bff; letter-spacing: 4px; background-color: #f0f0f0; padding: 15px; border-radius: 8px;">${otp}</h1>
+                    <p style="color: #666;">This verification code is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
+                    <p style="color: #e74c3c; margin-top: 20px;"><strong>Security Notice:</strong> If you did not attempt to log in, please contact your system administrator immediately.</p>
+                    <br/>
+                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale Academy - Admin Panel</p>
+                  </div>
+                </div>
+              `,
+                cc: null,
+                bcc: null
+            });
+        } catch (error) {
+            console.error("Error sending Admin OTP Email:", error);
+            return next(new ErrorHandler("Failed to send verification code. Please try again.", 500));
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Verification code sent to your email',
+            data: {
+                email: admin.email,
+                requiresOTP: true
+            }
+        });
+    } catch (err) {
+        console.error('Admin login error:', err);
+        const error = new ErrorHandler('Login failed', 500);
+        return next(error);
+    }
+};
+
+// Admin login - Step 2: Verify OTP and issue token
+exports.verifyOTP = async (req, res, next) => {
+    try {
+        const { email, otp } = req.body;
+
+        // Find admin by email
+        const admin = await Admin.findOne({ where: { email } });
+        if (!admin) {
+            return next(new ErrorHandler('Admin not found', 404));
+        }
+
+        // Check if OTP exists
+        if (!admin.otp || !admin.otpExpiry) {
+            return next(new ErrorHandler('No verification code found. Please request a new one.', 400));
+        }
+
+        // Check if OTP has expired
+        if (new Date() > new Date(admin.otpExpiry)) {
+            admin.otp = null;
+            admin.otpExpiry = null;
+            await admin.save();
+            return next(new ErrorHandler('Verification code has expired. Please login again.', 400));
+        }
+
+        // Verify OTP
+        if (admin.otp !== otp.toString()) {
+            return next(new ErrorHandler('Invalid verification code', 401));
+        }
+
+        // Clear OTP after successful verification
+        admin.otp = null;
+        admin.otpExpiry = null;
         admin.lastLogin = new Date();
         await admin.save();
 
         // Generate JWT token
-        const payload = { 
-            id: admin.id, 
-            email: admin.email, 
-            role: admin.role 
+        const payload = {
+            id: admin.id,
+            email: admin.email,
+            role: admin.role
         };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
 
@@ -55,8 +144,71 @@ exports.login = async (req, res, next) => {
             }
         });
     } catch (err) {
-        console.error('Admin login error:', err);
-        const error = new ErrorHandler('Login failed', 500);
+        console.error('Admin OTP verification error:', err);
+        const error = new ErrorHandler('OTP verification failed', 500);
+        return next(error);
+    }
+};
+
+// Resend OTP
+exports.resendOTP = async (req, res, next) => {
+    try {
+        const { email } = req.body;
+
+        // Find admin by email
+        const admin = await Admin.findOne({ where: { email } });
+        if (!admin) {
+            return next(new ErrorHandler('Admin not found', 404));
+        }
+
+        // Generate new 6-digit OTP
+        function generate6DigitOTP() {
+            return Math.floor(100000 + Math.random() * 900000);
+        }
+        const otp = generate6DigitOTP();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+        // Save OTP to admin record
+        admin.otp = otp.toString();
+        admin.otpExpiry = otpExpiry;
+        await admin.save();
+
+        // Send OTP via email
+        try {
+            await sendMail({
+                receiver: email,
+                subject: `MockTale Admin - New Verification Code`,
+                content: 'content',
+                service: null,
+                host: "smtp.gmail.com",
+                htmlContent: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f6f8;">
+                  <div style="max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <h2 style="color: #333; text-align: center;">Admin Login Verification</h2>
+                    <p>Hi <strong>${admin.name}</strong>,</p>
+                    <p>Here is your new verification code:</p>
+                    <h1 style="text-align: center; color: #007bff; letter-spacing: 4px; background-color: #f0f0f0; padding: 15px; border-radius: 8px;">${otp}</h1>
+                    <p style="color: #666;">This verification code is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
+                    <br/>
+                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale Academy - Admin Panel</p>
+                  </div>
+                </div>
+              `,
+                cc: null,
+                bcc: null
+            });
+        } catch (error) {
+            console.error("Error sending Admin OTP Email:", error);
+            return next(new ErrorHandler("Failed to send verification code. Please try again.", 500));
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'New verification code sent to your email'
+        });
+    } catch (err) {
+        console.error('Admin resend OTP error:', err);
+        const error = new ErrorHandler('Failed to resend verification code', 500);
         return next(error);
     }
 };
