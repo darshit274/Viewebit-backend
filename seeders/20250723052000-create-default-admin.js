@@ -4,12 +4,12 @@ const bcrypt = require('bcryptjs');
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+    const hashedPassword = await bcrypt.hash('mocktale.academy@admin.com', 10);
     
     await queryInterface.bulkInsert('admins', [{
       id: '550e8400-e29b-41d4-a716-446655440000',
       name: 'Super Admin',
-      email: 'admin@mocktale.com',
+      email: 'mocktaleacademy@gmail.com',
       password: hashedPassword,
       role: 'super_admin',
       isActive: true,
