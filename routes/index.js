@@ -26,6 +26,7 @@ const DebugLeaderboardRoutes = require("./debugLeaderboard");
 const SampleDataRoutes = require("./sampleDataRoutes");
 const UploadRoutes = require("./uploadRoutes");
 const QuestionReportRoutes = require("./questionReportRoutes");
+const ContactQueryRoutes = require("./contactQueryRoutes");
 
 router.use("/users", UserRoutes);
 router.use("/admin", AdminRoutes);
@@ -57,6 +58,7 @@ try {
 }
 router.use("/debug-leaderboard", DebugLeaderboardRoutes); // Debug leaderboard queries
 router.use("/sample-data", SampleDataRoutes); // Temporary sample data creation routes
+router.use("/contact", ContactQueryRoutes); // Contact query APIs - public submission & admin management
 router.use("/", QuestionReportRoutes); // Question report APIs for users and admins
 router.use("/", StudentDynamicTestRoutes); // NEW: Student-facing dynamic hierarchy APIs
 router.use("/", StudentTestRoutes); // OLD: Student-facing test APIs (kept for backwards compatibility)
