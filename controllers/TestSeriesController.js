@@ -1028,7 +1028,7 @@ class TestSeriesController {
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
           'is_active', 'pricing_type', 'price', 'currency',
-          'discount_percentage', 'is_featured',
+          'discount_percentage', 'is_featured', "validity_days",
           'created_at', 'updated_at'
         ]
       });
@@ -1060,7 +1060,7 @@ class TestSeriesController {
 
           // Get subscription details
           const subscription = subscriptions.find(sub => sub.test_series_id === series.id);
-
+          const subscriptionCreatedAt = new Date(subscription?.created_at);
           return {
             id: series.id,
             uuid: series.uuid,
@@ -1078,7 +1078,9 @@ class TestSeriesController {
             is_purchased: true,
             is_subscribed: true,
             enrolled_at: subscription?.created_at,
-            expiry_date: subscription?.expiry_date
+            expiry_date: series?.validity_days
+              ? new Date(subscriptionCreatedAt.setDate(subscriptionCreatedAt.getDate() + series.validity_days))
+              : subscription?.expiry_date || null
           };
         })
       );
