@@ -47,9 +47,6 @@ router.use("/subscription-access", SubscriptionAccessRoutes); // Subscription ac
 router.use("/debug", DebugRoutes); // Debug APIs for checking database state
 router.use("/test-simulation", TestSimulationRoutes); // Temporary test simulation APIs for testing
 router.use("/quiz", QuizSubmissionRoutes); // Simple quiz submission APIs for frontend
-console.log('📌 Registering Test History Routes at /test-history');
-console.log('📌 TestHistoryRoutes type:', typeof TestHistoryRoutes);
-console.log('📌 TestHistoryRoutes:', TestHistoryRoutes);
 try {
   router.use("/test-history", TestHistoryRoutes); // Test history APIs for viewing past test results
   console.log('✅ Test History Routes registered successfully');

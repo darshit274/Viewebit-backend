@@ -1943,7 +1943,7 @@ class TestManagementController {
           {
             model: Category,
             as: 'childCategories',
-            where: { is_active: true },
+            // where: { is_active: true },
             required: false,
             order: [['display_order', 'ASC'], ['created_at', 'ASC']]
           },
@@ -1951,7 +1951,7 @@ class TestManagementController {
           {
             model: Question,
             as: 'questions',
-            where: { is_active: true },
+            // where: { is_active: true },
             required: false,
             order: [['question_order', 'ASC'], ['created_at', 'ASC']]
           },
