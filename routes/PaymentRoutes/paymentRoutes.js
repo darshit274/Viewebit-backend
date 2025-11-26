@@ -279,6 +279,48 @@ router.post('/create-order', authToken, async (req, res) => {
 
     console.log('✅ Pending subscription created:', subscriptionData.id);
 
+    // Fetch user details for Razorpay prefill
+    const userDetails = await User.findOne({
+      where: { uuid: userId },
+      attributes: ['username', 'email', 'fullName', 'phone', 'phoneNumber']
+    });
+
+    // Helper function to format phone number for Razorpay
+    const formatPhoneNumber = (phone) => {
+      if (!phone) return '+919999999999'; // Fallback for users without phone
+
+      // Remove all non-digit characters except +
+      let cleaned = phone.replace(/[^\d+]/g, '');
+
+      // If already has country code, return as is
+      if (cleaned.startsWith('+')) return cleaned;
+
+      // If starts with 91, add +
+      if (cleaned.startsWith('91') && cleaned.length === 12) {
+        return `+${cleaned}`;
+      }
+
+      // If 10 digits, add +91 (Indian number)
+      if (cleaned.length === 10) {
+        return `+91${cleaned}`;
+      }
+
+      // Otherwise return fallback
+      return '+919999999999';
+    };
+
+    // Prepare user info for prefill
+    const userPhone = userDetails?.phone || userDetails?.phoneNumber;
+    const userName = userDetails?.fullName || userDetails?.username || 'User';
+    const userEmail = userDetails?.email || 'user@example.com';
+
+    console.log('📋 User details for Razorpay prefill:', {
+      name: userName,
+      email: userEmail,
+      phone: userPhone,
+      formattedPhone: formatPhoneNumber(userPhone)
+    });
+
     // Return order details to frontend
     res.json({
       success: true,
@@ -294,7 +336,13 @@ router.post('/create-order', authToken, async (req, res) => {
           type: planType,
           price: amount / 100
         },
-        subscriptionId: subscriptionData.id
+        subscriptionId: subscriptionData.id,
+        // Include user details for Razorpay prefill
+        userDetails: {
+          name: userName,
+          email: userEmail,
+          contact: formatPhoneNumber(userPhone)
+        }
       }
     });
 
