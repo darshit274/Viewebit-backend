@@ -255,6 +255,7 @@ exports.forgotPassword = async (req, res, next) => {
             return next(new ErrorHandler(500, "Failed to send Password Reset Email"));
         }
         res.status(200).json({
+            success: true,
             message: 'OTP sent to your email for password reset',
         });
     } catch (err) {
@@ -281,6 +282,7 @@ exports.resetPassword = async (req, res, next) => {
 
         await user.save();
         res.status(200).json({
+            success: true,
             message: 'Password reset successfully',
         });
     } catch (err) {
@@ -379,6 +381,7 @@ exports.resendOTP = async (req, res, next) => {
         }
         
         res.status(200).json({
+            success: true,
             message: 'New OTP sent to your email',
         });
     } catch (err) {
