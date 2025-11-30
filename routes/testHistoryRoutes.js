@@ -704,7 +704,7 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
                 negativeMarks: 0, // Default value
                 timeSpent: userAnswer.time_spent || 0
             };
-        }).filter(q => q !== null);
+        })?.filter(q => q !== null)?.sort((a, b) => a.questionId - b.questionId); // Sort by question ID
 
         // Send response
         res.json({
