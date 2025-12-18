@@ -34,7 +34,7 @@ module.exports = {
     pool: {
       max: 5,
       min: 0,
-      // acquire: 60000, // Increased from 20s to 60s for db4free.net
+      acquire: 60000, // Increased from 20s to 60s for db4free.net
       idle: 10000,
     },
     dialectOptions: {

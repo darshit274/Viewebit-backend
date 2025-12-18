@@ -593,8 +593,8 @@ router.get('/:sessionId/solutions', requireAuth, async (req, res) => {
 
     // Helper function to choose English/Gujarati text
     const getText = (eng, guj) => {
-        if (language === "gujarati") return guj ?? eng;
-        return eng ?? guj;
+        if (language === "gujarati") return guj || eng;
+        return eng || guj;
         // return { english: eng, gujarati: guj };  // For "both"
     };
 
