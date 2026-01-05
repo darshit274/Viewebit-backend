@@ -957,6 +957,154 @@ class TestSeriesController {
       });
     }
   }
+
+  // Get enrolled test series (user's purchased series)
+  static async getEnrolledSeries(req, res) {
+    try {
+      const { page = 1, limit = 20, search } = req.query;
+      // const userId = req.user?.id;
+      const userUuid = req.user.uuid;
+
+      if (!userUuid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+      }
+
+      const offset = (page - 1) * limit;
+
+      // Find all active subscriptions for the user
+      const subscriptions = await Subscription.findAll({
+        where: {
+          user_id: userUuid,
+          status: 'completed',
+          [Op.or]: [
+            { expiry_date: null },
+            { expiry_date: { [Op.gt]: new Date() } }
+          ]
+        },
+        attributes: ['test_series_id', 'created_at', 'expiry_date']
+      });
+
+      if (subscriptions.length === 0) {
+        return res.json({
+          success: true,
+          message: 'No enrolled test series found',
+          data: [],
+          pagination: {
+            total: 0,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: 0
+          }
+        });
+      }
+
+      // Extract test series IDs
+      const testSeriesIds = subscriptions.map(sub => sub.test_series_id);
+
+      // Build where clause for test series
+      const where = {
+        id: { [Op.in]: testSeriesIds },
+        is_active: true
+      };
+
+      if (search) {
+        where[Op.or] = [
+          { name: { [Op.like]: `%${search}%` } },
+          { name_gujarati: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+          { description_gujarati: { [Op.like]: `%${search}%` } }
+        ];
+      }
+
+      // Get enrolled test series with pagination
+      const { count, rows } = await TestSeries.findAndCountAll({
+        where,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        order: [['created_at', 'DESC']],
+        attributes: [
+          'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
+          'is_active', 'pricing_type', 'price', 'currency',
+          'discount_percentage', 'is_featured', "validity_days",
+          'created_at', 'updated_at'
+        ]
+      });
+
+      // Transform data to match web app format
+      const testSeriesWithMeta = await Promise.all(
+        rows.map(async (series) => {
+          // Count categories (representing test groups)
+          const categoriesCount = await Category.count({
+            where: {
+              test_series_id: series.id,
+              is_active: true,
+              node_type: 'question_holder'
+            }
+          });
+
+          // Count total questions across all categories
+          const totalQuestions = await Question.count({
+            include: [{
+              model: Category,
+              as: 'category',
+              where: {
+                test_series_id: series.id,
+                is_active: true
+              },
+              required: true
+            }]
+          });
+
+          // Get subscription details
+          const subscription = subscriptions.find(sub => sub.test_series_id === series.id);
+          const subscriptionCreatedAt = new Date(subscription?.created_at);
+          return {
+            id: series.id,
+            uuid: series.uuid,
+            name: series.name,
+            title: series.name,
+            description: series.description,
+            pricing_type: series.pricing_type,
+            price: series.price,
+            currency: series.currency,
+            discount_percentage: series.discount_percentage,
+            is_featured: series.is_featured,
+            tests_count: categoriesCount,
+            total_tests: categoriesCount,
+            total_questions: totalQuestions,
+            is_purchased: true,
+            is_subscribed: true,
+            enrolled_at: subscription?.created_at,
+            expiry_date: series?.validity_days
+              ? new Date(subscriptionCreatedAt.setDate(subscriptionCreatedAt.getDate() + series.validity_days))
+              : subscription?.expiry_date || null
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        message: 'Enrolled test series retrieved successfully',
+        data: testSeriesWithMeta,
+        pagination: {
+          total: count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(count / limit)
+        }
+      });
+
+    } catch (error) {
+      console.error('Get enrolled series error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to retrieve enrolled test series'
+      });
+    }
+  }
 }
 
 module.exports = TestSeriesController;

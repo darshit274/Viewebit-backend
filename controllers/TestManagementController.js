@@ -52,7 +52,7 @@ function transformToHierarchy(testSeries) {
 }
 
 function getTotalQuestions(category) {
-  return category.subCategories?.reduce((acc, sub) => 
+  return category.subCategories?.reduce((acc, sub) =>
     acc + sub.tests?.reduce((testAcc, test) => testAcc + (test.questions?.length || 0), 0), 0) || 0;
 }
 
@@ -64,12 +64,12 @@ class TestManagementController {
   // =====================
   // DYNAMIC HIERARCHY MANAGEMENT (NEW)
   // =====================
-  
+
   // Get test series with dynamic hierarchy view
   async getTestSeriesWithHierarchy(req, res) {
     try {
       const { uuid } = req.params;
-      
+
       // Get test series
       const testSeries = await TestSeries.findOne({
         where: { uuid },
@@ -115,10 +115,10 @@ class TestManagementController {
           statistics: {
             totalCategories: testSeries.categories?.length || 0,
             totalSubCategories: testSeries.categories?.reduce((acc, cat) => acc + (cat.subCategories?.length || 0), 0) || 0,
-            totalTests: testSeries.categories?.reduce((acc, cat) => 
+            totalTests: testSeries.categories?.reduce((acc, cat) =>
               acc + cat.subCategories?.reduce((subAcc, sub) => subAcc + (sub.tests?.length || 0), 0), 0) || 0,
-            totalQuestions: testSeries.categories?.reduce((acc, cat) => 
-              acc + cat.subCategories?.reduce((subAcc, sub) => 
+            totalQuestions: testSeries.categories?.reduce((acc, cat) =>
+              acc + cat.subCategories?.reduce((subAcc, sub) =>
                 subAcc + sub.tests?.reduce((testAcc, test) => testAcc + (test.questions?.length || 0), 0), 0), 0) || 0
           }
         }
@@ -139,11 +139,11 @@ class TestManagementController {
   async createDynamicCategory(req, res) {
     try {
       const { testSeriesUuid } = req.params;
-      const { 
-        parentCategoryId, 
-        name, 
-        description, 
-        name_gujarati, 
+      const {
+        parentCategoryId,
+        name,
+        description,
+        name_gujarati,
         description_gujarati,
         isQuestionHolder = false
       } = req.body;
@@ -270,7 +270,7 @@ class TestManagementController {
   // =====================
   // TEST SERIES MANAGEMENT
   // =====================
-  
+
   // Get all test series with pagination, filtering, and statistics
   async getTestSeries(req, res) {
     console.log('=================================');
@@ -287,7 +287,7 @@ class TestManagementController {
       } = req.query;
 
       const offset = (parseInt(page) - 1) * parseInt(limit);
-      
+
       // Build where clause
       let where = {};
       if (status === 'active') {
@@ -506,13 +506,13 @@ class TestManagementController {
       console.error('Error creating test series:', error);
       console.error('Error stack:', error.stack);
       console.error('Request body:', req.body);
-      
+
       // More detailed error response
       const errorResponse = {
         success: false,
         message: 'Failed to create test series'
       };
-      
+
       if (process.env.NODE_ENV === 'development' || true) { // Always show error in dev
         errorResponse.error = error.message;
         errorResponse.details = error.errors ? error.errors.map(e => ({
@@ -521,7 +521,7 @@ class TestManagementController {
           type: e.type
         })) : undefined;
       }
-      
+
       res.status(500).json(errorResponse);
     }
   }
@@ -530,7 +530,7 @@ class TestManagementController {
   async bulkOperationsTestSeries(req, res) {
     try {
       const { action, testSeriesIds } = req.body;
-      
+
       if (!action || !testSeriesIds || !Array.isArray(testSeriesIds)) {
         return res.status(400).json({
           success: false,
@@ -602,8 +602,8 @@ class TestManagementController {
         validity_days
       } = req.body;
 
-      const testSeries = await TestSeries.findOne({ 
-        where: { uuid } 
+      const testSeries = await TestSeries.findOne({
+        where: { uuid }
       });
       if (!testSeries) {
         return res.status(404).json({
@@ -612,12 +612,12 @@ class TestManagementController {
         });
       }
 
-      const updateData = { 
-        name: title, 
-        description, 
-        name_gujarati: title_gujarati, 
-        description_gujarati, 
-        is_active 
+      const updateData = {
+        name: title,
+        description,
+        name_gujarati: title_gujarati,
+        description_gujarati,
+        is_active
       };
 
       // Add pricing fields if provided
@@ -673,9 +673,9 @@ class TestManagementController {
     try {
       const { uuid } = req.params;
 
-      const testSeries = await TestSeries.findOne({ 
+      const testSeries = await TestSeries.findOne({
         attributes: ['id', 'uuid', 'name', 'description', 'is_active'],
-        where: { uuid } 
+        where: { uuid }
       });
       if (!testSeries) {
         return res.status(404).json({
@@ -820,11 +820,11 @@ class TestManagementController {
       const { testSeriesUuid } = req.params;
       const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
 
-      const testSeries = await TestSeries.findOne({ 
+      const testSeries = await TestSeries.findOne({
         attributes: ['id', 'uuid', 'name', 'description', 'is_active'],
-        where: { uuid: testSeriesUuid, is_active: true } 
+        where: { uuid: testSeriesUuid, is_active: true }
       });
-      
+
       if (!testSeries) {
         return res.status(404).json({
           success: false,
@@ -859,7 +859,7 @@ class TestManagementController {
   async bulkOperationsCategories(req, res) {
     try {
       const { action, categoryIds } = req.body;
-      
+
       if (!action || !categoryIds || !Array.isArray(categoryIds)) {
         return res.status(400).json({
           success: false,
@@ -1119,10 +1119,10 @@ class TestManagementController {
       const { categoryUuid } = req.params;
       const { name, description, name_gujarati, description_gujarati, is_active } = req.body;
 
-      const category = await Category.findOne({ 
-        where: { uuid: categoryUuid, is_active: true } 
+      const category = await Category.findOne({
+        where: { uuid: categoryUuid, is_active: true }
       });
-      
+
       if (!category) {
         return res.status(404).json({
           success: false,
@@ -1157,7 +1157,7 @@ class TestManagementController {
   async bulkOperationsSubCategories(req, res) {
     try {
       const { action, subCategoryIds } = req.body;
-      
+
       if (!action || !subCategoryIds || !Array.isArray(subCategoryIds)) {
         return res.status(400).json({
           success: false,
@@ -1376,13 +1376,13 @@ class TestManagementController {
   async createTest(req, res) {
     try {
       const { subCategoryUuid } = req.params;
-      const { 
-        title, 
-        description, 
-        duration_minutes, 
-        total_marks, 
-        title_gujarati, 
-        description_gujarati, 
+      const {
+        title,
+        description,
+        duration_minutes,
+        total_marks,
+        title_gujarati,
+        description_gujarati,
         is_active,
         is_demo,
         is_free_in_paid_series,
@@ -1396,10 +1396,10 @@ class TestManagementController {
         instructions_gujarati
       } = req.body;
 
-      const subCategory = await SubCategory.findOne({ 
-        where: { uuid: subCategoryUuid, is_active: true } 
+      const subCategory = await SubCategory.findOne({
+        where: { uuid: subCategoryUuid, is_active: true }
       });
-      
+
       if (!subCategory) {
         return res.status(404).json({
           success: false,
@@ -1446,7 +1446,7 @@ class TestManagementController {
   async bulkOperationsTests(req, res) {
     try {
       const { action, testIds } = req.body;
-      
+
       if (!action || !testIds || !Array.isArray(testIds)) {
         return res.status(400).json({
           success: false,
@@ -1513,10 +1513,10 @@ class TestManagementController {
         });
       }
 
-      await test.update({ 
-        title, 
-        description, 
-        duration_minutes, 
+      await test.update({
+        title,
+        description,
+        duration_minutes,
         total_marks,
         title_gujarati,
         description_gujarati,
@@ -1662,14 +1662,14 @@ class TestManagementController {
   async createQuestion(req, res) {
     try {
       const { testUuid } = req.params;
-      const { 
-        question_text, 
-        option_a, 
-        option_b, 
-        option_c, 
-        option_d, 
-        correct_answer, 
-        explanation, 
+      const {
+        question_text,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
+        correct_answer,
+        explanation,
         marks,
         question_text_gujarati,
         option_a_gujarati,
@@ -1680,10 +1680,10 @@ class TestManagementController {
         is_active
       } = req.body;
 
-      const test = await Test.findOne({ 
-        where: { uuid: testUuid, is_active: true } 
+      const test = await Test.findOne({
+        where: { uuid: testUuid, is_active: true }
       });
-      
+
       if (!test) {
         return res.status(404).json({
           success: false,
@@ -1735,14 +1735,14 @@ class TestManagementController {
     try {
       const { uuid, questionUuid } = req.params;
       const questionId = uuid || questionUuid;
-      const { 
-        question_text, 
-        option_a, 
-        option_b, 
-        option_c, 
-        option_d, 
-        correct_answer, 
-        explanation, 
+      const {
+        question_text,
+        option_a,
+        option_b,
+        option_c,
+        option_d,
+        correct_answer,
+        explanation,
         marks,
         question_text_gujarati,
         option_a_gujarati,
@@ -1753,11 +1753,11 @@ class TestManagementController {
         is_active
       } = req.body;
 
-      const question = await Question.findOne({ 
+      const question = await Question.findOne({
         where: { uuid: questionId },
         include: [{ model: Test, as: 'test' }]
       });
-      
+
       if (!question) {
         return res.status(404).json({
           success: false,
@@ -1811,11 +1811,11 @@ class TestManagementController {
       const { uuid, questionUuid } = req.params;
       const questionId = uuid || questionUuid;
 
-      const question = await Question.findOne({ 
+      const question = await Question.findOne({
         where: { uuid: questionId },
         include: [{ model: Test, as: 'test' }]
       });
-      
+
       if (!question) {
         return res.status(404).json({
           success: false,
@@ -1943,7 +1943,7 @@ class TestManagementController {
           {
             model: Category,
             as: 'childCategories',
-            where: { is_active: true },
+            // where: { is_active: true },
             required: false,
             order: [['display_order', 'ASC'], ['created_at', 'ASC']]
           },
@@ -1951,7 +1951,7 @@ class TestManagementController {
           {
             model: Question,
             as: 'questions',
-            where: { is_active: true },
+            // where: { is_active: true },
             required: false,
             order: [['question_order', 'ASC'], ['created_at', 'ASC']]
           },
@@ -2055,7 +2055,7 @@ class TestManagementController {
           test_series_id: testSeries.id,
           hierarchy_level: 0,
           parent_category_id: null,
-          is_active: true
+          // is_active: true
         },
         attributes: [
           'id', 'uuid', 'test_series_id', 'name', 'description',
@@ -2094,7 +2094,7 @@ class TestManagementController {
       // Determine content type and button states based on what exists
       let contentType = 'empty';
       let content = [];
-      
+
       if (rootCategories.length > 0) {
         contentType = 'categories';
         content = rootCategories;
@@ -2496,7 +2496,7 @@ class TestManagementController {
 
   async getTotalNestedCategories(testSeriesId) {
     const count = await Category.count({
-      where: { 
+      where: {
         test_series_id: testSeriesId,
         hierarchy_level: { [Op.gt]: 0 }
       }
@@ -2553,7 +2553,7 @@ class TestManagementController {
     });
 
     const parentCategories = await Category.findAll({
-      where: { 
+      where: {
         test_series_id: testSeriesId,
         parent_category_id: { [Op.not]: null }
       },
@@ -2567,18 +2567,18 @@ class TestManagementController {
 
   async getActiveCategoriesCount(testSeriesId) {
     return await Category.count({
-      where: { 
+      where: {
         test_series_id: testSeriesId,
-        is_active: true 
+        is_active: true
       }
     });
   }
 
   async getInactiveCategoriesCount(testSeriesId) {
     return await Category.count({
-      where: { 
+      where: {
         test_series_id: testSeriesId,
-        is_active: false 
+        is_active: false
       }
     });
   }
@@ -2651,36 +2651,36 @@ class TestManagementController {
 
   async getActiveChildrenCount(categoryId) {
     return await Category.count({
-      where: { 
+      where: {
         parent_category_id: categoryId,
-        is_active: true 
+        is_active: true
       }
     });
   }
 
   async getInactiveChildrenCount(categoryId) {
     return await Category.count({
-      where: { 
+      where: {
         parent_category_id: categoryId,
-        is_active: false 
+        is_active: false
       }
     });
   }
 
   async getActiveQuestionsForCategory(categoryId) {
     return await Question.count({
-      where: { 
+      where: {
         category_id: categoryId,
-        is_active: true 
+        is_active: true
       }
     });
   }
 
   async getInactiveQuestionsForCategory(categoryId) {
     return await Question.count({
-      where: { 
+      where: {
         category_id: categoryId,
-        is_active: false 
+        is_active: false
       }
     });
   }

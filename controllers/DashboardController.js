@@ -8,7 +8,8 @@ const {
   Pdfs,
   LeaderboardEntry,
   Category, // Using Category model instead of DynamicCategory
-  TestSeries
+  TestSeries,
+  Test
 } = require('../models');
 
 class DashboardController {
@@ -71,7 +72,19 @@ class DashboardController {
         },
         order: [['completed_at', 'DESC']],
         limit: 5,
-        attributes: ['id', 'calculated_score', 'total_questions', 'total_correct', 'completed_at', 'started_at']
+        attributes: ['id', 'calculated_score', 'total_questions', 'total_correct', 'completed_at', 'started_at'],
+        include: [
+          {
+            model: Test,
+            as: "test",
+            attributes: ['title', 'description'] // add what you need
+          },
+          // {
+          //   model: LeaderboardEntry,
+          //   as: "leaderboardEntry",
+          //   attributes: ['percentile'] // add what you need
+          // },
+        ]
       });
 
       // Format recent activity
@@ -84,7 +97,7 @@ class DashboardController {
           id: index + 1,
           sessionUuid: session.id,
           type: 'test',
-          title: `Test ${index + 1}`,
+          title: session?.test?.title || 'N/A',
           date: session.completed_at || session.started_at,
           score: session.total_correct || 0,
           total: session.total_questions || 0,
@@ -123,7 +136,7 @@ class DashboardController {
     try {
       // Return demo data for now
       const daysSinceJoining = Math.floor(Math.random() * 30) + 1; // 1-30 days
-      
+
       const summary = {
         user: {
           uuid: req.user.uuid,

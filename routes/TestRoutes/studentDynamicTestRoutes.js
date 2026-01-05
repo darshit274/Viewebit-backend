@@ -213,7 +213,7 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
       where,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      order: [["created_at", "DESC"]],
+      order: [["created_at", "ASC"]],
       attributes: [
         "id",
         "uuid",
@@ -352,7 +352,7 @@ router.get("/dynamic/test-series/:uuid", optionalAuth, async (req, res) => {
       },
       order: [
         ["display_order", "ASC"],
-        ["name", "ASC"],
+        ["test_duration_minutes", "ASC"],
       ],
       attributes: [
         "id",
@@ -522,7 +522,7 @@ router.get("/dynamic/categories/:uuid", optionalAuth, async (req, res) => {
       },
       order: [
         ["display_order", "ASC"],
-        ["name", "ASC"],
+        ["created_at", "ASC"],
       ],
       attributes: [
         "id",

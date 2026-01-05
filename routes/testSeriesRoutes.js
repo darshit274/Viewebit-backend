@@ -30,6 +30,9 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
+// Enrolled series endpoint (requires authentication) - MUST be before parameterized routes
+router.get('/enrolled', authenticateToken, TestSeriesController.getEnrolledSeries);
+
 // Test series endpoints (for web app compatibility)
 router.get('/series', optionalAuth, TestSeriesController.getTestSeries);
 router.get('/series/:id', optionalAuth, TestSeriesController.getTestSeriesDetails);

@@ -406,6 +406,7 @@ class LeaderboardController {
       console.log(`🔍 Fetching leaderboard for UUID: ${testSeriesId}`);
 
       let leaderboardData = [];
+      let strictTestIds = [];
 
       try {
         // ✅ SMART UUID DETECTION: Check if UUID is test series OR category
@@ -414,25 +415,117 @@ class LeaderboardController {
           attributes: ["id", "name", "uuid"],
         });
 
-        // If not found as test series, check if it's a category UUID
         if (!testSeries) {
-          console.log(`❌ Not found as test series UUID, checking if it's a category UUID...`);
+          const testSession = await TestSession.findAll({
+            where: {
+              id: testSeriesId,
+            }
+          })
 
-          const { Category } = require("../models");
-          const category = await Category.findOne({
-            where: { uuid: testSeriesId },
-            include: [{
-              model: TestSeries,
-              as: 'testSeries',
-              attributes: ['id', 'name', 'uuid']
-            }]
+          if (testSession.length > 0) {
+            const test = await Test.findAll({
+              where: {
+                id: testSession?.[0]?.test_id
+              },
+              attributes: ["sub_category_id"],
+            })
+            const subCategoryId = test?.[0]?.sub_category_id;
+            if (subCategoryId) {
+              const AlltestIds = await Test.findAll({
+                where: {
+                  sub_category_id: subCategoryId
+                },
+                attributes: ["id"],
+              })
+              strictTestIds = AlltestIds.map((test) => test.id);
+            }
+
+          }
+        }
+
+
+
+        if (strictTestIds.length === 0) {
+          // If not found as test series, check if it's a category UUID
+          if (!testSeries) {
+            console.log(`❌ Not found as test series UUID, checking if it's a category UUID...`);
+
+            const { Category } = require("../models");
+            const category = await Category.findOne({
+              where: { uuid: testSeriesId },
+              include: [{
+                model: TestSeries,
+                as: 'testSeries',
+                attributes: ['id', 'name', 'uuid']
+              }]
+            });
+
+            if (category && category.testSeries) {
+              testSeries = category.testSeries;
+              console.log(`✅ Found as category UUID! Using parent test series: ${testSeries.name} (${testSeries.uuid})`);
+            } else {
+              console.log(`❌ UUID not found as test series OR category`);
+              return res.json({
+                success: true,
+                message: "No participants found for this test series yet",
+                data: [],
+                testSeriesId,
+                metadata: {
+                  total: 0,
+                  limit: parseInt(limit),
+                  dataSource: "empty",
+                  message: "Be the first to take a test in this series!",
+                },
+              });
+            }
+          } else {
+            console.log(`✅ Found as test series UUID: ${testSeries.name}`);
+          }
+
+          // Find all tests that belong to this test series
+          const { NewTest } = require("../models");
+          const testsInSeries = await NewTest.findAll({
+            where: { test_series_id: testSeries.id },
+            attributes: ["id"],
           });
 
-          if (category && category.testSeries) {
-            testSeries = category.testSeries;
-            console.log(`✅ Found as category UUID! Using parent test series: ${testSeries.name} (${testSeries.uuid})`);
-          } else {
-            console.log(`❌ UUID not found as test series OR category`);
+          const testIds = testsInSeries.map((test) => test.id);
+
+          // Don't return early if NewTest is empty - we also check old tests below
+
+          // Get all test IDs (both old and new system) that belong to this test series
+          const { Test, SubCategory, Category } = require("../models");
+          const oldTests = await Test.findAll({
+            include: [
+              {
+                model: SubCategory,
+                as: "subCategory",
+                include: [
+                  {
+                    model: Category,
+                    as: "category",
+                    where: { test_series_id: testSeries.id },
+                  },
+                ],
+              },
+            ],
+            attributes: ["id"],
+          });
+
+          const oldTestIds = oldTests.map((test) => test.id);
+          const allTestIds = [...testIds, ...oldTestIds];
+
+          console.log(
+            `Looking for leaderboard entries with test IDs: NewTest[${testIds.join(
+              ","
+            )}] + OldTest[${oldTestIds.join(",")}]`
+          );
+          console.log("All test IDs for query:", allTestIds);
+          console.log("Query will be: test_id IN", allTestIds);
+
+          // Check if we have any test IDs to search for
+          if (allTestIds.length === 0) {
+            console.log("No test IDs found - returning empty leaderboard");
             return res.json({
               success: true,
               message: "No participants found for this test series yet",
@@ -446,87 +539,25 @@ class LeaderboardController {
               },
             });
           }
-        } else {
-          console.log(`✅ Found as test series UUID: ${testSeries.name}`);
-        }
 
-        // Find all tests that belong to this test series
-        const { NewTest } = require("../models");
-        const testsInSeries = await NewTest.findAll({
-          where: { test_series_id: testSeries.id },
-          attributes: ["id"],
-        });
+          // STRICT FILTERING: Only get entries for THIS specific test series UUID
+          // Find tests that were created ONLY for this test series by checking category ownership
 
-        const testIds = testsInSeries.map((test) => test.id);
-
-        // Don't return early if NewTest is empty - we also check old tests below
-
-        // Get all test IDs (both old and new system) that belong to this test series
-        const { Test, SubCategory, Category } = require("../models");
-        const oldTests = await Test.findAll({
-          include: [
-            {
-              model: SubCategory,
-              as: "subCategory",
-              include: [
-                {
-                  model: Category,
-                  as: "category",
-                  where: { test_series_id: testSeries.id },
-                },
-              ],
-            },
-          ],
-          attributes: ["id"],
-        });
-
-        const oldTestIds = oldTests.map((test) => test.id);
-        const allTestIds = [...testIds, ...oldTestIds];
-
-        console.log(
-          `Looking for leaderboard entries with test IDs: NewTest[${testIds.join(
-            ","
-          )}] + OldTest[${oldTestIds.join(",")}]`
-        );
-        console.log("All test IDs for query:", allTestIds);
-        console.log("Query will be: test_id IN", allTestIds);
-
-        // Check if we have any test IDs to search for
-        if (allTestIds.length === 0) {
-          console.log("No test IDs found - returning empty leaderboard");
-          return res.json({
-            success: true,
-            message: "No participants found for this test series yet",
-            data: [],
-            testSeriesId,
-            metadata: {
-              total: 0,
-              limit: parseInt(limit),
-              dataSource: "empty",
-              message: "Be the first to take a test in this series!",
-            },
-          });
-        }
-
-        // STRICT FILTERING: Only get entries for THIS specific test series UUID
-        // Find tests that were created ONLY for this test series by checking category ownership
-        const strictTestIds = [];
-
-        // Only include tests from categories that EXCLUSIVELY belong to this test series
-        for (const category of await Category.findAll({
-          where: { test_series_id: testSeries.id },
-        })) {
-          const subCats = await SubCategory.findAll({
-            where: { category_id: category.id },
-          });
-          for (const subCat of subCats) {
-            const tests = await Test.findAll({
-              where: { sub_category_id: subCat.id },
+          // Only include tests from categories that EXCLUSIVELY belong to this test series
+          for (const category of await Category.findAll({
+            where: { test_series_id: testSeries.id },
+          })) {
+            const subCats = await SubCategory.findAll({
+              where: { category_id: category.id },
             });
-            strictTestIds.push(...tests.map((t) => t.id));
+            for (const subCat of subCats) {
+              const tests = await Test.findAll({
+                where: { sub_category_id: subCat.id },
+              });
+              strictTestIds.push(...tests.map((t) => t.id));
+            }
           }
         }
-
         console.log(
           `STRICT filtering: Using ONLY test IDs: [${strictTestIds.join(
             ","

@@ -26,6 +26,7 @@ const DebugLeaderboardRoutes = require("./debugLeaderboard");
 const SampleDataRoutes = require("./sampleDataRoutes");
 const UploadRoutes = require("./uploadRoutes");
 const QuestionReportRoutes = require("./questionReportRoutes");
+const ContactQueryRoutes = require("./contactQueryRoutes");
 
 router.use("/users", UserRoutes);
 router.use("/admin", AdminRoutes);
@@ -46,9 +47,6 @@ router.use("/subscription-access", SubscriptionAccessRoutes); // Subscription ac
 router.use("/debug", DebugRoutes); // Debug APIs for checking database state
 router.use("/test-simulation", TestSimulationRoutes); // Temporary test simulation APIs for testing
 router.use("/quiz", QuizSubmissionRoutes); // Simple quiz submission APIs for frontend
-console.log('📌 Registering Test History Routes at /test-history');
-console.log('📌 TestHistoryRoutes type:', typeof TestHistoryRoutes);
-console.log('📌 TestHistoryRoutes:', TestHistoryRoutes);
 try {
   router.use("/test-history", TestHistoryRoutes); // Test history APIs for viewing past test results
   console.log('✅ Test History Routes registered successfully');
@@ -57,6 +55,7 @@ try {
 }
 router.use("/debug-leaderboard", DebugLeaderboardRoutes); // Debug leaderboard queries
 router.use("/sample-data", SampleDataRoutes); // Temporary sample data creation routes
+router.use("/contact", ContactQueryRoutes); // Contact query APIs - public submission & admin management
 router.use("/", QuestionReportRoutes); // Question report APIs for users and admins
 router.use("/", StudentDynamicTestRoutes); // NEW: Student-facing dynamic hierarchy APIs
 router.use("/", StudentTestRoutes); // OLD: Student-facing test APIs (kept for backwards compatibility)

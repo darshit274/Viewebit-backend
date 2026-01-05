@@ -114,8 +114,11 @@ router.post('/notifications/test', adminAuth, notificationController.sendTestNot
 
 // Subscription management routes (admin access)
 const subscriptionController = require('../../controllers/SubscriptionController/subscriptionController');
+router.get('/subscriptions', adminAuth, subscriptionController.getAllSubscriptions);
 router.get('/subscriptions/stats', adminAuth, subscriptionController.getSubscriptionStats);
 router.get('/subscriptions/export', adminAuth, subscriptionController.exportSubscriptions);
+router.get('/subscriptions/:id', adminAuth, subscriptionController.getSubscriptionDetails);
+router.patch('/subscriptions/:id/status', adminAuth, subscriptionController.updateSubscriptionStatus);
 router.post('/subscriptions/manual', adminAuth, subscriptionController.createManualSubscription);
 
 // PDF Upload management routes

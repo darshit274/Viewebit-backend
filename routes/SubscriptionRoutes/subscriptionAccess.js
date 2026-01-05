@@ -51,8 +51,10 @@ router.get('/test-series/:seriesId', authToken, async (req, res) => {
       });
     }
 
+
+
     // If the series is free, user has access
-    if (testSeries.pricing_type === 'free') {
+    if (testSeries.pricing_type === 'free' || testSeries.pricing_type === 'previous_years_question_papers') {
       return res.json({
         success: true,
         data: {
@@ -127,7 +129,7 @@ router.get('/test-series/:seriesId', authToken, async (req, res) => {
       order: [['created_at', 'DESC']]
     });
 
-    const hasPendingPayment = pendingSubscription && 
+    const hasPendingPayment = pendingSubscription &&
       (new Date() - new Date(pendingSubscription.created_at)) < (30 * 60 * 1000); // 30 minutes
 
     console.log('🚫 [MOBILE APP] User does not have access:', {
@@ -402,7 +404,7 @@ const checkTestAccess = async (req, res, next) => {
     }
 
     let testSeriesId = seriesId;
-    
+
     // If we have testId but no seriesId, find the series from test
     if (testId && !seriesId) {
       const test = await Test.findOne({
@@ -412,7 +414,7 @@ const checkTestAccess = async (req, res, next) => {
           attributes: ['id', 'uuid', 'pricing_type']
         }]
       });
-      
+
       if (test && test.TestSeries) {
         testSeriesId = test.TestSeries.uuid;
       }
@@ -427,7 +429,7 @@ const checkTestAccess = async (req, res, next) => {
 
     // Use our subscription check logic
     const accessCheck = await checkUserTestSeriesAccess(userId, testSeriesId);
-    
+
     if (!accessCheck.hasAccess) {
       return res.status(403).json({
         success: false,
@@ -544,8 +546,8 @@ async function checkUserTestSeriesAccess(userId, seriesId, categoryId = null) {
   }
 }
 
-module.exports = { 
-  router, 
+module.exports = {
+  router,
   checkTestAccess,
   checkUserTestSeriesAccess
 };
