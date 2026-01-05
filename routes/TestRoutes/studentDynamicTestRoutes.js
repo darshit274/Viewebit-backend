@@ -352,7 +352,7 @@ router.get("/dynamic/test-series/:uuid", optionalAuth, async (req, res) => {
       },
       order: [
         ["display_order", "ASC"],
-        ["test_duration_minutes", "ASC"],
+        ["created_at", "ASC"],
       ],
       attributes: [
         "id",
