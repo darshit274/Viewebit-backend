@@ -9,19 +9,19 @@ module.exports = {
     dialect: process.env.DB_DIALECT || "mysql",
     port: process.env.DB_PORT || 3306,
     logging: console.log,
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000,
-    },
-    dialectOptions: {
-      connectTimeout: 20000,
-      ssl: {
-        require: false, 
-        rejectUnauthorized: false,
-      },
-    },
+    // pool: {
+    //   max: 5,
+    //   min: 0,
+    //   acquire: 30000,
+    //   idle: 10000,
+    // },
+    // dialectOptions: {
+    //   connectTimeout: 20000,
+    //   ssl: {
+    //     require: false, 
+    //     rejectUnauthorized: false,
+    //   },
+    // },
   },
 
   test: {
@@ -31,19 +31,19 @@ module.exports = {
     host: process.env.DB_HOST || "localhost",
     dialect: process.env.DB_DIALECT || "mysql",
     logging: false,
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 60000, // Increased from 20s to 60s for db4free.net
-      idle: 10000,
-    },
-    dialectOptions: {
-      // connectTimeout: 60000, // Increased from 30s to 60s for db4free.net
-      ssl: {
-        require: false,
-        rejectUnauthorized: false,
-      },
-    },
+    // pool: {
+    //   max: 5,
+    //   min: 0,
+    //   acquire: 60000, // Increased from 20s to 60s for db4free.net
+    //   idle: 10000,
+    // },
+    // dialectOptions: {
+    //   // connectTimeout: 60000, // Increased from 30s to 60s for db4free.net
+    //   ssl: {
+    //     require: false,
+    //     rejectUnauthorized: false,
+    //   },
+    // },
   },
 
   production: {
@@ -54,18 +54,18 @@ module.exports = {
     dialect: process.env.DB_DIALECT || "mysql",
     port: process.env.DB_PORT || 3306,
     logging: false,
-    pool: {
-      max: 15,    
-      min: 5,     
-      acquire: 60000,
-      idle: 30000,
-    },
-    dialectOptions: {
-      connectTimeout: 30000,
-      ssl: {
-        require: true,           
-        rejectUnauthorized: true 
-      },
-    },
+    // pool: {
+    //   max: 15,    
+    //   min: 5,     
+    //   acquire: 60000,
+    //   idle: 30000,
+    // },
+    // dialectOptions: {
+    //   connectTimeout: 30000,
+    //   ssl: {
+    //     require: true,           
+    //     rejectUnauthorized: true 
+    //   },
+    // },
   },
 };

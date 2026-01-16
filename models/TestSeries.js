@@ -95,6 +95,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: 365,
       comment: 'Number of days the course is valid after purchase'
+    },
+    is_course_closed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'When true, prevents new enrollments for this course'
     }
   }, {
     tableName: 'new_test_series',

@@ -308,7 +308,7 @@ class TestManagementController {
         attributes: [
           'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 'is_active', 'created_at', 'updated_at',
           'pricing_type', 'price', 'currency',
-          'features', 'discount_percentage', 'is_featured', 'has_negative_marking', 'negative_marks', 'validity_days'
+          'features', 'discount_percentage', 'is_featured', 'is_course_closed', 'has_negative_marking', 'negative_marks', 'validity_days'
         ],
         where,
         order: [[sortBy, sortOrder]],
@@ -340,7 +340,8 @@ class TestManagementController {
       console.log('DEBUG: Raw testSeries data from DB:', JSON.stringify(testSeries.slice(0, 1), null, 2));
 
       const transformedSeries = testSeries.map(series => {
-        console.log('DEBUG: Processing series:', series.uuid, 'has_negative_marking:', series.has_negative_marking, 'negative_marks:', series.negative_marks);
+        console.log('DEBUG: Processing series:', series.uuid, 'has_negative_marking:', series.has_negative_marking, 'negative_marks:', series.negative_marks, "is_course_closed", series.dataValues.is_course_closed);
+        // console.log('DEBUG: Processing series:', series);
 
         return {
           id: series.id,
@@ -356,6 +357,7 @@ class TestManagementController {
           features: series.features,
           discount_percentage: series.discount_percentage,
           is_featured: series.is_featured,
+          is_course_closed: series.dataValues.is_course_closed,
           has_negative_marking: series.has_negative_marking,
           negative_marks: series.negative_marks,
           validity_days: series.validity_days,
@@ -399,7 +401,8 @@ class TestManagementController {
           'is_active', 'created_at', 'updated_at', 'pricing_type', 'price', 'currency',
           'features', 'discount_percentage',
           'is_featured', 'difficulty_level', 'free_test_count', 'max_attempts_per_test',
-          'has_negative_marking', 'negative_marks', 'supports_pause_resume', 'supports_multilanguage', 'validity_days'
+          'has_negative_marking', 'negative_marks', 'supports_pause_resume', 'supports_multilanguage', 'validity_days',
+          'is_course_closed'
         ]
       });
 
@@ -446,7 +449,8 @@ class TestManagementController {
         one_time_completion,
         max_attempts,
         auto_submit_on_expire,
-        validity_days
+        validity_days,
+        is_course_closed
       } = req.body;
 
       const testSeries = await TestSeries.create({
@@ -468,7 +472,8 @@ class TestManagementController {
         // Negative marking removed from test series level - now handled at category level
         supports_pause_resume: true,
         supports_multilanguage: true,
-        validity_days: validity_days || 365 // Default to 365 days (1 year)
+        validity_days: validity_days || 365, // Default to 365 days (1 year)
+        is_course_closed: is_course_closed || false // Default to false (open for enrollment)
       });
 
       // Transform response to match frontend expectations
@@ -497,6 +502,7 @@ class TestManagementController {
           max_attempts: testSeries.max_attempts,
           auto_submit_on_expire: testSeries.auto_submit_on_expire,
           validity_days: testSeries.validity_days,
+          is_course_closed: testSeries.is_course_closed,
           created_at: testSeries.created_at,
           updated_at: testSeries.updated_at
         },
@@ -599,7 +605,8 @@ class TestManagementController {
         features,
         discount_percentage,
         is_featured,
-        validity_days
+        validity_days,
+        is_course_closed
       } = req.body;
 
       const testSeries = await TestSeries.findOne({
@@ -617,7 +624,8 @@ class TestManagementController {
         description,
         name_gujarati: title_gujarati,
         description_gujarati,
-        is_active
+        is_active,
+        is_course_closed
       };
 
       // Add pricing fields if provided
@@ -641,6 +649,7 @@ class TestManagementController {
         description: testSeries.description,
         description_gujarati: testSeries.description_gujarati,
         is_active: testSeries.is_active,
+        is_course_closed: testSeries.is_course_closed,
         pricing_type: testSeries.pricing_type,
         price: testSeries.price,
         currency: testSeries.currency,
@@ -994,7 +1003,7 @@ class TestManagementController {
         });
       }
 
-      await category.update({ is_active: false });
+      await category.destroy();
 
       res.json({
         success: true,
@@ -1823,13 +1832,13 @@ class TestManagementController {
         });
       }
 
-      await question.update({ is_active: false });
+      await question.destroy();
 
       // Update test total marks
-      const totalMarks = await Question.sum('marks', {
-        where: { test_id: question.test_id, is_active: true }
-      });
-      await question.test.update({ total_marks: totalMarks });
+      // const totalMarks = await Question.sum('marks', {
+      //   where: { test_id: question.test_id, is_active: true }
+      // });
+      // await question.test.update({ total_marks: totalMarks });
 
       res.json({
         success: true,

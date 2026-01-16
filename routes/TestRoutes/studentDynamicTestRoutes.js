@@ -87,9 +87,9 @@ async function getQuestionsRecursive(categoryId, shuffle = false) {
     order: shuffle
       ? sequelize.random()
       : [
-          ["question_order", "ASC"],
-          ["id", "ASC"],
-        ],
+        ["question_order", "ASC"],
+        ["id", "ASC"],
+      ],
     attributes: [
       "id",
       "uuid",
@@ -223,6 +223,7 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
         "description_gujarati",
         "is_active",
         "pricing_type",
+        "is_course_closed",
         "price",
         "currency",
         "discount_percentage",
@@ -276,6 +277,13 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
           });
           is_subscribed = !!subscription;
         }
+        if (
+          series.pricing_type === "paid" &&
+          series.is_course_closed === true &&
+          !is_subscribed
+        ) {
+          return null; 
+        }
 
         return {
           ...series.toJSON(),
@@ -291,7 +299,7 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
 
     res.json({
       success: true,
-      data: testSeriesWithMeta,
+      data: testSeriesWithMeta.filter(series => series !== null), // Filter out inaccessible series
       pagination: {
         total: count,
         page: parseInt(page),
