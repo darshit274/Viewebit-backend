@@ -14,6 +14,7 @@ router.post('/resetPassword', authController.resetPassword);
 router.post('/resend-otp', authController.resendOTP);
 
 // Protected routes (authentication required)
+router.post('/logout', authToken, authController.logout);
 router.get('/profile', authToken, authController.getProfile);
 router.post('/change-password', authToken, authController.changePassword);
 router.post('/register-push-token', authToken, notificationController.registerPushToken);

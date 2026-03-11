@@ -140,10 +140,15 @@ exports.login = async (req, res,    next) => {
         if (!validated_password) {
             return next(new ErrorHandler('Invalid email or password', 401));
         }
-        // Generate JWT token
-        const payload = { 
+        // Generate a unique session ID and save it — invalidates any previous session
+        const sessionId = require('crypto').randomUUID();
+        await user.update({ current_session_id: sessionId, lastLogin: new Date() });
+
+        // Generate JWT token (includes sessionId to enforce single-device login)
+        const payload = {
             uuid: user.uuid,  // Use UUID as primary identifier
-            email: user.email 
+            email: user.email,
+            sessionId
         };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
         res.status(200).json({
@@ -586,6 +591,20 @@ async function calculateUserRank(userUuid, userAvgScore) {
 
     return (betterUsers?.length || 0) + 1;
 }
+
+// Logout — clears the session so no other device can use this session
+exports.logout = async (req, res, next) => {
+    try {
+        await User.update(
+            { current_session_id: null },
+            { where: { uuid: req.user.uuid } }
+        );
+        res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (err) {
+        console.error('Logout error:', err);
+        return next(new ErrorHandler('Error while logging out', 500));
+    }
+};
 
 // Change user password
 exports.changePassword = async (req, res, next) => {

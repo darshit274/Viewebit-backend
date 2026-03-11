@@ -170,6 +170,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       allowNull: false
+    },
+    current_session_id: {
+      type: DataTypes.STRING(36),
+      allowNull: true,
+      defaultValue: null
     }
   }, {
     sequelize,

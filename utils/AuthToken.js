@@ -34,9 +34,17 @@ exports.authToken = async (req, res, next) => {
     const user = await User.findOne({ where: { uuid: userUuid } });
     
     if (!user) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not found. Please login again.' 
+      return res.status(401).json({
+        success: false,
+        message: 'User not found. Please login again.'
+      });
+    }
+
+    // Single-device enforcement: check if this token's session matches the active session in DB
+    if (!decoded.sessionId || user.current_session_id !== decoded.sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Your session was ended because you logged in from another device. Please login again.'
       });
     }
 

@@ -19,9 +19,9 @@ exports.adminAuth = async (req, res, next) => {
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        // Find admin
+        // Find admin (fetch current_session_id for single-device enforcement)
         const admin = await Admin.findByPk(decoded.id, {
-            attributes: ['id', 'name', 'email', 'role', 'isActive']
+            attributes: ['id', 'name', 'email', 'role', 'isActive', 'current_session_id']
         });
 
         if (!admin) {
@@ -30,6 +30,11 @@ exports.adminAuth = async (req, res, next) => {
 
         if (!admin.isActive) {
             return next(new ErrorHandler('Account is deactivated.', 403));
+        }
+
+        // Single-device enforcement: check if this token's session matches the active session in DB
+        if (!decoded.sessionId || admin.current_session_id !== decoded.sessionId) {
+            return next(new ErrorHandler('Your session was ended because you logged in from another device. Please login again.', 401));
         }
 
         // Add admin to request object

@@ -113,17 +113,21 @@ exports.verifyOTP = async (req, res, next) => {
             return next(new ErrorHandler('Invalid verification code', 401));
         }
 
-        // Clear OTP after successful verification
+        // Clear OTP after successful verification and generate a new session ID
+        // (invalidates any previous session on another device)
+        const sessionId = require('crypto').randomUUID();
         admin.otp = null;
         admin.otpExpiry = null;
         admin.lastLogin = new Date();
+        admin.current_session_id = sessionId;
         await admin.save();
 
-        // Generate JWT token
+        // Generate JWT token (includes sessionId to enforce single-device login)
         const payload = {
             id: admin.id,
             email: admin.email,
-            role: admin.role
+            role: admin.role,
+            sessionId
         };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
 
@@ -235,10 +239,13 @@ exports.getProfile = async (req, res, next) => {
     }
 };
 
-// Admin logout
+// Admin logout — clears the session so the token cannot be reused
 exports.logout = async (req, res, next) => {
     try {
-        // In a more complex setup, you might want to blacklist the token
+        await Admin.update(
+            { current_session_id: null },
+            { where: { id: req.admin.id } }
+        );
         res.status(200).json({
             success: true,
             message: 'Logout successful'

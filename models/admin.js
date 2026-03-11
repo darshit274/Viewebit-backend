@@ -62,6 +62,11 @@ module.exports = (sequelize, DataTypes) => {
     otpExpiry: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    current_session_id: {
+      type: DataTypes.STRING(36),
+      allowNull: true,
+      defaultValue: null
     }
   }, {
     sequelize,
