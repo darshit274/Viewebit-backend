@@ -24,6 +24,7 @@ router.get('/analytics/registrations', adminAuth, adminController.getRegistratio
 router.get('/analytics/test-attempts', adminAuth, adminController.getTestAttemptAnalytics);
 router.get('/analytics/categories', adminAuth, adminController.getCategoryAnalytics);
 router.get('/analytics/recent-activity', adminAuth, adminController.getRecentActivity);
+router.get('/analytics/test-series-attempts', adminAuth, adminController.getTestSeriesAttemptAnalytics);
 
 // Student management routes (alias for users)
 router.get('/students', adminAuth, adminController.getStudents);

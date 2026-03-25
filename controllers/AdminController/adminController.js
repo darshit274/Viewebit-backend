@@ -850,6 +850,59 @@ exports.getRecentActivity = async (req, res, next) => {
     }
 };
 
+// Analytics: test attempts broken down per test series
+exports.getTestSeriesAttemptAnalytics = async (req, res, next) => {
+    try {
+        const period = req.query.period || 'week';
+        const { sequelize } = require('../../models');
+
+        let startDate = new Date();
+        if (period === 'month') {
+            startDate.setMonth(startDate.getMonth() - 1);
+        } else {
+            startDate.setDate(startDate.getDate() - 7);
+        }
+
+        const rows = await sequelize.query(`
+            SELECT
+                ts.id,
+                ts.name,
+                COUNT(sess.id)                                                                      AS total_attempts,
+                SUM(CASE WHEN sess.status = 'completed' THEN 1 ELSE 0 END)                         AS completed_attempts,
+                ROUND(AVG(CASE WHEN sess.status = 'completed' THEN sess.calculated_score ELSE NULL END), 1) AS avg_score
+            FROM new_test_series ts
+            LEFT JOIN categories c     ON c.test_series_id = ts.id
+            LEFT JOIN sub_categories sc ON sc.category_id  = c.id
+            LEFT JOIN tests t           ON t.sub_category_id = sc.id
+            LEFT JOIN test_sessions sess ON sess.test_id = t.id
+                                        AND sess.created_at >= :startDate
+            WHERE ts.is_active = 1
+            GROUP BY ts.id, ts.name
+            HAVING COUNT(sess.id) > 0
+            ORDER BY total_attempts DESC
+            LIMIT 10
+        `, {
+            replacements: { startDate },
+            type: sequelize.QueryTypes.SELECT
+        });
+
+        const data = rows.map(row => ({
+            name: row.name,
+            total_attempts: parseInt(row.total_attempts) || 0,
+            completed_attempts: parseInt(row.completed_attempts) || 0,
+            avg_score: parseFloat(row.avg_score) || 0,
+            completion_rate: row.total_attempts > 0
+                ? Math.round((parseInt(row.completed_attempts) / parseInt(row.total_attempts)) * 100)
+                : 0
+        }));
+
+        res.status(200).json({ success: true, data });
+    } catch (err) {
+        console.error('Test series attempt analytics error:', err);
+        return next(new ErrorHandler('Failed to fetch test series attempt analytics', 500));
+    }
+};
+
 // Additional user management methods
 exports.getUserStats = async (req, res, next) => {
     try {
