@@ -43,6 +43,7 @@ router.delete('/users/:id', adminAuth, adminController.deleteStudent);
 router.patch('/users/:id/toggle-status', adminAuth, adminController.toggleUserStatus);
 router.patch('/users/:id/verify', adminAuth, adminController.verifyUser);
 router.patch('/users/:id/toggle-premium', adminAuth, adminController.toggleUserPremium);
+router.patch('/users/:id/reset-device', adminAuth, adminController.resetUserDevice);
 
 
 // Questions management routes

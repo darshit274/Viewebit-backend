@@ -175,6 +175,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(36),
       allowNull: true,
       defaultValue: null
+    },
+    device_id: {
+      type: DataTypes.STRING(36),
+      allowNull: true,
+      defaultValue: null
     }
   }, {
     sequelize,

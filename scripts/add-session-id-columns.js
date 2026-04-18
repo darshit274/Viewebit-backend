@@ -37,6 +37,18 @@ async function run() {
     console.log('ℹ️  current_session_id already exists in admins table — skipping');
   }
 
+  // --- device_id on users (app device lock) ---
+  if (!usersColumns.device_id) {
+    await queryInterface.addColumn('users', 'device_id', {
+      type: DataTypes.STRING(36),
+      allowNull: true,
+      defaultValue: null
+    });
+    console.log('✅ Added device_id to users table');
+  } else {
+    console.log('ℹ️  device_id already exists in users table — skipping');
+  }
+
   await sequelize.close();
   console.log('\nDone. Single-device login enforcement is ready.');
 }

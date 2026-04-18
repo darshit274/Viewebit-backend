@@ -124,7 +124,7 @@ exports.register = async (req, res, next) => {
 
 exports.login = async (req, res,    next) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, device_id } = req.body;
         // Find user by email
         const user = await User.findOne({ where: { email } });
         if (!user) {
@@ -134,12 +134,25 @@ exports.login = async (req, res,    next) => {
         if (!user.isEmailVerified) {
             return next(new ErrorHandler('Please verify your email before logging in', 403));
         }
-        
+
         // Check password
         const validated_password = await bcrypt.compare(password, user.password);
         if (!validated_password) {
             return next(new ErrorHandler('Invalid email or password', 401));
         }
+
+        // Device lock check (app only — device_id is only sent by the mobile app, never by web)
+        if (device_id) {
+            if (user.device_id && user.device_id !== device_id) {
+                return next(new ErrorHandler(
+                    'This account is linked to another device. Please contact admin to reset your device access.',
+                    403
+                ));
+            }
+            // First login from app, or same device — save/confirm device_id
+            await user.update({ device_id });
+        }
+
         // Generate a unique session ID and save it — invalidates any previous session
         const sessionId = require('crypto').randomUUID();
         await user.update({ current_session_id: sessionId, lastLogin: new Date() });

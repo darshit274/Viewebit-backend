@@ -377,28 +377,45 @@ exports.getDashboardStats = async (req, res, next) => {
 // Get all students with pagination
 exports.getStudents = async (req, res, next) => {
     try {
+        const { Op } = require('sequelize');
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const limit = Math.min(parseInt(req.query.limit) || 10, 100); // cap at 100
         const search = req.query.search || '';
         const sortBy = req.query.sortBy || 'created_at';
-        const sortOrder = req.query.sortOrder || 'DESC';
+        const sortOrder = (req.query.sortOrder || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
         const offset = (page - 1) * limit;
 
         const whereClause = {};
+
+        // Search by username, email, or phone
         if (search) {
-            whereClause[require('sequelize').Op.or] = [
-                { username: { [require('sequelize').Op.like]: `%${search}%` } },
-                { email: { [require('sequelize').Op.like]: `%${search}%` } }
+            whereClause[Op.or] = [
+                { username: { [Op.like]: `%${search}%` } },
+                { email: { [Op.like]: `%${search}%` } },
+                { phone: { [Op.like]: `%${search}%` } }
             ];
         }
 
+        // Filter by active status
+        if (req.query.is_active !== undefined && req.query.is_active !== '') {
+            whereClause.isActive = req.query.is_active === 'true';
+        }
+
+        // Filter by email verification
+        if (req.query.is_verified !== undefined && req.query.is_verified !== '') {
+            whereClause.isEmailVerified = req.query.is_verified === 'true';
+        }
+
+        const allowedSortFields = ['username', 'email', 'created_at', 'isEmailVerified', 'isActive'];
+        const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
+
         const { count, rows } = await User.findAndCountAll({
             where: whereClause,
-            attributes: ['uuid', 'username', 'email', 'phone', 'profileImage', 'isEmailVerified', 'isActive', 'created_at'],
+            attributes: ['uuid', 'username', 'email', 'phone', 'profileImage', 'isEmailVerified', 'isActive', 'created_at', 'device_id'],
             limit,
             offset,
-            order: [[sortBy, sortOrder]]
+            order: [[safeSortBy, sortOrder]]
         });
 
         res.status(200).json({
@@ -1009,6 +1026,28 @@ exports.toggleUserPremium = async (req, res, next) => {
         console.error('Toggle user premium error:', err);
         const error = new ErrorHandler('Failed to toggle user premium status', 500);
         return next(error);
+    }
+};
+
+// Reset a user's device lock — clears device_id so they can login from a new device
+exports.resetUserDevice = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const user = await User.findOne({ where: { uuid: id } });
+        if (!user) {
+            return next(new ErrorHandler('User not found', 404));
+        }
+
+        await user.update({ device_id: null });
+
+        res.status(200).json({
+            success: true,
+            message: `Device lock removed for ${user.username}. They can now login from any device.`
+        });
+    } catch (err) {
+        console.error('Reset user device error:', err);
+        return next(new ErrorHandler('Failed to reset device lock', 500));
     }
 };
 
