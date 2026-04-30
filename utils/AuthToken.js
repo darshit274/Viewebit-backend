@@ -40,8 +40,10 @@ exports.authToken = async (req, res, next) => {
       });
     }
 
-    // Single-device enforcement: check if this token's session matches the active session in DB
-    if (!decoded.sessionId || user.current_session_id !== decoded.sessionId) {
+    // Single-device enforcement: only reject if the DB has an active session set
+    // and it doesn't match this token's session. Tokens without sessionId (pre-feature)
+    // are allowed through so existing users aren't force-logged-out on upgrade.
+    if (user.current_session_id && decoded.sessionId && user.current_session_id !== decoded.sessionId) {
       return res.status(401).json({
         success: false,
         message: 'Your session was ended because you logged in from another device. Please login again.'
