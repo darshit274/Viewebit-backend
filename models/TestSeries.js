@@ -101,6 +101,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false,
       allowNull: false,
       comment: 'When true, prevents new enrollments for this course'
+    },
+    display_order: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      comment: 'Controls display position in app and web — lower number shown first'
     }
   }, {
     tableName: 'new_test_series',

@@ -282,8 +282,8 @@ class TestManagementController {
         limit = 10,
         search = '',
         status = 'all',
-        sortBy = 'created_at',
-        sortOrder = 'DESC'
+        sortBy = 'display_order',
+        sortOrder = 'ASC'
       } = req.query;
 
       const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -303,15 +303,19 @@ class TestManagementController {
         ];
       }
 
+      const allowedSortFields = ['display_order', 'created_at', 'name', 'updated_at'];
+      const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'display_order';
+
       // Get paginated data
       const { count, rows: testSeries } = await TestSeries.findAndCountAll({
         attributes: [
           'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati', 'is_active', 'created_at', 'updated_at',
           'pricing_type', 'price', 'currency',
-          'features', 'discount_percentage', 'is_featured', 'is_course_closed', 'has_negative_marking', 'negative_marks', 'validity_days'
+          'features', 'discount_percentage', 'is_featured', 'is_course_closed', 'has_negative_marking', 'negative_marks', 'validity_days',
+          'display_order'
         ],
         where,
-        order: [[sortBy, sortOrder]],
+        order: [[safeSortBy, sortOrder]],
         limit: parseInt(limit),
         offset,
         include: [{
@@ -363,7 +367,8 @@ class TestManagementController {
           validity_days: series.validity_days,
           created_at: series.created_at,
           updated_at: series.updated_at,
-          categories_count: series.categories ? series.categories.length : 0
+          categories_count: series.categories ? series.categories.length : 0,
+          display_order: series.display_order
         };
       });
 
@@ -453,6 +458,13 @@ class TestManagementController {
         is_course_closed
       } = req.body;
 
+      // Auto-assign display_order as max + 1 so new series appears at the end
+      const maxOrderResult = await TestSeries.findOne({
+        attributes: [[TestSeries.sequelize.fn('MAX', TestSeries.sequelize.col('display_order')), 'maxOrder']],
+        raw: true
+      });
+      const nextDisplayOrder = (maxOrderResult?.maxOrder || 0) + 1;
+
       const testSeries = await TestSeries.create({
         name: title,
         description,
@@ -465,15 +477,14 @@ class TestManagementController {
         features: features || [],
         discount_percentage: discount_percentage || 0.00,
         is_featured: is_featured || false,
-        // Additional fields that match the existing table structure
-        difficulty_level: 'beginner', // Required field
-        free_test_count: free_tests_count || 0, // Use existing field name
-        max_attempts_per_test: max_attempts || 1, // Use existing field name
-        // Negative marking removed from test series level - now handled at category level
+        difficulty_level: 'beginner',
+        free_test_count: free_tests_count || 0,
+        max_attempts_per_test: max_attempts || 1,
         supports_pause_resume: true,
         supports_multilanguage: true,
-        validity_days: validity_days || 365, // Default to 365 days (1 year)
-        is_course_closed: is_course_closed || false // Default to false (open for enrollment)
+        validity_days: validity_days || 365,
+        is_course_closed: is_course_closed || false,
+        display_order: nextDisplayOrder
       });
 
       // Transform response to match frontend expectations
@@ -1948,21 +1959,21 @@ class TestManagementController {
       const category = await Category.findOne({
         where: { uuid: categoryUuid },
         include: [
-          // Get child categories
+          // Get child categories — separate:true required so Sequelize actually applies the order
           {
             model: Category,
             as: 'childCategories',
-            // where: { is_active: true },
             required: false,
+            separate: true,
             order: [['display_order', 'ASC'], ['created_at', 'ASC']]
           },
-          // Get questions directly
+          // Get questions directly — separate:true required so Sequelize actually applies the order
           {
             model: Question,
             as: 'questions',
-            // where: { is_active: true },
             required: false,
-            order: [['question_order', 'ASC'], ['created_at', 'ASC']]
+            separate: true,
+            order: [['display_order', 'ASC'], ['created_at', 'ASC']]
           },
           // Get parent for breadcrumb
           {
@@ -2225,6 +2236,17 @@ class TestManagementController {
         // TODO: Implement proper test_series_id tracking for questions
       }
 
+      // Auto-assign display_order as max + 1 among siblings
+      const siblingMax = await Category.findOne({
+        attributes: [[Category.sequelize.fn('MAX', Category.sequelize.col('display_order')), 'maxOrder']],
+        where: {
+          test_series_id: testSeriesId,
+          parent_category_id: parentCategory ? parentCategory.id : null
+        },
+        raw: true
+      });
+      const nextDisplayOrder = (siblingMax?.maxOrder || 0) + 1;
+
       // Create the new category
       const newCategory = await Category.create({
         test_series_id: testSeriesId,
@@ -2235,7 +2257,7 @@ class TestManagementController {
         description_gujarati: description_gujarati?.trim() || null,
         hierarchy_level: hierarchyLevel,
         node_type: 'unset',
-        display_order: 0,
+        display_order: nextDisplayOrder,
         negative_marking_enabled: negative_marking_enabled || false,
         negative_marks_per_wrong: negative_marks_per_wrong || 0.25,
         test_duration_minutes: test_duration_minutes || 60
@@ -2340,6 +2362,14 @@ class TestManagementController {
         });
       }
 
+      // Auto-assign display_order as max + 1 among questions in same category
+      const qMax = await Question.findOne({
+        attributes: [[Question.sequelize.fn('MAX', Question.sequelize.col('display_order')), 'maxOrder']],
+        where: { category_id: category.id },
+        raw: true
+      });
+      const nextQDisplayOrder = (qMax?.maxOrder || 0) + 1;
+
       // Create the question with a temporary test_id = 1 (we'll fix this properly later)
       const newQuestion = await Question.create({
         test_id: 1, // Temporary workaround - we need to make this nullable in DB
@@ -2352,7 +2382,7 @@ class TestManagementController {
         correct_answer,
         explanation: explanation?.trim() || null,
         marks: parseInt(marks) || 1,
-        display_order: 0,
+        display_order: nextQDisplayOrder,
         // Gujarati fields
         question_text_gujarati: question_text_gujarati?.trim() || null,
         option_a_gujarati: option_a_gujarati?.trim() || null,
@@ -2692,6 +2722,73 @@ class TestManagementController {
         is_active: false
       }
     });
+  }
+
+  // =====================
+  // REORDER METHODS
+  // =====================
+
+  // Reorder test series — accepts [{uuid, display_order}]
+  async reorderTestSeries(req, res) {
+    try {
+      const { items } = req.body; // [{uuid, display_order}]
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: 'items array is required' });
+      }
+
+      await Promise.all(
+        items.map(({ uuid, display_order }) =>
+          TestSeries.update({ display_order }, { where: { uuid } })
+        )
+      );
+
+      res.json({ success: true, message: 'Test series order updated' });
+    } catch (error) {
+      console.error('Error reordering test series:', error);
+      res.status(500).json({ success: false, message: 'Failed to reorder test series' });
+    }
+  }
+
+  // Reorder categories within a parent — accepts [{uuid, display_order}]
+  async reorderCategories(req, res) {
+    try {
+      const { items } = req.body; // [{uuid, display_order}]
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: 'items array is required' });
+      }
+
+      await Promise.all(
+        items.map(({ uuid, display_order }) =>
+          Category.update({ display_order }, { where: { uuid } })
+        )
+      );
+
+      res.json({ success: true, message: 'Category order updated' });
+    } catch (error) {
+      console.error('Error reordering categories:', error);
+      res.status(500).json({ success: false, message: 'Failed to reorder categories' });
+    }
+  }
+
+  // Reorder questions within a category — accepts [{uuid, display_order}]
+  async reorderQuestions(req, res) {
+    try {
+      const { items } = req.body; // [{uuid, display_order}]
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: 'items array is required' });
+      }
+
+      await Promise.all(
+        items.map(({ uuid, display_order }) =>
+          Question.update({ display_order }, { where: { uuid } })
+        )
+      );
+
+      res.json({ success: true, message: 'Question order updated' });
+    } catch (error) {
+      console.error('Error reordering questions:', error);
+      res.status(500).json({ success: false, message: 'Failed to reorder questions' });
+    }
   }
 }
 
