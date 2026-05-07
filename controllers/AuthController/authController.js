@@ -10,7 +10,7 @@ const { Sequelize, Op } = require('sequelize');
 
 exports.register = async (req, res, next) => {
     try {
-        const { username, name, email, password, phone, mobile } = req.body;
+        const { username, name, email, password, phone, mobile, device_id } = req.body;
 
         // Handle field mapping - accept both naming conventions
         const finalUsername = username || name;
@@ -51,7 +51,11 @@ exports.register = async (req, res, next) => {
             password: hashedPassword,
             otp,
             otpExpiry,
-            isEmailVerified: false
+            isEmailVerified: false,
+            // Lock the account to the signup device when the mobile app provides one.
+            // Web signups don't send device_id, so this stays null for them — web logins
+            // are not device-locked. Admin can clear via /admin/users/:id/reset-device.
+            device_id: device_id || null
         });
 
         // Generate JWT token
