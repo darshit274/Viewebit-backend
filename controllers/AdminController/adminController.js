@@ -1051,6 +1051,306 @@ exports.resetUserDevice = async (req, res, next) => {
     }
 };
 
+// List test attempts grouped by student — one row per student with their latest
+// attempt summary plus a total/completed count. Admin uses this to spot active
+// students for paid-package follow-up; clicking a row opens the per-student
+// history via getStudentTestAttemptsForAdmin below.
+exports.getTestAttempts = async (req, res, next) => {
+    try {
+        const {
+            page = 1,
+            limit = 20,
+            search = '',
+            status = 'all',
+            dateFrom = '',
+            dateTo = '',
+        } = req.query;
+
+        const offset = (parseInt(page) - 1) * parseInt(limit);
+        const { TestSession, sequelize } = require('../../models');
+
+        // Build session-level filters (status, date range)
+        const sessionWhere = {};
+        if (status && status !== 'all') sessionWhere.status = status;
+        if (dateFrom || dateTo) {
+            sessionWhere.created_at = {};
+            if (dateFrom) sessionWhere.created_at[Op.gte] = new Date(dateFrom);
+            if (dateTo) {
+                const toDate = new Date(dateTo);
+                toDate.setHours(23, 59, 59, 999);
+                sessionWhere.created_at[Op.lte] = toDate;
+            }
+        }
+
+        // If admin is searching by user fields, narrow sessions to matching user_ids first
+        const trimmedSearch = String(search).trim();
+        if (trimmedSearch) {
+            const like = `%${trimmedSearch}%`;
+            const matchingUsers = await User.findAll({
+                where: {
+                    [Op.or]: [
+                        { username: { [Op.like]: like } },
+                        { email:    { [Op.like]: like } },
+                        { phone:    { [Op.like]: like } },
+                    ],
+                },
+                attributes: ['uuid'],
+                raw: true,
+            });
+            const userIds = matchingUsers.map((u) => u.uuid);
+            if (userIds.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    data: [],
+                    pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 },
+                });
+            }
+            sessionWhere.user_id = { [Op.in]: userIds };
+        }
+
+        // Total distinct students matching filters (for pagination)
+        const totalStudents = await TestSession.count({
+            where: sessionWhere,
+            distinct: true,
+            col: 'user_id',
+        });
+
+        // One row per user: count attempts + take the latest created_at
+        const grouped = await TestSession.findAll({
+            where: sessionWhere,
+            attributes: [
+                'user_id',
+                [sequelize.fn('COUNT', sequelize.col('id')), 'total_attempts'],
+                [sequelize.fn('SUM', sequelize.literal('CASE WHEN is_completed = 1 THEN 1 ELSE 0 END')), 'completed_attempts'],
+                [sequelize.fn('MAX', sequelize.col('created_at')), 'latest_created_at'],
+            ],
+            group: ['user_id'],
+            order: [[sequelize.fn('MAX', sequelize.col('created_at')), 'DESC']],
+            limit: parseInt(limit),
+            offset,
+            raw: true,
+        });
+
+        // Fetch the actual latest session row + user info for each grouped user
+        const data = await Promise.all(grouped.map(async (g) => {
+            const [latestSession, user] = await Promise.all([
+                TestSession.findOne({
+                    where: { ...sessionWhere, user_id: g.user_id },
+                    order: [['created_at', 'DESC']],
+                }),
+                User.findOne({
+                    where: { uuid: g.user_id },
+                    attributes: ['uuid', 'username', 'email', 'phone', 'isEmailVerified', 'created_at'],
+                }),
+            ]);
+
+            return {
+                studentUuid: g.user_id,
+                studentName: user?.username || null,
+                studentEmail: user?.email || null,
+                studentPhone: user?.phone || null,
+                studentSignedUpAt: user?.created_at || null,
+                totalAttempts: parseInt(g.total_attempts) || 0,
+                completedAttempts: parseInt(g.completed_attempts) || 0,
+                latestAttempt: latestSession ? {
+                    sessionId: latestSession.id,
+                    testName: latestSession.test_name,
+                    categoryName: latestSession.category_name,
+                    status: latestSession.status,
+                    isCompleted: latestSession.is_completed,
+                    isSubmitted: latestSession.is_submitted,
+                    startedAt: latestSession.started_at,
+                    completedAt: latestSession.completed_at,
+                    createdAt: latestSession.created_at,
+                    totalQuestions: latestSession.total_questions,
+                    totalCorrect: latestSession.total_correct,
+                    totalWrong: latestSession.total_wrong,
+                    totalUnanswered: latestSession.total_unanswered,
+                    percentage: latestSession.percentage,
+                    finalScore: latestSession.final_score,
+                    timeSpentSeconds: latestSession.time_spent_seconds,
+                } : null,
+            };
+        }));
+
+        res.status(200).json({
+            success: true,
+            data,
+            pagination: {
+                total: totalStudents,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(totalStudents / parseInt(limit)),
+            },
+        });
+    } catch (err) {
+        console.error('Get test attempts error:', err);
+        return next(new ErrorHandler('Failed to fetch test attempts', 500));
+    }
+};
+
+// Get full test attempt history for a single student (admin view), including
+// the test-series → category hierarchy so admin can see exactly what each
+// attempt belongs to.
+exports.getStudentTestAttemptsForAdmin = async (req, res, next) => {
+    try {
+        const { uuid } = req.params;
+        const { TestSession, Category, TestSeries, Test, SubCategory } = require('../../models');
+
+        const user = await User.findOne({
+            where: { uuid },
+            attributes: ['uuid', 'username', 'email', 'phone', 'isEmailVerified', 'isActive', 'created_at'],
+        });
+        if (!user) {
+            return next(new ErrorHandler('Student not found', 404));
+        }
+
+        const sessions = await TestSession.findAll({
+            where: { user_id: uuid },
+            order: [['created_at', 'DESC']],
+        });
+
+        // Cache category lookups so we don't refetch for repeat tests
+        const categoryCache = {};
+        const buildHierarchy = async (session) => {
+            // Prefer the category_uuid stored in session_data (new dynamic system)
+            let categoryUuid = session.session_data?.category_uuid || null;
+
+            // Fall back to the legacy Test → SubCategory → Category → TestSeries chain
+            if (!categoryUuid && session.test_id) {
+                try {
+                    const oldTest = await Test.findByPk(session.test_id, {
+                        include: [{
+                            model: SubCategory,
+                            as: 'subCategory',
+                            include: [{
+                                model: Category,
+                                as: 'category',
+                                include: [{ model: TestSeries, as: 'testSeries', attributes: ['uuid'] }],
+                            }],
+                        }],
+                    });
+                    if (oldTest?.subCategory?.category?.testSeries?.uuid) {
+                        categoryUuid = oldTest.subCategory.category.testSeries.uuid;
+                    }
+                } catch (_) {
+                    // ignore — legacy lookup is best-effort
+                }
+            }
+
+            let seriesName = null;
+            let parentCategoryNames = [];
+            let categoryName = session.category_name || session.test_name || null;
+
+            if (categoryUuid) {
+                if (!categoryCache[categoryUuid]) {
+                    categoryCache[categoryUuid] = await Category.findOne({
+                        where: { uuid: categoryUuid },
+                        include: [{
+                            model: TestSeries,
+                            as: 'testSeries',
+                            attributes: ['uuid', 'name'],
+                        }],
+                        attributes: ['id', 'uuid', 'name', 'parent_category_id'],
+                    });
+                }
+                const cat = categoryCache[categoryUuid];
+                if (cat) {
+                    seriesName = cat.testSeries?.name || null;
+                    categoryName = cat.name || categoryName;
+                    let parentId = cat.parent_category_id;
+                    while (parentId) {
+                        const parent = await Category.findByPk(parentId, {
+                            attributes: ['id', 'name', 'parent_category_id'],
+                        });
+                        if (!parent) break;
+                        parentCategoryNames.unshift(parent.name);
+                        parentId = parent.parent_category_id;
+                    }
+                }
+            }
+
+            const parts = [];
+            if (seriesName) parts.push(seriesName);
+            parts.push(...parentCategoryNames);
+            if (categoryName) parts.push(categoryName);
+
+            return {
+                seriesName,
+                categoryName,
+                subCategoryName: parentCategoryNames[parentCategoryNames.length - 1] || null,
+                parentCategoryNames,
+                hierarchyPath: parts.join(' → ') || (session.test_name || 'General'),
+            };
+        };
+
+        const attempts = await Promise.all(sessions.map(async (s) => {
+            const hierarchy = await buildHierarchy(s);
+            return {
+                sessionId: s.id,
+                testName: s.test_name,
+                categoryName: hierarchy.categoryName,
+                seriesName: hierarchy.seriesName,
+                subCategoryName: hierarchy.subCategoryName,
+                hierarchyPath: hierarchy.hierarchyPath,
+                status: s.status,
+                isCompleted: s.is_completed,
+                isSubmitted: s.is_submitted,
+                startedAt: s.started_at,
+                completedAt: s.completed_at,
+                createdAt: s.created_at,
+                totalQuestions: s.total_questions,
+                totalCorrect: s.total_correct,
+                totalWrong: s.total_wrong,
+                totalUnanswered: s.total_unanswered,
+                percentage: s.percentage,
+                finalScore: s.final_score,
+                timeSpentSeconds: s.time_spent_seconds,
+            };
+        }));
+
+        // Summary stats
+        const totalAttempts = attempts.length;
+        const completedAttempts = attempts.filter((a) => a.isCompleted).length;
+        const inProgressAttempts = attempts.filter((a) => a.status === 'active' || a.status === 'paused').length;
+        const uniqueTests = new Set(attempts.map((a) => a.hierarchyPath).filter(Boolean)).size;
+        const uniqueSeries = new Set(attempts.map((a) => a.seriesName).filter(Boolean)).size;
+        const avgPercentage = (() => {
+            const scored = attempts.filter((a) => a.isCompleted && a.percentage !== null);
+            if (scored.length === 0) return null;
+            const sum = scored.reduce((acc, a) => acc + parseFloat(a.percentage || 0), 0);
+            return Math.round((sum / scored.length) * 10) / 10;
+        })();
+
+        res.status(200).json({
+            success: true,
+            data: {
+                student: {
+                    uuid: user.uuid,
+                    name: user.username,
+                    email: user.email,
+                    phone: user.phone,
+                    isEmailVerified: user.isEmailVerified,
+                    isActive: user.isActive,
+                    signedUpAt: user.created_at,
+                },
+                summary: {
+                    totalAttempts,
+                    completedAttempts,
+                    inProgressAttempts,
+                    uniqueTests,
+                    uniqueSeries,
+                    avgPercentage,
+                },
+                attempts,
+            },
+        });
+    } catch (err) {
+        console.error('Get student test attempts (admin) error:', err);
+        return next(new ErrorHandler('Failed to fetch student test attempts', 500));
+    }
+};
+
 // Helper function for relative time
 const getRelativeTime = (date) => {
     const now = new Date();

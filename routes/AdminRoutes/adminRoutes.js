@@ -26,6 +26,11 @@ router.get('/analytics/categories', adminAuth, adminController.getCategoryAnalyt
 router.get('/analytics/recent-activity', adminAuth, adminController.getRecentActivity);
 router.get('/analytics/test-series-attempts', adminAuth, adminController.getTestSeriesAttemptAnalytics);
 
+// Test attempts list — who is taking which test (for admin follow-up on paid packages)
+router.get('/test-attempts', adminAuth, adminController.getTestAttempts);
+// Full attempt history for one student (used by the "View" button on the Test Attempts page)
+router.get('/users/:uuid/test-attempts', adminAuth, adminController.getStudentTestAttemptsForAdmin);
+
 // Student management routes (alias for users)
 router.get('/students', adminAuth, adminController.getStudents);
 router.get('/students/:id', adminAuth, adminController.getStudentById);
