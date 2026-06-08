@@ -4,6 +4,30 @@ const { authToken } = require('../../utils/AuthToken');
 const { User, TestSeries, Subscription, Pdfs } = require('../../models');
 const { Op } = require('sequelize');
 
+/**
+ * Subscription.metadata is a JSON column. Depending on how it was written
+ * (raw object vs JSON.stringify), Sequelize's MySQL driver may give us back:
+ *   1. a parsed object                  (normal case — write was object)
+ *   2. a JSON string                    (write was JSON.stringify(...))
+ *   3. a doubly-encoded JSON string     (write was JSON.stringify(...) and the
+ *                                        driver wrapped it again)
+ *   4. null / undefined                 (no metadata)
+ *
+ * Walk through up to two parse layers so every case lands on a plain object.
+ */
+const parseSubscriptionMetadata = (raw) => {
+  if (raw == null) return {};
+  let v = raw;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  if (typeof v === 'string') {
+    // double-encoded — one more parse
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  return v && typeof v === 'object' ? v : {};
+};
+
 // Simple test endpoint for mobile app connectivity
 router.get('/test', authToken, (req, res) => {
   res.json({
@@ -233,18 +257,15 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
       amount_paid: sub.amount_paid
     })));
 
-    // Try different approaches to find the subscription
-    let pdfSubscription = null;
-
-    // Method 1: Direct string search in metadata (most reliable)
-    pdfSubscription = await Subscription.findOne({
+    // PDF purchases have test_series_id = NULL and metadata.pdf_id = <pdfId>.
+    // We deliberately do NOT filter by `metadata` here because JSON-column
+    // operators (Op.not: null, Op.like) behave inconsistently across MySQL
+    // versions; the JS filter below handles every shape.
+    const allCompletedPDFSubscriptions = await Subscription.findAll({
       where: {
         user_id: userId,
         test_series_id: null,
         status: 'completed',
-        metadata: {
-          [Op.like]: `%"pdf_id":"${pdfId}"%`
-        },
         [Op.or]: [
           { expiry_date: null },
           { expiry_date: { [Op.gt]: new Date() } }
@@ -253,45 +274,22 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
       attributes: ['id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata']
     });
 
-    // Method 2: If first method fails, search with JSON-based approach
-    if (!pdfSubscription) {
-      console.log('🔄 First method failed, trying JSON search approach...');
+    console.log('🔍 Candidate PDF subscriptions:', allCompletedPDFSubscriptions.length);
+    // Dump exact shape of metadata for every candidate so we can see what we got
+    allCompletedPDFSubscriptions.forEach((sub) => {
+      console.log(`  sub ${sub.id}: metadata typeof=${typeof sub.metadata}`,
+        typeof sub.metadata === 'string'
+          ? `value="${sub.metadata.substring(0, 200)}${sub.metadata.length > 200 ? '...' : ''}"`
+          : `value=${JSON.stringify(sub.metadata)}`);
+    });
 
-      const allCompletedPDFSubscriptions = await Subscription.findAll({
-        where: {
-          user_id: userId,
-          test_series_id: null,
-          status: 'completed',
-          metadata: { [Op.not]: null },
-          [Op.or]: [
-            { expiry_date: null },
-            { expiry_date: { [Op.gt]: new Date() } }
-          ]
-        },
-        attributes: ['id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata']
-      });
-
-      console.log('🔍 Found completed PDF subscriptions:', allCompletedPDFSubscriptions.length);
-
-      // Filter in JavaScript to find matching PDF
-      pdfSubscription = allCompletedPDFSubscriptions.find(sub => {
-        try {
-          if (sub.metadata) {
-            const metadata = JSON.parse(sub.metadata);
-            const matches = metadata.pdf_id === pdfId;
-            console.log(`🎯 Checking subscription ${sub.id}:`, {
-              metadata_pdf_id: metadata.pdf_id,
-              target_pdf_id: pdfId,
-              matches
-            });
-            return matches;
-          }
-        } catch (error) {
-          console.log('❌ Failed to parse metadata for subscription:', sub.id);
-        }
-        return false;
-      });
-    }
+    const pdfSubscription = allCompletedPDFSubscriptions.find((sub) => {
+      const metadata = parseSubscriptionMetadata(sub.metadata);
+      const storedPdfId = metadata && metadata.pdf_id;
+      const matches = storedPdfId === pdfId;
+      console.log(`  → sub ${sub.id}: parsed pdf_id=${storedPdfId}, target=${pdfId}, match=${matches}`);
+      return matches;
+    });
 
     console.log('🎯 PDF subscription query result:', pdfSubscription ? {
       id: pdfSubscription.id,

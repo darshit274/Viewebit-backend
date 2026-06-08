@@ -267,12 +267,15 @@ router.post('/create-order', authToken, async (req, res) => {
       status: 'pending',
       purchase_date: new Date(),
       expiry_date: new Date(Date.now() + (365 * 24 * 60 * 60 * 1000)), // 1 year from now
-      metadata: JSON.stringify({
+      // Pass a plain object — Sequelize handles JSON-column serialisation. Using
+      // JSON.stringify(...) here can lead to MySQL storing a JSON string value
+      // (instead of a JSON object), which then breaks metadata.pdf_id lookups.
+      metadata: {
         plan_type: planType,
         pdf_id: pdfId || null,
         razorpay_order_id: order.id,
         receipt_id: receiptId
-      })
+      }
     };
 
     await Subscription.create(subscriptionData);
@@ -363,13 +366,35 @@ router.post('/create-order', authToken, async (req, res) => {
 });
 
 // Verify Payment
+/**
+ * Subscription.metadata is a JSON column. Depending on how a row was originally
+ * written (older code used JSON.stringify(...)), the value coming back from
+ * Sequelize may be:
+ *   1. a plain JS object
+ *   2. a JSON string
+ *   3. a doubly-encoded JSON string
+ *   4. null / undefined
+ * Walk through up to two parse layers so every case lands on a plain object.
+ */
+const parseSubscriptionMetadata = (raw) => {
+  if (raw == null) return {};
+  let v = raw;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  return v && typeof v === 'object' ? v : {};
+};
+
 router.post('/verify-payment', authToken, async (req, res) => {
   try {
-    const { 
-      razorpay_order_id, 
-      razorpay_payment_id, 
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
       razorpay_signature,
-      subscription_id 
+      subscription_id
     } = req.body;
     const userId = req.user.uuid;
 
@@ -436,16 +461,36 @@ router.post('/verify-payment', authToken, async (req, res) => {
         });
       }
 
-      // Update subscription status
+      // Build the metadata we want to persist
+      const mergedMetadata = {
+        ...parseSubscriptionMetadata(subscription.metadata),
+        razorpay_payment_id: razorpay_payment_id,
+        payment_status: payment.status,
+        payment_method: payment.method,
+        verified_at: new Date().toISOString()
+      };
+      console.log('💾 Writing merged metadata:', JSON.stringify(mergedMetadata));
+
+      // Update subscription status — pass plain objects so Sequelize handles the JSON serialisation
       await subscription.update({
         status: 'completed',
-        metadata: JSON.stringify({
-          ...JSON.parse(subscription.metadata || '{}'),
-          razorpay_payment_id: razorpay_payment_id,
-          payment_status: payment.status,
-          payment_method: payment.method,
-          verified_at: new Date().toISOString()
-        })
+        metadata: mergedMetadata
+      });
+
+      // Re-read straight from DB so we can SEE what actually got persisted
+      const verifyPersisted = await Subscription.findOne({
+        where: { id: subscription.id },
+        attributes: ['id', 'status', 'metadata', 'test_series_id', 'expiry_date']
+      });
+      console.log('🔍 Persisted subscription:', {
+        id: verifyPersisted?.id,
+        status: verifyPersisted?.status,
+        test_series_id: verifyPersisted?.test_series_id,
+        expiry_date: verifyPersisted?.expiry_date,
+        metadata_typeof: typeof verifyPersisted?.metadata,
+        metadata: typeof verifyPersisted?.metadata === 'string'
+          ? verifyPersisted.metadata
+          : JSON.stringify(verifyPersisted?.metadata)
       });
 
       // Update user subscription status
@@ -480,11 +525,11 @@ router.post('/verify-payment', authToken, async (req, res) => {
       // Update subscription status to failed
       await subscription.update({
         status: 'failed',
-        metadata: JSON.stringify({
-          ...JSON.parse(subscription.metadata || '{}'),
+        metadata: {
+          ...parseSubscriptionMetadata(subscription.metadata),
           error: razorpayError.message,
           failed_at: new Date().toISOString()
-        })
+        }
       });
 
       res.status(400).json({
@@ -587,7 +632,7 @@ router.get('/status/:orderId', authToken, async (req, res) => {
     let paymentDetails = null;
     if (subscription.status === 'completed') {
       try {
-        const metadata = JSON.parse(subscription.metadata || '{}');
+        const metadata = parseSubscriptionMetadata(subscription.metadata);
         if (metadata.razorpay_payment_id) {
           paymentDetails = await razorpayInstance.payments.fetch(metadata.razorpay_payment_id);
         }

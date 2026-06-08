@@ -179,6 +179,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+
+    // Position within a leaf (pdf_holder) category — lower number shown first
+    display_order: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Sibling order within the same category (lower = shown first)'
+    },
     
     // Test relationship (optional) - disabled for now
     // test_id: {

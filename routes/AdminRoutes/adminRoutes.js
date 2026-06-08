@@ -132,6 +132,10 @@ router.post('/subscriptions/manual', adminAuth, subscriptionController.createMan
 const pdfUploadRoutes = require('./pdfUploadRoutes');
 router.use('/pdf', pdfUploadRoutes);
 
+// PDF Hierarchy (categories with sub-categories tree) — admin endpoints
+const pdfHierarchyRoutes = require('./pdfHierarchyRoutes');
+router.use('/pdf-hierarchy', pdfHierarchyRoutes);
+
 // PYQ management routes
 const pyqRoutes = require('./pyqRoutes');
 router.use('/pyqs', pyqRoutes);
