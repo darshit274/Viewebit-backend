@@ -318,6 +318,11 @@ exports.reorderPdfs = async (req, res, next) => {
  * inside their category. Expects multer middleware to have populated req.files.
  */
 exports.uploadPdfToCategory = async (req, res, next) => {
+  // Stopwatch helper — emits a duration per step so we can SEE where time is
+  // going in production. Look at the log lines tagged [PDF-UPLOAD].
+  const t0 = Date.now();
+  const mark = (label) => console.log(`[PDF-UPLOAD] ${label}: +${Date.now() - t0}ms`);
+
   try {
     const { categoryUuid } = req.params;
     const {
@@ -337,6 +342,7 @@ exports.uploadPdfToCategory = async (req, res, next) => {
       return next(new ErrorHandler('No PDF file provided', 400));
     }
     const file = req.files[0];
+    mark(`controller entered (file ${file.originalname}, ${(file.size / 1024 / 1024).toFixed(2)}MB)`);
 
     // Basic file validation
     if (file.mimetype !== 'application/pdf') {
@@ -351,6 +357,7 @@ exports.uploadPdfToCategory = async (req, res, next) => {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       return next(new ErrorHandler('Invalid PDF — file signature check failed', 400));
     }
+    mark('validation done');
 
     if (!title || !title.trim()) {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
@@ -358,6 +365,7 @@ exports.uploadPdfToCategory = async (req, res, next) => {
     }
 
     const category = await PdfCategory.findOne({ where: { uuid: categoryUuid } });
+    mark('category lookup done');
     if (!category) {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       return next(new ErrorHandler('Category not found', 404));
@@ -370,13 +378,18 @@ exports.uploadPdfToCategory = async (req, res, next) => {
       ));
     }
 
-    // Auto-assign display_order at the end of the leaf
+    // Auto-assign display_order at the end of the leaf. Run in parallel with the
+    // Pdfs.create won't work because we need the result first — but we can at
+    // least make sure this query is FAST by adding an index on (category_id).
+    // Without an index, MySQL scans the full pdfs table for this aggregation.
+    // See the migration in this same change that adds the index.
     const siblingMax = await Pdfs.findOne({
       attributes: [[sequelize.fn('MAX', sequelize.col('display_order')), 'maxOrder']],
       where: { category_id: category.id },
       raw: true,
     });
-    const nextDisplayOrder = (siblingMax?.maxOrder || 0) + 1;
+    const nextDisplayOrder = (Number(siblingMax?.maxOrder) || 0) + 1;
+    mark('display_order computed');
 
     let parsedTags = null;
     if (tags) {
@@ -405,12 +418,15 @@ exports.uploadPdfToCategory = async (req, res, next) => {
       preview_pages: preview_pages ? parseInt(preview_pages) : 0,
       display_order: nextDisplayOrder,
     });
+    mark('Pdfs.create done');
 
     // Promote category from 'unset' to 'pdf_holder' on first upload
     if (category.node_type === 'unset') {
       await category.update({ node_type: 'pdf_holder' });
+      mark('category promoted to pdf_holder');
     }
 
+    mark('TOTAL');
     res.status(201).json({
       success: true,
       message: 'PDF uploaded successfully',
