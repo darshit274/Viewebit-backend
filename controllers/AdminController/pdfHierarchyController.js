@@ -21,6 +21,7 @@ const { Op } = require('sequelize');
 const fs = require('fs');
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { validatePDFFile } = require('../../utils/pdfUpload');
+const { PDF_UPLOAD_MAX_SIZE_BYTES, PDF_UPLOAD_MAX_SIZE_MB } = require('../../utils/uploadConfig');
 
 // ===== ADMIN ENDPOINTS =====
 
@@ -342,9 +343,9 @@ exports.uploadPdfToCategory = async (req, res, next) => {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       return next(new ErrorHandler('Only PDF files are allowed', 400));
     }
-    if (file.size > 50 * 1024 * 1024) {
+    if (file.size > PDF_UPLOAD_MAX_SIZE_BYTES) {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
-      return next(new ErrorHandler('File size must be less than 50MB', 400));
+      return next(new ErrorHandler(`File size must be less than ${PDF_UPLOAD_MAX_SIZE_MB}MB`, 400));
     }
     if (!validatePDFFile(file.path)) {
       if (fs.existsSync(file.path)) fs.unlinkSync(file.path);

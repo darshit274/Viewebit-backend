@@ -2,6 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { PDF_UPLOAD_MAX_SIZE_BYTES, PDF_UPLOAD_MAX_SIZE_MB } = require('./uploadConfig');
 
 // Create uploads directory if it doesn't exist
 const createUploadsDir = () => {
@@ -53,12 +54,12 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Configure multer
+// Configure multer — file size limit is env-driven
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
+    fileSize: PDF_UPLOAD_MAX_SIZE_BYTES,
     files: 1 // Only one file at a time
   }
 });
@@ -86,7 +87,7 @@ const handlePDFUpload = (req, res, next) => {
         if (err.code === 'LIMIT_FILE_SIZE') {
           return res.status(400).json({
             success: false,
-            message: 'File too large. Maximum size is 50MB.'
+            message: `File too large. Maximum size is ${PDF_UPLOAD_MAX_SIZE_MB}MB.`
           });
         }
         if (err.code === 'LIMIT_FILE_COUNT') {

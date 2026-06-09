@@ -12,6 +12,9 @@ const { validateConfig: validateRazorpayConfig } = require('./config/razorpay');
 const NotificationScheduler = require('./services/NotificationScheduler');
 dotenv.config();
 
+// Centralised upload + timeout config (env-driven). Must be required AFTER dotenv.
+const { EXPRESS_BODY_LIMIT, REQUEST_TIMEOUT_MS } = require('./utils/uploadConfig');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -59,9 +62,20 @@ app.use((req, res, next) => {
   next();
 });
 
-// Parse JSON bodies with increased limit for base64 images
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Parse JSON bodies — limit is env-driven so it can match the upload size on prod
+app.use(express.json({ limit: EXPRESS_BODY_LIMIT }));
+app.use(express.urlencoded({ limit: EXPRESS_BODY_LIMIT, extended: true }));
+
+// Bump per-request timeout for long-running endpoints (PDF upload). The
+// `setTimeout` on req/res prevents Node's default 2-minute socket timeout from
+// killing big uploads. nginx proxy_read_timeout still has to be at least this big.
+app.use((req, res, next) => {
+  if (req.path.includes('/upload') || req.path.endsWith('/upload')) {
+    req.setTimeout(REQUEST_TIMEOUT_MS);
+    res.setTimeout(REQUEST_TIMEOUT_MS);
+  }
+  next();
+});
 
 // File upload is handled by multer in individual controllers
 

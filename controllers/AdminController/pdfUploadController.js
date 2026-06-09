@@ -3,13 +3,14 @@ const { Pdfs, PdfCategory, Test_Series, ExamType, Admin } = require('../../model
 const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs');
-const { 
-  handlePDFUpload, 
-  deletePDFFile, 
-  getFileInfo, 
-  formatFileSize, 
-  validatePDFFile 
+const {
+  handlePDFUpload,
+  deletePDFFile,
+  getFileInfo,
+  formatFileSize,
+  validatePDFFile
 } = require('../../utils/pdfUpload');
+const { PDF_UPLOAD_MAX_SIZE_BYTES, PDF_UPLOAD_MAX_SIZE_MB } = require('../../utils/uploadConfig');
 
 // Get all PDF categories
 exports.getPdfCategories = async (req, res, next) => {
@@ -132,10 +133,9 @@ exports.uploadPdf = async (req, res, next) => {
       return next(new ErrorHandler('Only PDF files are allowed', 400));
     }
 
-    // Validate file size (50MB limit)
-    const maxSize = 50 * 1024 * 1024;
-    if (uploadedFile.size > maxSize) {
-      return next(new ErrorHandler('File size must be less than 50MB', 400));
+    // Validate file size — env-driven cap
+    if (uploadedFile.size > PDF_UPLOAD_MAX_SIZE_BYTES) {
+      return next(new ErrorHandler(`File size must be less than ${PDF_UPLOAD_MAX_SIZE_MB}MB`, 400));
     }
 
     // Validate minimum file size (PDFs are rarely < 100 bytes)
