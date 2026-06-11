@@ -159,16 +159,24 @@ PYQ.associate = function(models) {
         foreignKey: 'exam_type_id', 
         as: 'examType' 
     });
-    PYQ.hasMany(models.NewQuestion, { 
-        foreignKey: 'test_id', 
-        as: 'questions',
-        constraints: false,
-        scope: { test_type: 'pyq' }
-    });
-    PYQ.belongsTo(models.Admin, { 
-        foreignKey: 'created_by', 
-        as: 'creator' 
-    });
+    // Check if models exist before defining associations
+    if (models.Question) {
+        PYQ.hasMany(models.Question, { 
+            foreignKey: 'test_id', 
+            as: 'questions',
+            constraints: false,
+            scope: { test_type: 'pyq' }
+        });
+    }
+    
+    if (models.Admin) {
+        PYQ.belongsTo(models.Admin, { 
+            foreignKey: 'created_by', 
+            as: 'creator' 
+        });
+    }
+    
+    // Removed UserAnswer association - pyq_id doesn't exist in user_answers table
 };
 
 return PYQ;

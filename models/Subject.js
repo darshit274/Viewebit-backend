@@ -49,14 +49,20 @@ Subject.associate = function(models) {
         foreignKey: 'subject_id', 
         as: 'hierarchies' 
     });
-    Subject.hasMany(models.NewTestSeries, { 
-        foreignKey: 'subject_id', 
-        as: 'testSeries' 
-    });
-    Subject.hasMany(models.FreeTest, { 
-        foreignKey: 'subject_id', 
-        as: 'freeTests' 
-    });
+    // Note: TestSeries uses category_id instead of subject_id
+    // if (models.TestSeries) {
+    //     Subject.hasMany(models.TestSeries, { 
+    //         foreignKey: 'subject_id', 
+    //         as: 'testSeries' 
+    //     });
+    // }
+    
+    if (models.FreeTest) {
+        Subject.hasMany(models.FreeTest, { 
+            foreignKey: 'subject_id', 
+            as: 'freeTests' 
+        });
+    }
 };
 
 return Subject;

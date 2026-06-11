@@ -75,14 +75,20 @@ SubjectHierarchy.associate = function(models) {
         foreignKey: 'parent_id', 
         as: 'children' 
     });
-    SubjectHierarchy.hasMany(models.NewTestSeries, { 
-        foreignKey: 'subject_hierarchy_id', 
-        as: 'testSeries' 
-    });
-    SubjectHierarchy.hasMany(models.FreeTest, { 
-        foreignKey: 'subject_hierarchy_id', 
-        as: 'freeTests' 
-    });
+    // Note: TestSeries uses category_id instead of subject_hierarchy_id
+    // if (models.TestSeries) {
+    //     SubjectHierarchy.hasMany(models.TestSeries, { 
+    //         foreignKey: 'subject_hierarchy_id', 
+    //         as: 'testSeries' 
+    //     });
+    // }
+    
+    if (models.FreeTest) {
+        SubjectHierarchy.hasMany(models.FreeTest, { 
+            foreignKey: 'subject_hierarchy_id', 
+            as: 'freeTests' 
+        });
+    }
 };
 
 return SubjectHierarchy;

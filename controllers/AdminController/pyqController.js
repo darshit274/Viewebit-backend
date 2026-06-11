@@ -1,4 +1,4 @@
-const { PYQ, ExamType, NewQuestion, Admin } = require('../../models');
+const { PYQ, ExamType, NewQuestion, Admin, User_Score, User_Answers } = require('../../models');
 const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
 
@@ -89,8 +89,14 @@ const pyqController = {
           }
         });
 
-        // TODO: Add attempt count from user_scores table when implemented
-        const attemptCount = 0; // Placeholder
+        // Get actual attempt count from user_scores table
+        const attemptCount = await User_Score.count({
+          where: { 
+            pyq_id: pyq.id,
+            test_type: 'pyq',
+            status: 'completed'
+          }
+        });
 
         return {
           ...pyq.toJSON(),
@@ -560,7 +566,15 @@ const pyqController = {
         raw: true
       });
 
-      // Recent PYQs (popular ones would need user_scores data)
+      // Get total attempts across all PYQs
+      const totalAttempts = await User_Score.count({
+        where: { 
+          test_type: 'pyq',
+          status: 'completed'
+        }
+      });
+
+      // Recent PYQs (popular ones based on attempt count)
       const popularPYQs = await PYQ.findAll({
         attributes: ['id', 'title', 'exam_year'],
         include: [
@@ -568,11 +582,134 @@ const pyqController = {
             model: ExamType,
             as: 'examType',
             attributes: ['name']
+          },
+          {
+            model: User_Score,
+            as: 'userScores',
+            attributes: [],
+            where: { 
+              test_type: 'pyq',
+              status: 'completed'
+            },
+            required: false
           }
         ],
         where: { is_active: true },
+        group: ['PYQ.id', 'examType.id'],
+        order: [
+          [PYQ.sequelize.fn('COUNT', PYQ.sequelize.col('userScores.id')), 'DESC'],
+          ['created_at', 'DESC']
+        ],
+        limit: 5,
+        subQuery: false
+      });
+
+      // Get attempt counts for popular PYQs
+      const popularPYQsWithAttempts = await Promise.all(
+        popularPYQs.map(async (pyq) => {
+          const attemptCount = await User_Score.count({
+            where: { 
+              pyq_id: pyq.id,
+              test_type: 'pyq',
+              status: 'completed'
+            }
+          });
+          return {
+            id: pyq.id,
+            title: pyq.title,
+            attempts: attemptCount,
+            examType: pyq.examType?.name || 'Unknown',
+            year: pyq.exam_year
+          };
+        })
+      );
+
+      // Get attempt counts by exam type
+      const examTypeAttempts = await Promise.all(
+        examTypeBreakdown.map(async (item) => {
+          const attempts = await User_Score.count({
+            include: [{
+              model: PYQ,
+              as: 'pyq',
+              include: [{
+                model: ExamType,
+                as: 'examType',
+                where: { name: item.examType }
+              }]
+            }],
+            where: { 
+              test_type: 'pyq',
+              status: 'completed'
+            }
+          });
+          return {
+            examType: item.examType,
+            count: parseInt(item.count),
+            attempts
+          };
+        })
+      );
+
+      // Get attempt counts by year
+      const yearlyAttempts = await Promise.all(
+        yearlyBreakdown.map(async (item) => {
+          const attempts = await User_Score.count({
+            include: [{
+              model: PYQ,
+              as: 'pyq',
+              where: { exam_year: item.exam_year }
+            }],
+            where: { 
+              test_type: 'pyq',
+              status: 'completed'
+            }
+          });
+          return {
+            year: item.exam_year,
+            count: parseInt(item.count),
+            attempts
+          };
+        })
+      );
+
+      // Get attempt counts by paper type
+      const paperTypeAttempts = await Promise.all(
+        paperTypeBreakdown.map(async (item) => {
+          const attempts = await User_Score.count({
+            include: [{
+              model: PYQ,
+              as: 'pyq',
+              where: { paper_type: item.paper_type }
+            }],
+            where: { 
+              test_type: 'pyq',
+              status: 'completed'
+            }
+          });
+          return {
+            type: item.paper_type,
+            count: parseInt(item.count),
+            attempts
+          };
+        })
+      );
+
+      // Get recent activity (recent attempts)
+      const recentActivity = await User_Score.findAll({
+        attributes: ['created_at', 'percentage', 'time_taken'],
+        include: [
+          {
+            model: PYQ,
+            as: 'pyq',
+            attributes: ['title', 'exam_year']
+          }
+        ],
+        where: { 
+          test_type: 'pyq',
+          status: 'completed'
+        },
         order: [['created_at', 'DESC']],
-        limit: 5
+        limit: 10
       });
 
       res.json({
@@ -582,35 +719,23 @@ const pyqController = {
           activePYQs,
           featuredPYQs,
           totalQuestions,
-          totalAttempts: 0, // TODO: Implement when user_scores is ready
+          totalAttempts,
           uniqueExamTypes,
           yearRange: {
             earliest: yearRange?.dataValues?.earliest || new Date().getFullYear(),
             latest: yearRange?.dataValues?.latest || new Date().getFullYear()
           },
-          examTypeBreakdown: examTypeBreakdown.map(item => ({
-            examType: item.examType,
-            count: parseInt(item.count),
-            attempts: 0 // TODO: Add when user attempts are tracked
-          })),
-          yearlyBreakdown: yearlyBreakdown.map(item => ({
-            year: item.exam_year,
-            count: parseInt(item.count),
-            attempts: 0 // TODO: Add when user attempts are tracked
-          })),
-          paperTypeBreakdown: paperTypeBreakdown.map(item => ({
-            type: item.paper_type,
-            count: parseInt(item.count),
-            attempts: 0 // TODO: Add when user attempts are tracked
-          })),
-          popularPYQs: popularPYQs.map(pyq => ({
-            id: pyq.id,
-            title: pyq.title,
-            attempts: 0, // TODO: Add when user attempts are tracked
-            examType: pyq.examType?.name || 'Unknown',
-            year: pyq.exam_year
-          })),
-          recentActivity: [] // TODO: Implement activity tracking
+          examTypeBreakdown: examTypeAttempts,
+          yearlyBreakdown: yearlyAttempts,
+          paperTypeBreakdown: paperTypeAttempts,
+          popularPYQs: popularPYQsWithAttempts,
+          recentActivity: recentActivity.map(activity => ({
+            date: activity.created_at,
+            title: activity.pyq?.title || 'Unknown PYQ',
+            year: activity.pyq?.exam_year || 'Unknown',
+            percentage: activity.percentage,
+            time_taken: activity.time_taken
+          }))
         }
       });
     } catch (error) {
@@ -718,6 +843,175 @@ const pyqController = {
       res.status(500).json({
         success: false,
         message: 'Failed to fetch conducting authorities',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  },
+
+  // Get PYQ attempt statistics for a specific PYQ
+  async getPYQAttempts(req, res) {
+    try {
+      const { id } = req.params;
+      const { page = 1, limit = 10 } = req.query;
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+
+      // Verify PYQ exists
+      const pyq = await PYQ.findByPk(id);
+      if (!pyq) {
+        return res.status(404).json({
+          success: false,
+          message: 'PYQ not found'
+        });
+      }
+
+      // Get attempt statistics
+      const [totalAttempts, avgScore, completedAttempts] = await Promise.all([
+        User_Score.count({
+          where: { pyq_id: id, test_type: 'pyq' }
+        }),
+        User_Score.findOne({
+          attributes: [
+            [User_Score.sequelize.fn('AVG', User_Score.sequelize.col('percentage')), 'avg_score']
+          ],
+          where: { pyq_id: id, test_type: 'pyq', status: 'completed' },
+          raw: true
+        }),
+        User_Score.count({
+          where: { pyq_id: id, test_type: 'pyq', status: 'completed' }
+        })
+      ]);
+
+      // Get recent attempts with user details
+      const recentAttempts = await User_Score.findAndCountAll({
+        where: { pyq_id: id, test_type: 'pyq' },
+        include: [
+          {
+            model: require('../../models').User,
+            as: 'user',
+            attributes: ['uuid', 'username', 'email']
+          }
+        ],
+        order: [['created_at', 'DESC']],
+        limit: parseInt(limit),
+        offset
+      });
+
+      res.json({
+        success: true,
+        data: {
+          pyq: {
+            id: pyq.id,
+            title: pyq.title,
+            exam_year: pyq.exam_year
+          },
+          statistics: {
+            totalAttempts,
+            completedAttempts,
+            avgScore: avgScore?.avg_score ? parseFloat(avgScore.avg_score).toFixed(2) : 0,
+            completionRate: totalAttempts > 0 ? ((completedAttempts / totalAttempts) * 100).toFixed(2) : 0
+          },
+          attempts: recentAttempts.rows.map(attempt => ({
+            id: attempt.id,
+            user: {
+              uuid: attempt.user?.uuid,
+              username: attempt.user?.username,
+              email: attempt.user?.email
+            },
+            score: attempt.total_score,
+            percentage: attempt.percentage,
+            correct_answers: attempt.correct_answers,
+            wrong_answers: attempt.wrong_answers,
+            unanswered: attempt.unanswered,
+            time_taken: attempt.time_taken,
+            status: attempt.status,
+            attempt_number: attempt.attempt_number,
+            started_at: attempt.started_at,
+            completed_at: attempt.completed_at,
+            created_at: attempt.created_at
+          })),
+          pagination: {
+            total: recentAttempts.count,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(recentAttempts.count / parseInt(limit))
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching PYQ attempts:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch PYQ attempts',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      });
+    }
+  },
+
+  // Get PYQ leaderboard
+  async getPYQLeaderboard(req, res) {
+    try {
+      const { id } = req.params;
+      const { limit = 50 } = req.query;
+
+      // Verify PYQ exists
+      const pyq = await PYQ.findByPk(id);
+      if (!pyq) {
+        return res.status(404).json({
+          success: false,
+          message: 'PYQ not found'
+        });
+      }
+
+      // Get top scores for this PYQ
+      const leaderboard = await User_Score.findAll({
+        where: { 
+          pyq_id: id, 
+          test_type: 'pyq',
+          status: 'completed'
+        },
+        include: [
+          {
+            model: require('../../models').User,
+            as: 'user',
+            attributes: ['uuid', 'username']
+          }
+        ],
+        order: [
+          ['percentage', 'DESC'],
+          ['time_taken', 'ASC'],
+          ['created_at', 'ASC']
+        ],
+        limit: parseInt(limit)
+      });
+
+      res.json({
+        success: true,
+        data: {
+          pyq: {
+            id: pyq.id,
+            title: pyq.title,
+            exam_year: pyq.exam_year
+          },
+          leaderboard: leaderboard.map((entry, index) => ({
+            rank: index + 1,
+            user: {
+              uuid: entry.user?.uuid,
+              username: entry.user?.username
+            },
+            score: entry.total_score,
+            percentage: entry.percentage,
+            correct_answers: entry.correct_answers,
+            wrong_answers: entry.wrong_answers,
+            time_taken: entry.time_taken,
+            attempt_date: entry.completed_at || entry.created_at
+          }))
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching PYQ leaderboard:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch PYQ leaderboard',
         error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }

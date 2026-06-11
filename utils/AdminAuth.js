@@ -42,6 +42,8 @@ exports.adminAuth = async (req, res, next) => {
         if (error.name === 'TokenExpiredError') {
             return next(new ErrorHandler('Token expired.', 401));
         }
+        // console.log(error,"fffffffffffff");
+        
         return next(new ErrorHandler('Token verification failed.', 401));
     }
 };

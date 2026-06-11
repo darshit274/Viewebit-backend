@@ -1,0 +1,21 @@
+# BACKUP FILE - studentDynamicTestRoutes.js
+# Created: October 17, 2025
+# Purpose: Backup before adding is_free_in_paid_series field to API responses
+
+This file is a backup of the studentDynamicTestRoutes.js before modifications to add the `is_free_in_paid_series` field.
+
+Changes made:
+1. Added `is_free_in_paid_series` to category attributes in `/dynamic/categories/:uuid` endpoint (line ~330)
+2. Added `is_free_in_paid_series` to subcategories attributes (line ~376)
+
+To revert: Copy the original file from git history or restore from this backup reference.
+
+Original file location:
+D:\Darshit Projects\Mocktail-claude\Mocktail-backend\routes\TestRoutes\studentDynamicTestRoutes.js
+
+Git commit before changes:
+Check git log for commit hash before this modification.
+
+---
+
+NOTE: The actual backup content is in git history. This is just a marker file.

@@ -3,16 +3,72 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const router = require('./routes/index');
 const serverless = require("serverless-http");
+// Removed express-fileupload to avoid conflict with multer
 
 const { sequelize } = require('./models'); // Assuming your sequelize export is CommonJS
-const errorMiddleware = require('./utils/default/globalErrorHandler')
+const errorMiddleware = require('./utils/default/globalErrorHandler');
+const { initializeFirebase } = require('./config/firebase');
+const { validateConfig: validateRazorpayConfig } = require('./config/razorpay');
+const NotificationScheduler = require('./services/NotificationScheduler');
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+// Configure CORS to allow all origins and methods
+app.use(cors({
+  origin: '*', // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  credentials: false, // Set to false when using origin: '*'
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+}));
+// Trust proxy for devtunnels/ngrok
+app.set('trust proxy', true);
+
+// Handle preflight requests explicitly
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.status(200).send();
+  } else {
+    next();
+  }
+});
+
+// Manual CORS headers middleware (fallback)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  next();
+});
+
+// Request logging middleware for debugging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.get('origin') || 'No origin'}`);
+  if (req.path.includes('/upload')) {
+    console.log('🚨 UPLOAD REQUEST DETECTED:');
+    console.log('  Path:', req.path);
+    console.log('  Method:', req.method);
+    console.log('  Content-Type:', req.get('content-type'));
+    console.log('  Content-Length:', req.get('content-length'));
+  }
+  next();
+});
+
+// Parse JSON bodies with increased limit for base64 images
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// File upload is handled by multer in individual controllers
+
+// Serve static files
+app.use('/uploads', express.static('uploads'));
+
+// API routes
 app.use('/api', router);
 
 app.get('/', (req, res) => {
@@ -27,12 +83,20 @@ sequelize.authenticate().then(() => {
 
 async function startServer() {
   try {
+    // Initialize Firebase Admin SDK
+    initializeFirebase();
 
-    app.listen(PORT, () => {
+    // Validate Razorpay configuration
+    validateRazorpayConfig();
+
+    // Initialize Notification Scheduler
+    NotificationScheduler.initialize();
+
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    // console.error('❌ DB Connection error:', error);
+    console.error('❌ Server startup error:', error);
   }
 }
 

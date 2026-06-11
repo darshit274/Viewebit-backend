@@ -13,10 +13,12 @@ module.exports = (sequelize, DataTypes) => {
       });
       
       // Test series relationship
-      Pdfs.belongsTo(models.Test_Series, {
-        foreignKey: 'test_series_id',
-        as: 'testSeries'
-      });
+      if (models.TestSeries) {
+        Pdfs.belongsTo(models.TestSeries, {
+          foreignKey: 'test_series_id',
+          as: 'testSeries'
+        });
+      }
       
       // Exam type relationship
       Pdfs.belongsTo(models.ExamType, {
@@ -54,10 +56,10 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     
-    // Category relationship
+    // Category relationship (nullable for course-based PDFs)
     category_id: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'pdf_categories',
         key: 'id'
@@ -130,6 +132,44 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Number of times viewed'
     },
     
+    // Pricing
+    price: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0.00,
+      allowNull: false,
+      comment: 'Price for premium PDFs'
+    },
+    currency: {
+      type: DataTypes.STRING(10),
+      defaultValue: 'INR',
+      allowNull: false,
+      comment: 'Currency for pricing'
+    },
+    is_free: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      allowNull: false,
+      comment: 'Whether the PDF is free to access'
+    },
+    discount_percentage: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 0.00,
+      allowNull: false,
+      comment: 'Discount percentage if any'
+    },
+    subscription_required: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether subscription is required to access'
+    },
+    preview_pages: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Number of preview pages available for free'
+    },
+
     // Status
     is_active: {
       type: DataTypes.BOOLEAN,
@@ -140,12 +180,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false
     },
     
-    // Test relationship (optional)
-    test_id: {
-      type: DataTypes.UUID,
-      allowNull: true
-      // references will be added when Test model is properly implemented
-    },
+    // Test relationship (optional) - disabled for now
+    // test_id: {
+    //   type: DataTypes.UUID,
+    //   allowNull: true
+    //   // references will be added when Test model is properly implemented
+    // },
     
     // Admin information
     uploaded_by: {

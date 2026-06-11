@@ -1,15 +1,22 @@
 'use strict';
 
+require('dotenv').config();
+const { v4: uuidv4 } = require('uuid');
+
 const bcrypt = require('bcryptjs');
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+
     await queryInterface.bulkInsert('admins', [{
-      id: '550e8400-e29b-41d4-a716-446655440000',
+      id:  uuidv4(),
       name: 'Super Admin',
-      email: 'admin@mocktale.com',
+      email: adminEmail,
       password: hashedPassword,
       role: 'super_admin',
       isActive: true,
@@ -26,7 +33,7 @@ module.exports = {
 
   down: async (queryInterface, Sequelize) => {
     await queryInterface.bulkDelete('admins', {
-      email: 'admin@mocktale.com'
+      email: process.env.ADMIN_EMAIL
     }, {});
   }
 };
