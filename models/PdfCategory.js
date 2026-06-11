@@ -70,6 +70,24 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       comment: 'unset = empty; container = has sub-categories; pdf_holder = contains PDFs directly',
     },
+    // ===== PRICING (root categories only — mirrors TestSeries.pricing_type) =====
+    pricing_type: {
+      type: DataTypes.ENUM('free', 'paid', 'restricted'),
+      defaultValue: 'free',
+      allowNull: false,
+      comment: 'Access for the whole category tree (root categories only)',
+    },
+    price: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0.0,
+      allowNull: false,
+      comment: 'Price for the whole category when pricing_type = paid',
+    },
+    discount_percentage: {
+      type: DataTypes.DECIMAL(5, 2),
+      defaultValue: 0.0,
+      allowNull: false,
+    },
     // ===== LEGACY FIELDS (kept for backward compat) =====
     sort_order: {
       type: DataTypes.INTEGER,

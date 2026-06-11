@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authToken } = require('../../utils/AuthToken');
-const { User, TestSeries, Subscription, Pdfs } = require('../../models');
+const { User, TestSeries, Subscription, Pdfs, PdfCategory } = require('../../models');
 const { Op } = require('sequelize');
 
 /**
@@ -196,6 +196,136 @@ router.get('/test-series/:seriesId', authToken, async (req, res) => {
   }
 });
 
+// ===== PDF CATEGORY ACCESS (category-level pricing, mirrors test series) =====
+
+/** Walk up the pdf_categories tree to the root — pricing lives on the root only. */
+async function resolveRootPdfCategory(category) {
+  let node = category;
+  while (node && node.parent_category_id !== null) {
+    node = await PdfCategory.findByPk(node.parent_category_id, {
+      attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
+    });
+  }
+  return node;
+}
+
+/** Find the user's active purchase of a root PDF category (metadata.pdf_category_uuid). */
+async function findCategoryPurchase(userId, rootUuid) {
+  const candidates = await Subscription.findAll({
+    where: {
+      user_id: userId,
+      test_series_id: null,
+      status: 'completed',
+      [Op.or]: [
+        { expiry_date: null },
+        { expiry_date: { [Op.gt]: new Date() } }
+      ]
+    },
+    attributes: ['id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata'],
+  });
+  return candidates.find((sub) => {
+    const md = parseSubscriptionMetadata(sub.metadata);
+    return md.pdf_category_uuid === rootUuid;
+  }) || null;
+}
+
+// Check user's subscription status for a PDF category (whole-category purchase)
+router.get('/pdf-category/:categoryUuid', authToken, async (req, res) => {
+  try {
+    const { categoryUuid } = req.params;
+    const userId = req.user.uuid;
+
+    const category = await PdfCategory.findOne({
+      where: { uuid: categoryUuid },
+      attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
+    });
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'PDF category not found' });
+    }
+
+    const root = await resolveRootPdfCategory(category);
+    const basePrice = parseFloat(root?.price || 0);
+    const discountPercentage = parseFloat(root?.discount_percentage || 0);
+    const discountedPrice = discountPercentage > 0
+      ? basePrice * (1 - discountPercentage / 100)
+      : basePrice;
+
+    const categoryInfo = {
+      id: root.id,
+      uuid: root.uuid,
+      name: root.name,
+      pricing_type: root.pricing_type,
+      price: basePrice,
+      discount_percentage: discountPercentage,
+      discounted_price: discountedPrice,
+    };
+
+    // Free → always accessible; restricted → never purchasable
+    if (root.pricing_type === 'free') {
+      return res.json({
+        success: true,
+        data: {
+          hasAccess: true,
+          accessType: 'free',
+          canPurchase: false,
+          showEnrollButton: false,
+          category: categoryInfo,
+        }
+      });
+    }
+    if (root.pricing_type === 'restricted') {
+      return res.json({
+        success: true,
+        data: {
+          hasAccess: false,
+          accessType: 'restricted',
+          canPurchase: false,
+          showEnrollButton: false,
+          category: categoryInfo,
+        }
+      });
+    }
+
+    const purchase = await findCategoryPurchase(userId, root.uuid);
+    if (purchase) {
+      return res.json({
+        success: true,
+        data: {
+          hasAccess: true,
+          accessType: 'purchased',
+          canPurchase: false,
+          showEnrollButton: false,
+          subscription: {
+            id: purchase.id,
+            purchaseDate: purchase.purchase_date,
+            expiryDate: purchase.expiry_date,
+            amountPaid: purchase.amount_paid,
+          },
+          category: categoryInfo,
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        hasAccess: false,
+        accessType: 'none',
+        canPurchase: true,
+        showEnrollButton: true,
+        category: categoryInfo,
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error checking PDF category access:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check PDF category access',
+      error: error.message
+    });
+  }
+});
+
 // Check user's subscription status for a PDF
 router.get('/pdf/:pdfId', authToken, async (req, res) => {
   try {
@@ -207,7 +337,7 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
     // Get PDF details
     const pdf = await Pdfs.findOne({
       where: { id: pdfId },
-      attributes: ['id', 'title', 'access_level', 'file_path']
+      attributes: ['id', 'title', 'access_level', 'file_path', 'category_id']
     });
 
     if (!pdf) {
@@ -319,6 +449,51 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
           }
         }
       });
+    }
+
+    // No individual purchase — check whether the user bought the whole
+    // category this PDF lives in (category-level pricing flow).
+    if (pdf.category_id) {
+      const pdfCategory = await PdfCategory.findByPk(pdf.category_id, {
+        attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
+      });
+      if (pdfCategory) {
+        const root = await resolveRootPdfCategory(pdfCategory);
+        if (root) {
+          if (root.pricing_type === 'free') {
+            return res.json({
+              success: true,
+              data: {
+                hasAccess: true,
+                accessType: 'free',
+                canPurchase: false,
+                showEnrollButton: false,
+                pdf: { id: pdf.id, title: pdf.title, access_level: pdf.access_level }
+              }
+            });
+          }
+          const categoryPurchase = await findCategoryPurchase(userId, root.uuid);
+          if (categoryPurchase) {
+            console.log('✅ User has purchased the parent PDF category:', root.uuid);
+            return res.json({
+              success: true,
+              data: {
+                hasAccess: true,
+                accessType: 'purchased',
+                canPurchase: false,
+                showEnrollButton: false,
+                subscription: {
+                  id: categoryPurchase.id,
+                  purchaseDate: categoryPurchase.purchase_date,
+                  expiryDate: categoryPurchase.expiry_date,
+                  amountPaid: categoryPurchase.amount_paid,
+                },
+                pdf: { id: pdf.id, title: pdf.title, access_level: pdf.access_level }
+              }
+            });
+          }
+        }
+      }
     }
 
     console.log('🚫 User has not purchased this PDF');

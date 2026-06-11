@@ -23,6 +23,30 @@ const ErrorHandler = require('../../utils/default/errorHandler');
 const { validatePDFFile } = require('../../utils/pdfUpload');
 const { PDF_UPLOAD_MAX_SIZE_BYTES, PDF_UPLOAD_MAX_SIZE_MB } = require('../../utils/uploadConfig');
 
+/**
+ * Walk up the tree to the root category. Access for every sub-category and
+ * PDF is decided by the root's pricing_type (Course Management pattern:
+ * pricing lives on the top-level entity only).
+ */
+async function resolveRootCategory(category) {
+  let node = category;
+  while (node && node.parent_category_id !== null) {
+    node = await PdfCategory.findByPk(node.parent_category_id);
+  }
+  return node;
+}
+
+/** Map a root category's pricing onto the per-PDF access fields the apps already understand. */
+function accessFromRoot(root) {
+  const pricing = root?.pricing_type || 'free';
+  return {
+    access_level: pricing === 'paid' ? 'premium' : pricing,
+    is_free: pricing === 'free',
+    price: pricing === 'paid' ? Number(root.price) || 0 : 0,
+    discount_percentage: pricing === 'paid' ? Number(root.discount_percentage) || 0 : 0,
+  };
+}
+
 // ===== ADMIN ENDPOINTS =====
 
 /** GET /admin/pdf-hierarchy/roots — list all root categories */
@@ -33,6 +57,7 @@ exports.getRootCategories = async (req, res, next) => {
       attributes: [
         'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati',
         'icon', 'color', 'node_type', 'parent_category_id', 'hierarchy_level',
+        'pricing_type', 'price', 'discount_percentage',
         'display_order', 'is_active', 'created_at', 'updated_at',
       ],
       order: [['display_order', 'ASC'], ['created_at', 'ASC']],
@@ -150,10 +175,16 @@ exports.getCategoryContent = async (req, res, next) => {
 exports.createCategory = async (req, res, next) => {
   try {
     const { parentUuid } = req.params;
-    const { name, name_gujarati, description, description_gujarati, icon, color } = req.body;
+    const {
+      name, name_gujarati, description, description_gujarati, icon, color,
+      pricing_type, price, discount_percentage,
+    } = req.body;
 
     if (!name || !name.trim()) {
       return next(new ErrorHandler('Category name is required', 400));
+    }
+    if (pricing_type !== undefined && !['free', 'paid', 'restricted'].includes(pricing_type)) {
+      return next(new ErrorHandler('pricing_type must be free, paid or restricted', 400));
     }
 
     let parentCategory = null;
@@ -195,6 +226,11 @@ exports.createCategory = async (req, res, next) => {
       display_order: nextDisplayOrder,
       node_type: 'unset',
       is_active: true,
+      // Pricing lives on root categories only — sub-categories inherit from root
+      pricing_type: parentId === null ? (pricing_type || 'free') : 'free',
+      price: parentId === null && pricing_type === 'paid' ? (parseFloat(price) || 0) : 0,
+      discount_percentage: parentId === null && pricing_type === 'paid'
+        ? (parseFloat(discount_percentage) || 0) : 0,
     });
 
     // Promote parent from 'unset' to 'container' on first child
@@ -217,7 +253,10 @@ exports.createCategory = async (req, res, next) => {
 exports.updateCategory = async (req, res, next) => {
   try {
     const { categoryUuid } = req.params;
-    const { name, name_gujarati, description, description_gujarati, icon, color, is_active } = req.body;
+    const {
+      name, name_gujarati, description, description_gujarati, icon, color, is_active,
+      pricing_type, price, discount_percentage,
+    } = req.body;
 
     const category = await PdfCategory.findOne({ where: { uuid: categoryUuid } });
     if (!category) {
@@ -233,7 +272,47 @@ exports.updateCategory = async (req, res, next) => {
     if (color !== undefined) updates.color = color;
     if (is_active !== undefined) updates.is_active = !!is_active;
 
+    // Pricing is only editable on root categories — everything below inherits
+    if (pricing_type !== undefined) {
+      if (!['free', 'paid', 'restricted'].includes(pricing_type)) {
+        return next(new ErrorHandler('pricing_type must be free, paid or restricted', 400));
+      }
+      if (category.parent_category_id !== null) {
+        return next(new ErrorHandler('Pricing can only be set on a main (root) category', 400));
+      }
+      updates.pricing_type = pricing_type;
+      updates.price = pricing_type === 'paid' ? (parseFloat(price) || 0) : 0;
+      updates.discount_percentage = pricing_type === 'paid'
+        ? (parseFloat(discount_percentage) || 0) : 0;
+    }
+
     await category.update(updates);
+
+    // Cascade a root pricing change onto every PDF in the subtree so legacy
+    // endpoints that read the stored per-PDF fields stay consistent.
+    if (updates.pricing_type !== undefined) {
+      const subtreeIds = [category.id];
+      let frontier = [category.id];
+      while (frontier.length > 0) {
+        const children = await PdfCategory.findAll({
+          where: { parent_category_id: { [Op.in]: frontier } },
+          attributes: ['id'],
+          raw: true,
+        });
+        frontier = children.map((c) => c.id);
+        subtreeIds.push(...frontier);
+      }
+      const inherited = accessFromRoot(category);
+      await Pdfs.update(
+        {
+          access_level: inherited.access_level,
+          is_free: inherited.is_free,
+          price: inherited.price,
+          discount_percentage: inherited.discount_percentage,
+        },
+        { where: { category_id: { [Op.in]: subtreeIds } } }
+      );
+    }
 
     res.json({ success: true, message: 'Category updated successfully', data: category });
   } catch (err) {
@@ -328,11 +407,8 @@ exports.uploadPdfToCategory = async (req, res, next) => {
     const {
       title,
       description,
-      access_level = 'free',
       tags,
-      price,
       currency,
-      discount_percentage,
       subscription_required,
       preview_pages,
     } = req.body;
@@ -399,21 +475,26 @@ exports.uploadPdfToCategory = async (req, res, next) => {
       }
     }
 
+    // Access is decided by the root category, never per PDF
+    const rootCategory = await resolveRootCategory(category);
+    const inheritedAccess = accessFromRoot(rootCategory);
+    mark('root category access resolved');
+
     const pdf = await Pdfs.create({
       title: title.trim(),
       description: description?.trim() || null,
       category_id: category.id,
-      access_level,
+      access_level: inheritedAccess.access_level,
       tags: parsedTags,
       uploaded_by: adminId,
       original_filename: file.originalname,
       file_path: file.path,
       file_size: file.size,
       mime_type: file.mimetype,
-      price: price ? parseFloat(price) : 0,
+      price: inheritedAccess.price,
       currency: currency || 'INR',
-      is_free: access_level === 'free',
-      discount_percentage: discount_percentage ? parseFloat(discount_percentage) : 0,
+      is_free: inheritedAccess.is_free,
+      discount_percentage: inheritedAccess.discount_percentage,
       subscription_required: subscription_required === 'true' || subscription_required === true,
       preview_pages: preview_pages ? parseInt(preview_pages) : 0,
       display_order: nextDisplayOrder,
@@ -452,9 +533,11 @@ exports.updatePdfMetadata = async (req, res, next) => {
     const pdf = await Pdfs.findOne({ where: { id: pdfId } });
     if (!pdf) return next(new ErrorHandler('PDF not found', 404));
 
+    // access_level/price/is_free are intentionally NOT editable here — access
+    // is inherited from the root category (see uploadPdfToCategory).
     const allowed = [
-      'title', 'description', 'access_level', 'price', 'currency',
-      'discount_percentage', 'subscription_required', 'preview_pages',
+      'title', 'description', 'currency',
+      'subscription_required', 'preview_pages',
       'is_active', 'is_featured', 'tags',
     ];
     const updates = {};
@@ -467,9 +550,6 @@ exports.updatePdfMetadata = async (req, res, next) => {
           updates[k] = req.body[k];
         }
       }
-    }
-    if (updates.access_level && updates.is_free === undefined) {
-      updates.is_free = updates.access_level === 'free';
     }
     await pdf.update(updates);
     res.json({ success: true, message: 'PDF updated', data: pdf });
@@ -591,6 +671,7 @@ exports.studentGetRootCategories = async (req, res, next) => {
       attributes: [
         'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati',
         'icon', 'color', 'node_type', 'display_order',
+        'pricing_type', 'price', 'discount_percentage',
       ],
       order: [['display_order', 'ASC'], ['created_at', 'ASC']],
     });
@@ -620,7 +701,8 @@ exports.studentGetCategoryContent = async (req, res, next) => {
       where: { uuid: categoryUuid, is_active: true },
       attributes: [
         'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati',
-        'icon', 'color', 'node_type', 'hierarchy_level',
+        'icon', 'color', 'node_type', 'hierarchy_level', 'parent_category_id',
+        'pricing_type', 'price', 'discount_percentage',
       ],
       include: [
         {
@@ -631,6 +713,10 @@ exports.studentGetCategoryContent = async (req, res, next) => {
       ],
     });
     if (!category) return next(new ErrorHandler('Category not found', 404));
+
+    // Access for everything in this tree comes from the ROOT category
+    const rootCategory = await resolveRootCategory(category);
+    const inheritedAccess = accessFromRoot(rootCategory);
 
     // Active children
     const childCategories = await PdfCategory.findAll({
@@ -649,7 +735,8 @@ exports.studentGetCategoryContent = async (req, res, next) => {
       return { ...c.toJSON(), subcategories_count, pdfs_count };
     }));
 
-    // Active PDFs in this category
+    // Active PDFs in this category — access fields are overridden with the
+    // values inherited from the root category, never the per-PDF ones.
     const pdfs = await Pdfs.findAll({
       where: { category_id: category.id, is_active: true },
       order: [['display_order', 'ASC'], ['created_at', 'ASC']],
@@ -659,12 +746,16 @@ exports.studentGetCategoryContent = async (req, res, next) => {
         'is_featured', 'display_order', 'created_at',
       ],
     });
+    const pdfsWithInheritedAccess = pdfs.map((p) => ({
+      ...p.toJSON(),
+      ...inheritedAccess,
+    }));
 
     let content_type = 'empty';
     let content = [];
     if (pdfs.length > 0) {
       content_type = 'pdfs';
-      content = pdfs;
+      content = pdfsWithInheritedAccess;
     } else if (childCategoriesWithCounts.length > 0) {
       content_type = 'categories';
       content = childCategoriesWithCounts;
@@ -673,7 +764,14 @@ exports.studentGetCategoryContent = async (req, res, next) => {
     res.json({
       success: true,
       data: {
-        category,
+        category: {
+          ...category.toJSON(),
+          // Effective access for this branch (resolved from the root)
+          pricing_type: rootCategory?.pricing_type || 'free',
+          price: inheritedAccess.price,
+          discount_percentage: inheritedAccess.discount_percentage,
+          is_free: inheritedAccess.is_free,
+        },
         content_type,
         content,
         statistics: {
