@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Subscription, User, TestSeries, ExamType } = require('../../models');
+const { Subscription, User, TestSeries, ExamType, PdfCategory } = require('../../models');
 const { Op } = require('sequelize');
 const { updateUserSubscriptionStatus } = require('../../utils/subscriptionHelper');
 
@@ -571,44 +571,52 @@ exports.exportSubscriptions = async (req, res, next) => {
 // Admin: Create manual subscription
 exports.createManualSubscription = async (req, res, next) => {
     try {
-        const { 
-            user_id, 
-            test_series_id, 
-            transaction_id, 
+        const {
+            user_id,
+            test_series_id,
+            pdf_category_uuid,
+            transaction_id,
             payment_method,
             amount_paid,
             currency = 'INR',
             status = 'completed',
             expiry_date
         } = req.body;
-        
-        // Validate required fields
-        if (!user_id || !test_series_id || !transaction_id || !amount_paid) {
-            return next(new ErrorHandler('Missing required fields', 400));
+
+        const isPdfCategory = !!pdf_category_uuid;
+        const isTestSeries  = !!test_series_id;
+
+        // Require exactly one of the two subscription targets
+        if (!user_id || !transaction_id || amount_paid == null || (!isTestSeries && !isPdfCategory)) {
+            return next(new ErrorHandler('Missing required fields: user_id, transaction_id, amount_paid, and one of test_series_id or pdf_category_uuid', 400));
         }
-        
+
         // Check if user exists
         const user = await User.findOne({ where: { uuid: user_id } });
         if (!user) {
             return next(new ErrorHandler('User not found', 404));
         }
-        
-        // Check if test series exists
-        const testSeries = await TestSeries.findByPk(test_series_id);
-        if (!testSeries) {
-            return next(new ErrorHandler('Test series not found', 404));
+
+        let pdfCategory = null;
+        if (isPdfCategory) {
+            pdfCategory = await PdfCategory.findOne({ where: { uuid: pdf_category_uuid } });
+            if (!pdfCategory) {
+                return next(new ErrorHandler('PDF category not found', 404));
+            }
+        } else {
+            const testSeries = await TestSeries.findByPk(test_series_id);
+            if (!testSeries) {
+                return next(new ErrorHandler('Test series not found', 404));
+            }
         }
-        
+
         // Check if transaction ID already exists
-        const existingTransaction = await Subscription.findOne({
-            where: { transaction_id }
-        });
-        
+        const existingTransaction = await Subscription.findOne({ where: { transaction_id } });
         if (existingTransaction) {
             return next(new ErrorHandler('Transaction ID already exists', 400));
         }
-        
-        // Use provided expiry date or calculate with default duration (365 days)
+
+        // Use provided expiry date or default to 365 days
         const DEFAULT_SUBSCRIPTION_DAYS = 365;
         let finalExpiryDate = null;
         if (expiry_date) {
@@ -617,24 +625,29 @@ exports.createManualSubscription = async (req, res, next) => {
             finalExpiryDate = new Date();
             finalExpiryDate.setDate(finalExpiryDate.getDate() + DEFAULT_SUBSCRIPTION_DAYS);
         }
-        
-        // Create subscription
-        const subscription = await Subscription.create({
+
+        const subscriptionPayload = {
             user_id,
-            test_series_id,
+            test_series_id: isTestSeries ? test_series_id : null,
             transaction_id,
             payment_method,
             amount_paid,
             currency,
             status,
             purchase_date: new Date(),
-            expiry_date: finalExpiryDate
-        });
-        
+            expiry_date: finalExpiryDate,
+            metadata: isPdfCategory ? {
+                plan_type: 'pdf_category',
+                pdf_category_id: pdfCategory.id,
+                pdf_category_uuid: pdfCategory.uuid,
+            } : null,
+        };
+
+        const subscription = await Subscription.create(subscriptionPayload);
+
         // Update user's subscription status
         await updateUserSubscriptionStatus(user_id);
-        
-        // Fetch the created subscription with details
+
         const createdSubscription = await Subscription.findByPk(subscription.id, {
             include: [
                 {
@@ -642,14 +655,14 @@ exports.createManualSubscription = async (req, res, next) => {
                     as: 'user',
                     attributes: ['uuid', 'username', 'email']
                 },
-                {
+                ...(isTestSeries ? [{
                     model: TestSeries,
                     as: 'testSeries',
                     attributes: ['id', 'name', 'price']
-                }
+                }] : [])
             ]
         });
-        
+
         res.status(201).json({
             success: true,
             message: 'Manual subscription created successfully',
