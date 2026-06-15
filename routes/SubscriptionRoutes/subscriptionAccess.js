@@ -541,7 +541,7 @@ router.get('/my-subscriptions', authToken, async (req, res) => {
         as: 'testSeries',
         attributes: ['id', 'uuid', 'name', 'description']
       }],
-      attributes: ['id', 'test_series_id', 'purchase_date', 'expiry_date', 'amount_paid'],
+      attributes: ['id', 'test_series_id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata'],
       order: [['purchase_date', 'DESC']]
     });
 
