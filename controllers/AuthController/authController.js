@@ -148,13 +148,26 @@ exports.login = async (req, res,    next) => {
         // Device lock check (app only — device_id is only sent by the mobile app, never by web)
         if (device_id) {
             if (user.device_id && user.device_id !== device_id) {
-                return next(new ErrorHandler(
-                    'This account is linked to another device. Please contact admin to reset your device access.',
-                    403
-                ));
+                // Allow one-time migration: old builds stored a random UUID in AsyncStorage
+                // (wiped on reinstall); new builds send the hardware androidId (16 hex chars).
+                // When stored id is UUID-format and incoming is androidId-format, update it
+                // transparently so the student is not locked out after reinstalling.
+                const storedIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.device_id);
+                const incomingIsAndroidId = /^[0-9a-f]{16}$/i.test(device_id);
+
+                if (storedIsUuid && incomingIsAndroidId) {
+                    // Migrate: replace UUID with the stable hardware androidId
+                    await user.update({ device_id });
+                } else {
+                    return next(new ErrorHandler(
+                        'This account is linked to another device. Please contact admin to reset your device access.',
+                        403
+                    ));
+                }
+            } else {
+                // First login from app, or same device — save/confirm device_id
+                await user.update({ device_id });
             }
-            // First login from app, or same device — save/confirm device_id
-            await user.update({ device_id });
         }
 
         // Generate a unique session ID and save it — invalidates any previous session
