@@ -148,26 +148,39 @@ exports.login = async (req, res,    next) => {
         // Device lock check (app only — device_id is only sent by the mobile app, never by web)
         if (device_id) {
             if (user.device_id && user.device_id !== device_id) {
-                // Allow one-time migration: old builds stored a random UUID in AsyncStorage
-                // (wiped on reinstall); new builds send the hardware androidId (16 hex chars).
-                // When stored id is UUID-format and incoming is androidId-format, update it
-                // transparently so the student is not locked out after reinstalling.
-                const storedIsUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.device_id);
-                const incomingIsAndroidId = /^[0-9a-f]{16}$/i.test(device_id);
+                // Device mismatch — could be reinstall on same phone or a different device.
+                // Send OTP to the registered email so the student can verify their identity.
+                // If OTP is correct, the device_id is updated and they are logged in.
+                // This avoids admin intervention for legitimate reinstalls.
+                const otp = Math.floor(1000 + Math.random() * 9000);
+                const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+                await user.update({ otp, otpExpiry });
 
-                if (storedIsUuid && incomingIsAndroidId) {
-                    // Migrate: replace UUID with the stable hardware androidId
-                    await user.update({ device_id });
-                } else {
-                    return next(new ErrorHandler(
-                        'This account is linked to another device. Please contact admin to reset your device access.',
-                        403
-                    ));
-                }
-            } else {
-                // First login from app, or same device — save/confirm device_id
-                await user.update({ device_id });
+                // Sign a short-lived token carrying the new device_id so otp_verify can
+                // update it after the student proves their identity via OTP.
+                const deviceChangeToken = jwt.sign(
+                    { userId: user.uuid, newDeviceId: device_id },
+                    process.env.JWT_SECRET,
+                    { expiresIn: '10m' }
+                );
+
+                try {
+                    await sendMail({
+                        email: user.email,
+                        subject: 'Device Verification - MockTale Academy',
+                        message: `Your device verification OTP is: <b>${otp}</b><br/>Valid for 10 minutes.<br/><br/>If you did not reinstall the app, please ignore this email.`
+                    });
+                } catch (_) { /* email failure should not block the response */ }
+
+                return res.status(403).json({
+                    success: false,
+                    errorCode: 'DEVICE_VERIFICATION_REQUIRED',
+                    message: 'New device detected. Enter the OTP sent to your registered email to continue.',
+                    deviceChangeToken
+                });
             }
+            // First login from app, or same device — save/confirm device_id
+            await user.update({ device_id });
         }
 
         // Generate a unique session ID and save it — invalidates any previous session
@@ -204,8 +217,8 @@ exports.login = async (req, res,    next) => {
 
 exports.otp_verify = async (req, res, next) => {
     try {
-        const { email, otp } = req.body;
-        // Find user by email   
+        const { email, otp, deviceChangeToken } = req.body;
+        // Find user by email
         const user = await User.findOne({ where: { email } });
         if (!user) {
             return next(new ErrorHandler('Invalid email !', 401));
@@ -214,12 +227,12 @@ exports.otp_verify = async (req, res, next) => {
         if (!user.otp || !user.otpExpiry) {
             return next(new ErrorHandler('No OTP found. Please request a new one.', 400));
         }
-        
+
         // Check if OTP has expired
         if (new Date() > user.otpExpiry) {
             return next(new ErrorHandler('OTP has expired. Please request a new one.', 400));
         }
-        
+
         // Check OTP
         if (user.otp !== parseInt(otp)) {
             return next(new ErrorHandler('Invalid OTP', 401));
@@ -229,8 +242,18 @@ exports.otp_verify = async (req, res, next) => {
         user.otp = null;
         user.otpExpiry = null;
         user.isEmailVerified = true;
-        await user.save();  
 
+        // If this OTP was for device re-enrollment, update the device_id
+        if (deviceChangeToken) {
+            try {
+                const decoded = jwt.verify(deviceChangeToken, process.env.JWT_SECRET);
+                if (decoded.userId === user.uuid && decoded.newDeviceId) {
+                    user.device_id = decoded.newDeviceId;
+                }
+            } catch (_) { /* invalid/expired token — ignore, device_id unchanged */ }
+        }
+
+        await user.save();
 
         res.status(200).json({
             success: true,
