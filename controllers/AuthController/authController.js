@@ -168,7 +168,21 @@ exports.login = async (req, res,    next) => {
                     await sendMail({
                         receiver: user.email,
                         subject: 'Device Verification - MockTale Academy',
-                        htmlContent: `Your device verification OTP is: <b>${otp}</b><br/>Valid for 10 minutes.<br/><br/>If you did not reinstall the app, please ignore this email.`
+                        service: null,
+                        host: 'smtp.gmail.com',
+                        content: '',
+                        htmlContent: `
+<div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f6f8;">
+  <div style="max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+    <h2 style="color: #333; text-align: center;">Device Verification</h2>
+    <p>Hi <strong>${user.username}</strong>,</p>
+    <p>A login attempt was detected from a new device installation. Use the OTP below to verify:</p>
+    <h1 style="text-align: center; color: #007bff; letter-spacing: 4px;">${otp}</h1>
+    <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
+    <p style="color: #666;">If you did not reinstall the app, please contact support immediately.</p>
+    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+  </div>
+</div>`
                     });
                 } catch (_) { /* email failure should not block the response */ }
 
