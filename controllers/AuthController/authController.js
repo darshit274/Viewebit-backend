@@ -166,9 +166,9 @@ exports.login = async (req, res,    next) => {
 
                 try {
                     await sendMail({
-                        email: user.email,
+                        receiver: user.email,
                         subject: 'Device Verification - MockTale Academy',
-                        message: `Your device verification OTP is: <b>${otp}</b><br/>Valid for 10 minutes.<br/><br/>If you did not reinstall the app, please ignore this email.`
+                        htmlContent: `Your device verification OTP is: <b>${otp}</b><br/>Valid for 10 minutes.<br/><br/>If you did not reinstall the app, please ignore this email.`
                     });
                 } catch (_) { /* email failure should not block the response */ }
 
