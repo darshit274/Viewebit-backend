@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 
 // Payment checkout page
@@ -9,7 +9,7 @@ router.get('/:orderId', async (req, res) => {
       keyId, 
       amount, 
       currency = 'INR', 
-      name = 'MockTale', 
+      name = 'Viewebit', 
       description, 
       itemName,
       itemPrice,
@@ -33,7 +33,7 @@ router.get('/:orderId', async (req, res) => {
     const checkoutHTML = `<!DOCTYPE html>
 <html>
 <head>
-  <title>MockTale Payment</title>
+  <title>Viewebit Payment</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>

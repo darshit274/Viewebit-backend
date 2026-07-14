@@ -1,4 +1,4 @@
-const ErrorHandler = require('../../utils/default/errorHandler');
+﻿const ErrorHandler = require('../../utils/default/errorHandler');
 const { User, TestSession, Test, sequelize } = require('../../models'); // ✅ Add sequelize instance
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -85,7 +85,7 @@ exports.register = async (req, res, next) => {
           <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
           <br/>
           <p style="font-size: 12px; color: #aaa; text-align: center;">If you did not request this, please ignore this email.</p>
-          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
         </div>
       </div>
     `,
@@ -167,7 +167,7 @@ exports.login = async (req, res,    next) => {
                 try {
                     await sendMail({
                         receiver: user.email,
-                        subject: 'Device Verification - MockTale Academy',
+                        subject: 'Device Verification - Viewebit Academy',
                         service: null,
                         host: 'smtp.gmail.com',
                         content: '',
@@ -180,7 +180,7 @@ exports.login = async (req, res,    next) => {
     <h1 style="text-align: center; color: #007bff; letter-spacing: 4px;">${otp}</h1>
     <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
     <p style="color: #666;">If you did not reinstall the app, please contact support immediately.</p>
-    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
   </div>
 </div>`
                     });
@@ -315,7 +315,7 @@ exports.forgotPassword = async (req, res, next) => {
           <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
           <br/>
           <p style="font-size: 12px; color: #aaa; text-align: center;">If you did not request this, please ignore this email.</p>
-          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
         </div>
       </div>
     `,
@@ -441,7 +441,7 @@ exports.resendOTP = async (req, res, next) => {
                         <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
                         <br/>
                         <p style="font-size: 12px; color: #aaa; text-align: center;">If you did not request this, please ignore this email.</p>
-                        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+                        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
                     </div>
                 </div>`,
                 cc: null,

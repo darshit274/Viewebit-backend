@@ -1,4 +1,4 @@
-const ErrorHandler = require('../../utils/default/errorHandler');
+﻿const ErrorHandler = require('../../utils/default/errorHandler');
 const { Admin, User, Subscription, TestSeries } = require('../../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -43,7 +43,7 @@ exports.login = async (req, res, next) => {
         try {
             await sendMail({
                 receiver: email,
-                subject: `MockTale Admin - Login Verification Code`,
+                subject: `Viewebit Admin - Login Verification Code`,
                 content: 'content',
                 service: null,
                 host: "smtp.gmail.com",
@@ -57,7 +57,7 @@ exports.login = async (req, res, next) => {
                     <p style="color: #666;">This verification code is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
                     <p style="color: #e74c3c; margin-top: 20px;"><strong>Security Notice:</strong> If you did not attempt to log in, please contact your system administrator immediately.</p>
                     <br/>
-                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale Academy - Admin Panel</p>
+                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit Academy - Admin Panel</p>
                   </div>
                 </div>
               `,
@@ -181,7 +181,7 @@ exports.resendOTP = async (req, res, next) => {
         try {
             await sendMail({
                 receiver: email,
-                subject: `MockTale Admin - New Verification Code`,
+                subject: `Viewebit Admin - New Verification Code`,
                 content: 'content',
                 service: null,
                 host: "smtp.gmail.com",
@@ -194,7 +194,7 @@ exports.resendOTP = async (req, res, next) => {
                     <h1 style="text-align: center; color: #007bff; letter-spacing: 4px; background-color: #f0f0f0; padding: 15px; border-radius: 8px;">${otp}</h1>
                     <p style="color: #666;">This verification code is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
                     <br/>
-                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale Academy - Admin Panel</p>
+                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit Academy - Admin Panel</p>
                   </div>
                 </div>
               `,

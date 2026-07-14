@@ -1,4 +1,4 @@
-const Razorpay = require('razorpay');
+﻿const Razorpay = require('razorpay');
 
 // Initialize Razorpay instance
 const razorpayInstance = new Razorpay({
@@ -9,13 +9,13 @@ const razorpayInstance = new Razorpay({
 // Razorpay configuration
 const razorpayConfig = {
   currency: 'INR',
-  receipt_prefix: 'MOCKTAIL_',
+  receipt_prefix: 'VIEWEBIT_',
   webhook_secret: process.env.RAZORPAY_WEBHOOK_SECRET,
   
   // Payment options
   payment_capture: 1, // Auto capture payments
   notes: {
-    app_name: 'Mocktail',
+    app_name: 'Viewebit',
     version: '1.0.0'
   }
 };

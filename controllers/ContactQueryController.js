@@ -5,7 +5,7 @@ const { Op } = require('sequelize');
 // Submit contact query (Public endpoint - no auth required)
 exports.submitQuery = async (req, res, next) => {
   try {
-    const { full_name, email, mobile_number, query_message } = req.body;
+    const { full_name, email, mobile_number, query_message, role, institution_name } = req.body;
 
     // Get IP address and user agent for spam prevention
     const ip_address = req.ip || req.connection.remoteAddress;
@@ -27,6 +27,8 @@ exports.submitQuery = async (req, res, next) => {
       full_name,
       email,
       mobile_number: cleaned_mobile,
+      role,
+      institution_name,
       query_message,
       ip_address,
       user_agent,
