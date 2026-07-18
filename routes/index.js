@@ -3,6 +3,18 @@ const router = express.Router();
 
 const UserRoutes = require("./AuthRoutes/authRoutes");
 const AdminRoutes = require("./AdminRoutes/adminRoutes");
+const EducatorAuthRoutes = require("./EducatorRoutes/educatorAuthRoutes");
+const EducatorCourseRoutes = require("./EducatorRoutes/courseRoutes");
+const EducatorDashboardRoutes = require("./EducatorRoutes/dashboardRoutes");
+const EducatorAssignmentRoutes = require("./EducatorRoutes/assignmentRoutes");
+const EducatorLiveSessionRoutes = require("./EducatorRoutes/liveSessionRoutes");
+const EducatorCertificateRoutes = require("./EducatorRoutes/certificateRoutes");
+const EducatorQuizHierarchyRoutes = require("./EducatorRoutes/quizHierarchyRoutes");
+const EducatorPdfHierarchyRoutes = require("./EducatorRoutes/pdfHierarchyRoutes");
+const StudentCourseRoutes = require("./CourseRoutes/studentCourseRoutes");
+const StudentAssignmentRoutes = require("./AssignmentRoutes/studentAssignmentRoutes");
+const StudentLiveSessionRoutes = require("./LiveSessionRoutes/studentLiveSessionRoutes");
+const CertificateRoutes = require("./CertificateRoutes/certificateRoutes");
 const SubscriptionRoutes = require("./SubscriptionRoutes/subscriptionRoutes");
 const PDFRoutes = require("./PDFRoutes/pdfRoutes");
 const NotificationRoutes = require("./notificationRoutes");
@@ -30,6 +42,18 @@ const ContactQueryRoutes = require("./contactQueryRoutes");
 
 router.use("/users", UserRoutes);
 router.use("/admin", AdminRoutes);
+router.use("/educator", EducatorAuthRoutes);
+router.use("/educator/courses", EducatorCourseRoutes);
+router.use("/educator/dashboard", EducatorDashboardRoutes);
+router.use("/educator", EducatorAssignmentRoutes);
+router.use("/educator/live-sessions", EducatorLiveSessionRoutes);
+router.use("/educator/certificates", EducatorCertificateRoutes);
+router.use("/educator/quizzes", EducatorQuizHierarchyRoutes);
+router.use("/educator/pdfs", EducatorPdfHierarchyRoutes);
+router.use("/courses", StudentCourseRoutes);
+router.use("/assignments", StudentAssignmentRoutes);
+router.use("/live-sessions", StudentLiveSessionRoutes);
+router.use("/certificates", CertificateRoutes);
 router.use("/admin/upload", UploadRoutes); // File upload APIs for rich text editor
 router.use("/admin/test-management", TestManagementRoutes); // Admin test management APIs (old system)
 router.use("/admin/dynamic-test", DynamicTestManagementRoutes); // New dynamic hierarchy system

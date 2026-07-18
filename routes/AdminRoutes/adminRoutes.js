@@ -128,6 +128,10 @@ router.get('/subscriptions/:id', adminAuth, subscriptionController.getSubscripti
 router.patch('/subscriptions/:id/status', adminAuth, subscriptionController.updateSubscriptionStatus);
 router.post('/subscriptions/manual', adminAuth, subscriptionController.createManualSubscription);
 
+// Reports export routes (admissions/enrollments CSV; revenue export reuses /subscriptions/export above)
+const reportsExportController = require('../../controllers/AdminController/reportsExportController');
+router.get('/reports/enrollments/export', adminAuth, reportsExportController.exportEnrollments);
+
 // PDF Upload management routes
 const pdfUploadRoutes = require('./pdfUploadRoutes');
 router.use('/pdf', pdfUploadRoutes);
@@ -148,7 +152,27 @@ router.use('/translations', translationRoutes);
 const testManagementRoutes = require('../testManagementRoutes');
 router.use('/test-management', testManagementRoutes);
 
+// Institution / Branch / Department management routes
+const institutionRoutes = require('./institutionRoutes');
+router.use('/institutions', institutionRoutes);
 
+const branchRoutes = require('./branchRoutes');
+router.use('/branches', branchRoutes);
+
+const departmentRoutes = require('./departmentRoutes');
+router.use('/departments', departmentRoutes);
+
+// Roles & Permissions management routes
+const roleRoutes = require('./roleRoutes');
+router.use('/roles', roleRoutes);
+
+// Educator account management routes (admin side)
+const educatorManagementRoutes = require('./educatorManagementRoutes');
+router.use('/educators', educatorManagementRoutes);
+
+// Admissions & Enrollments routes
+const admissionsRoutes = require('./admissionsRoutes');
+router.use('/admissions', admissionsRoutes);
 
 // Admin management routes (super admin only)
 router.post('/create', adminAuth, requireRole(['super_admin']), adminController.createAdmin);

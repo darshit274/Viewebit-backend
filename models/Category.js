@@ -81,6 +81,11 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false,
       allowNull: false,
       comment: 'If true, this category quiz is free even if the parent test series is paid'
+    },
+    educator_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Set when this node was authored by an Educator (Educator Panel quiz builder) rather than an Admin'
     }
   }, {
     tableName: 'categories',
@@ -115,6 +120,13 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'category_id',
       as: 'questions'
     });
+
+    if (models.Educator) {
+      Category.belongsTo(models.Educator, {
+        foreignKey: 'educator_id',
+        as: 'educator'
+      });
+    }
   };
 
   return Category;

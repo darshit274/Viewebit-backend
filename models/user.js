@@ -8,7 +8,17 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       // UserAnswer is linked through TestSession, not directly to User
       // Removed incorrect UserAnswer association
-      
+
+      if (models.Institution) {
+        User.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
+      }
+      if (models.Branch) {
+        User.belongsTo(models.Branch, { foreignKey: 'branch_id', as: 'branch' });
+      }
+      if (models.Department) {
+        User.belongsTo(models.Department, { foreignKey: 'department_id', as: 'department' });
+      }
+
       if (models.TestSession) {
         User.hasMany(models.TestSession, {
           foreignKey: 'user_id',
@@ -180,6 +190,27 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING(36),
       allowNull: true,
       defaultValue: null
+    },
+    institution_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    branch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    department_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    application_status: {
+      type: DataTypes.ENUM('pending', 'approved', 'rejected', 'enrolled'),
+      defaultValue: 'pending',
+      allowNull: false
+    },
+    applied_at: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   }, {
     sequelize,

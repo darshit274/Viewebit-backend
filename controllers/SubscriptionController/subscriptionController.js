@@ -461,47 +461,78 @@ exports.getSubscriptionStats = async (req, res, next) => {
     try {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        
+        const { branch_id, department_id, date_from, date_to } = req.query;
+
+        // Branch/department filtering requires joining through the TestSeries a
+        // subscription was purchased against (Phase 0 added branch_id/department_id
+        // scoping there) — PDF-only subscriptions (test_series_id null) are excluded
+        // when a branch/department filter is active, since they have no org scoping.
+        const needsSeriesJoin = !!(branch_id || department_id);
+        const seriesWhere = {};
+        if (branch_id) seriesWhere.branch_id = branch_id;
+        if (department_id) seriesWhere.department_id = department_id;
+
+        const dateRangeWhere = {};
+        if (date_from || date_to) {
+            dateRangeWhere.purchase_date = {};
+            if (date_from) dateRangeWhere.purchase_date[Op.gte] = new Date(date_from);
+            if (date_to) {
+                const to = new Date(date_to);
+                to.setHours(23, 59, 59, 999);
+                dateRangeWhere.purchase_date[Op.lte] = to;
+            }
+        }
+
+        const baseWhere = { status: 'completed', ...dateRangeWhere };
+        const includeOptions = needsSeriesJoin
+            ? [{ model: TestSeries, as: 'testSeries', attributes: [], where: seriesWhere, required: true }]
+            : [];
+
         const [
             totalSubscriptions,
             activeSubscriptions,
             totalRevenue,
             monthlyRevenue
         ] = await Promise.all([
-            // Total subscriptions
-            Subscription.count({
-                where: { status: 'completed' }
-            }),
-            // Active subscriptions
+            Subscription.count({ where: baseWhere, include: includeOptions }),
             Subscription.count({
                 where: {
-                    status: 'completed',
+                    ...baseWhere,
                     [Op.or]: [
                         { expiry_date: null },
                         { expiry_date: { [Op.gt]: now } }
                     ]
-                }
+                },
+                include: includeOptions
             }),
-            // Total revenue
+            Subscription.sum('amount_paid', { where: baseWhere, include: includeOptions }),
             Subscription.sum('amount_paid', {
-                where: { status: 'completed' }
-            }),
-            // Monthly revenue
-            Subscription.sum('amount_paid', {
-                where: {
-                    status: 'completed',
-                    purchase_date: { [Op.gte]: startOfMonth }
-                }
+                where: { ...baseWhere, purchase_date: { [Op.gte]: startOfMonth } },
+                include: includeOptions
             })
         ]);
-        
+
         const expiredSubscriptions = await Subscription.count({
-            where: {
-                status: 'completed',
-                expiry_date: { [Op.lte]: now }
-            }
+            where: { ...baseWhere, expiry_date: { [Op.lte]: now } },
+            include: includeOptions
         });
-        
+
+        // Revenue trend — last 6 months (or the filtered date range if narrower),
+        // grouped by calendar month, for the Revenue page's chart.
+        const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        const trendStart = dateRangeWhere.purchase_date?.[Op.gte] || sixMonthsAgo;
+        const revenueByMonth = await Subscription.findAll({
+            attributes: [
+                [require('sequelize').fn('DATE_FORMAT', require('sequelize').col('Subscription.purchase_date'), '%Y-%m'), 'month'],
+                [require('sequelize').fn('SUM', require('sequelize').col('amount_paid')), 'revenue']
+            ],
+            where: { status: 'completed', purchase_date: { [Op.gte]: trendStart } },
+            include: includeOptions,
+            group: [require('sequelize').fn('DATE_FORMAT', require('sequelize').col('Subscription.purchase_date'), '%Y-%m')],
+            order: [[require('sequelize').fn('DATE_FORMAT', require('sequelize').col('Subscription.purchase_date'), '%Y-%m'), 'ASC']],
+            raw: true
+        });
+
         res.status(200).json({
             success: true,
             data: {
@@ -509,7 +540,8 @@ exports.getSubscriptionStats = async (req, res, next) => {
                 active_subscriptions: activeSubscriptions || 0,
                 expired_subscriptions: expiredSubscriptions || 0,
                 total_revenue: totalRevenue || 0,
-                monthly_revenue: monthlyRevenue || 0
+                monthly_revenue: monthlyRevenue || 0,
+                revenue_trend: revenueByMonth.map((r) => ({ month: r.month, revenue: parseFloat(r.revenue) || 0 }))
             }
         });
     } catch (err) {

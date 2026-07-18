@@ -98,6 +98,23 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
     },
+    institution_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    branch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    department_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    educator_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Set when this node was authored by an Educator (Educator Panel PDF builder) rather than an Admin',
+    },
     created_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW,
@@ -129,6 +146,18 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: 'parent_category_id',
       as: 'childCategories',
     });
+    if (models.Institution) {
+      PdfCategory.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
+    }
+    if (models.Branch) {
+      PdfCategory.belongsTo(models.Branch, { foreignKey: 'branch_id', as: 'branch' });
+    }
+    if (models.Department) {
+      PdfCategory.belongsTo(models.Department, { foreignKey: 'department_id', as: 'department' });
+    }
+    if (models.Educator) {
+      PdfCategory.belongsTo(models.Educator, { foreignKey: 'educator_id', as: 'educator' });
+    }
   };
 
   return PdfCategory;

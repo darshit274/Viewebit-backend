@@ -320,6 +320,9 @@ class TestResponseController {
           results: results
         }
       });
+      // Note: certificate auto-issue for course quizzes is hooked into
+      // routes/quizSubmissionRoutes.js's /quiz/submit handler instead — that's
+      // the endpoint the actual category-based quiz-taking flow calls, not this one.
 
     } catch (error) {
       await transaction.rollback();

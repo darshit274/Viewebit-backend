@@ -107,6 +107,18 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 0,
       comment: 'Controls display position in app and web — lower number shown first'
+    },
+    institution_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    branch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    department_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
     }
   }, {
     tableName: 'new_test_series',
@@ -115,10 +127,22 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   TestSeries.associate = function(models) {
-    TestSeries.hasMany(models.Category, { 
-      foreignKey: 'test_series_id', 
-      as: 'categories' 
+    TestSeries.hasMany(models.Category, {
+      foreignKey: 'test_series_id',
+      as: 'categories'
     });
+    if (models.Institution) {
+      TestSeries.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
+    }
+    if (models.Branch) {
+      TestSeries.belongsTo(models.Branch, { foreignKey: 'branch_id', as: 'branch' });
+    }
+    if (models.Department) {
+      TestSeries.belongsTo(models.Department, { foreignKey: 'department_id', as: 'department' });
+    }
+    if (models.Course) {
+      TestSeries.hasOne(models.Course, { foreignKey: 'test_series_id', as: 'course' });
+    }
   };
 
   return TestSeries;
