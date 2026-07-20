@@ -230,3 +230,80 @@ exports.getStudentTestAttempts = async (req, res, next) => {
         return next(new ErrorHandler('Failed to fetch student test attempts', 500));
     }
 };
+
+exports.listSubscriptions = async (req, res, next) => {
+    try {
+        const { page = 1, limit = 20, search = '', status = 'all' } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+
+        const courses = await getEducatorCourses(req.educator.id);
+        const testSeriesIdToCourse = new Map(courses.filter((c) => c.test_series_id).map((c) => [c.test_series_id, c]));
+        const testSeriesIds = [...testSeriesIdToCourse.keys()];
+
+        if (testSeriesIds.length === 0) {
+            return res.status(200).json({ success: true, data: [], pagination: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+        }
+
+        const whereClause = { test_series_id: testSeriesIds };
+        if (status !== 'all') whereClause.status = status;
+
+        const includeClause = [{ model: User, as: 'user', attributes: ['uuid', 'username', 'email'], required: false }];
+        if (search) {
+            includeClause[0].where = { [Op.or]: [{ username: { [Op.like]: `%${search}%` } }, { email: { [Op.like]: `%${search}%` } }] };
+            includeClause[0].required = true;
+        }
+
+        const { count, rows } = await Subscription.findAndCountAll({
+            where: whereClause,
+            include: includeClause,
+            limit: limitNum,
+            offset: (pageNum - 1) * limitNum,
+            order: [['purchase_date', 'DESC']],
+        });
+
+        const data = rows.map((sub) => {
+            const course = testSeriesIdToCourse.get(sub.test_series_id);
+            return {
+                id: sub.id,
+                student: sub.user ? { uuid: sub.user.uuid, name: sub.user.username, email: sub.user.email } : null,
+                courseTitle: course?.title || null,
+                amountPaid: sub.amount_paid,
+                currency: sub.currency,
+                status: sub.status,
+                purchaseDate: sub.purchase_date,
+                expiryDate: sub.expiry_date,
+            };
+        });
+
+        res.status(200).json({ success: true, data, pagination: { total: count, page: pageNum, limit: limitNum, totalPages: Math.ceil(count / limitNum) } });
+    } catch (err) {
+        console.error('List subscriptions error:', err);
+        return next(new ErrorHandler('Failed to fetch subscriptions', 500));
+    }
+};
+
+exports.getSubscriptionStats = async (req, res, next) => {
+    try {
+        const courses = await getEducatorCourses(req.educator.id);
+        const testSeriesIds = [...new Set(courses.filter((c) => c.test_series_id).map((c) => c.test_series_id))];
+
+        if (testSeriesIds.length === 0) {
+            return res.status(200).json({ success: true, data: { total: 0, active: 0, expired: 0, totalRevenue: 0 } });
+        }
+
+        const now = new Date();
+        const baseWhere = { test_series_id: testSeriesIds, status: 'completed' };
+
+        const [total, active, totalRevenue] = await Promise.all([
+            Subscription.count({ where: baseWhere }),
+            Subscription.count({ where: { ...baseWhere, [Op.or]: [{ expiry_date: null }, { expiry_date: { [Op.gt]: now } }] } }),
+            Subscription.sum('amount_paid', { where: baseWhere }),
+        ]);
+
+        res.status(200).json({ success: true, data: { total, active, expired: total - active, totalRevenue: totalRevenue || 0 } });
+    } catch (err) {
+        console.error('Get subscription stats error:', err);
+        return next(new ErrorHandler('Failed to fetch subscription stats', 500));
+    }
+};
