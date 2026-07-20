@@ -204,11 +204,13 @@ exports.getStudentTestAttempts = async (req, res, next) => {
         const { studentUuid } = req.params;
         const { uuids: categoryUuids } = await getEducatorCategoryIds(req.educator.id);
 
-        const user = await User.findOne({ where: { uuid: studentUuid }, attributes: ['uuid', 'username', 'email'] });
-        if (!user) return next(new ErrorHandler('Student not found', 404));
-
         const sessions = await TestSession.findAll({ where: { user_id: studentUuid, status: 'completed' }, order: [['created_at', 'DESC']] });
         const scoped = sessions.filter((s) => categoryUuids.includes(s.session_data?.category_uuid));
+
+        if (scoped.length === 0) return next(new ErrorHandler('Student not found', 404));
+
+        const user = await User.findOne({ where: { uuid: studentUuid }, attributes: ['uuid', 'username', 'email'] });
+        if (!user) return next(new ErrorHandler('Student not found', 404));
 
         const attempts = scoped.map((s) => ({
             sessionId: s.id,
