@@ -131,3 +131,102 @@ exports.listStudents = async (req, res, next) => {
         return next(new ErrorHandler('Failed to fetch students', 500));
     }
 };
+
+exports.listTestAttempts = async (req, res, next) => {
+    try {
+        const { page = 1, limit = 20, search = '' } = req.query;
+        const { uuids: categoryUuids } = await getEducatorCategoryIds(req.educator.id);
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+
+        if (categoryUuids.length === 0) {
+            return res.status(200).json({ success: true, data: [], pagination: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+        }
+
+        const sessions = await TestSession.findAll({ where: { status: 'completed' }, order: [['created_at', 'DESC']] });
+        const scoped = sessions.filter((s) => categoryUuids.includes(s.session_data?.category_uuid));
+
+        const grouped = new Map();
+        scoped.forEach((s) => {
+            if (!grouped.has(s.user_id)) grouped.set(s.user_id, []);
+            grouped.get(s.user_id).push(s);
+        });
+
+        let userIds = [...grouped.keys()];
+        if (search) {
+            const like = `%${search}%`;
+            const matchingUsers = await User.findAll({
+                where: { uuid: userIds, [Op.or]: [{ username: { [Op.like]: like } }, { email: { [Op.like]: like } }] },
+                attributes: ['uuid'],
+            });
+            const allowed = new Set(matchingUsers.map((u) => u.uuid));
+            userIds = userIds.filter((id) => allowed.has(id));
+        }
+
+        const users = await User.findAll({ where: { uuid: userIds }, attributes: ['uuid', 'username', 'email'] });
+        const userMap = new Map(users.map((u) => [u.uuid, u]));
+
+        let rows = userIds.map((uid) => {
+            const userSessions = grouped.get(uid).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const latest = userSessions[0];
+            const user = userMap.get(uid);
+            return {
+                studentUuid: uid,
+                studentName: user?.username || null,
+                studentEmail: user?.email || null,
+                totalAttempts: userSessions.length,
+                completedAttempts: userSessions.length,
+                latestAttempt: {
+                    sessionId: latest.id,
+                    categoryName: latest.category_name,
+                    percentage: latest.percentage,
+                    finalScore: latest.final_score,
+                    completedAt: latest.completed_at,
+                },
+            };
+        });
+
+        rows.sort((a, b) => new Date(b.latestAttempt.completedAt || 0) - new Date(a.latestAttempt.completedAt || 0));
+
+        const total = rows.length;
+        const paged = rows.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+        res.status(200).json({ success: true, data: paged, pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } });
+    } catch (err) {
+        console.error('List test attempts error:', err);
+        return next(new ErrorHandler('Failed to fetch test attempts', 500));
+    }
+};
+
+exports.getStudentTestAttempts = async (req, res, next) => {
+    try {
+        const { studentUuid } = req.params;
+        const { uuids: categoryUuids } = await getEducatorCategoryIds(req.educator.id);
+
+        const user = await User.findOne({ where: { uuid: studentUuid }, attributes: ['uuid', 'username', 'email'] });
+        if (!user) return next(new ErrorHandler('Student not found', 404));
+
+        const sessions = await TestSession.findAll({ where: { user_id: studentUuid, status: 'completed' }, order: [['created_at', 'DESC']] });
+        const scoped = sessions.filter((s) => categoryUuids.includes(s.session_data?.category_uuid));
+
+        const attempts = scoped.map((s) => ({
+            sessionId: s.id,
+            categoryName: s.category_name,
+            percentage: s.percentage,
+            finalScore: s.final_score,
+            totalCorrect: s.total_correct,
+            totalWrong: s.total_wrong,
+            totalQuestions: s.total_questions,
+            timeSpentSeconds: s.time_spent_seconds,
+            completedAt: s.completed_at,
+        }));
+
+        res.status(200).json({
+            success: true,
+            data: { student: { uuid: user.uuid, name: user.username, email: user.email }, attempts },
+        });
+    } catch (err) {
+        console.error('Get student test attempts error:', err);
+        return next(new ErrorHandler('Failed to fetch student test attempts', 500));
+    }
+};

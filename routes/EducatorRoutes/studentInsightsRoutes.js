@@ -8,5 +8,7 @@ const { educatorAuth } = require('../../utils/EducatorAuth');
 router.use(educatorAuth);
 
 router.get('/students', studentInsightsController.listStudents);
+router.get('/test-attempts', studentInsightsController.listTestAttempts);
+router.get('/test-attempts/:studentUuid', studentInsightsController.getStudentTestAttempts);
 
 module.exports = router;
