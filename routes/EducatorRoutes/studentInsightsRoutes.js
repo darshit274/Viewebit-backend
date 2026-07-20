@@ -12,5 +12,6 @@ router.get('/test-attempts', studentInsightsController.listTestAttempts);
 router.get('/test-attempts/:studentUuid', studentInsightsController.getStudentTestAttempts);
 router.get('/subscriptions', studentInsightsController.listSubscriptions);
 router.get('/subscriptions/stats', studentInsightsController.getSubscriptionStats);
+router.post('/subscriptions/manual', studentInsightsController.createManualSubscription);
 
 module.exports = router;

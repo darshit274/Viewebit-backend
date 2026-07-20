@@ -1,4 +1,5 @@
 // Viewebit-backend/controllers/EducatorController/studentInsightsController.js
+const crypto = require('crypto');
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { Course, CourseModule, Lesson, LessonProgress, Subscription, TestSession, User } = require('../../models');
 const { Op } = require('sequelize');
@@ -305,5 +306,47 @@ exports.getSubscriptionStats = async (req, res, next) => {
     } catch (err) {
         console.error('Get subscription stats error:', err);
         return next(new ErrorHandler('Failed to fetch subscription stats', 500));
+    }
+};
+
+exports.createManualSubscription = async (req, res, next) => {
+    try {
+        const { student_email, course_uuid } = req.body;
+        if (!student_email || !course_uuid) {
+            return next(new ErrorHandler('student_email and course_uuid are required', 400));
+        }
+
+        const course = await Course.findOne({ where: { uuid: course_uuid, educator_id: req.educator.id } });
+        if (!course) return next(new ErrorHandler('Course not found or not owned by you', 404));
+        if (!course.test_series_id) return next(new ErrorHandler('This course has no linked test series to grant access to', 400));
+
+        const student = await User.findOne({ where: { email: student_email } });
+        if (!student) return next(new ErrorHandler('No student found with that email', 404));
+
+        const existing = await Subscription.findOne({
+            where: { user_id: student.uuid, test_series_id: course.test_series_id, status: 'completed' },
+        });
+        if (existing) return next(new ErrorHandler('This student already has access to this course', 400));
+
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 365);
+
+        const subscription = await Subscription.create({
+            user_id: student.uuid,
+            test_series_id: course.test_series_id,
+            transaction_id: `EDU-GRANT-${crypto.randomUUID()}`,
+            payment_method: 'manual_grant',
+            amount_paid: 0,
+            currency: 'INR',
+            status: 'completed',
+            purchase_date: new Date(),
+            expiry_date: expiryDate,
+            metadata: { granted_by_educator_id: req.educator.id, granted_by_educator: true },
+        });
+
+        res.status(201).json({ success: true, message: 'Access granted successfully', data: subscription });
+    } catch (err) {
+        console.error('Create manual subscription error:', err);
+        return next(new ErrorHandler('Failed to grant access', 500));
     }
 };
