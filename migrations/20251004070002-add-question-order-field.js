@@ -11,13 +11,13 @@ module.exports = {
     });
 
     // Add index for better performance when ordering
-    await queryInterface.addIndex('questions', ['category_id', 'question_order'], {
-      name: 'idx_questions_category_order'
+    await queryInterface.addIndex('questions', ['test_id', 'question_order'], {
+      name: 'idx_questions_test_order'
     });
   },
 
   async down (queryInterface, Sequelize) {
-    await queryInterface.removeIndex('questions', 'idx_questions_category_order');
+    await queryInterface.removeIndex('questions', 'idx_questions_test_order');
     await queryInterface.removeColumn('questions', 'question_order');
   }
 };
