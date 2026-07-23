@@ -28,9 +28,8 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     push_token: {
-      type: DataTypes.TEXT,
+      type: DataTypes.STRING(512),
       allowNull: false,
-      unique: true,
       comment: 'Expo/Firebase push token'
     },
     platform: {
