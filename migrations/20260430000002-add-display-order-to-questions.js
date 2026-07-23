@@ -12,11 +12,11 @@ module.exports = {
       });
     }
 
-    // Initialise existing rows so order matches current creation order within each category
+    // Initialise existing rows so order matches current creation order within each test
     await queryInterface.sequelize.query(`
       UPDATE questions q
       JOIN (
-        SELECT id, ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY created_at ASC, id ASC) AS rn
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY test_id ORDER BY created_at ASC, id ASC) AS rn
         FROM questions
       ) ranked ON q.id = ranked.id
       SET q.display_order = ranked.rn
