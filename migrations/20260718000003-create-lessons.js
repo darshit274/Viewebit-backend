@@ -41,7 +41,7 @@ module.exports = {
         allowNull: true
       },
       pdf_id: {
-        type: Sequelize.CHAR(36),
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: 'pdfs',

@@ -10,7 +10,7 @@ module.exports = {
         allowNull: false
       },
       user_id: {
-        type: Sequelize.CHAR(36),
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: 'users',
