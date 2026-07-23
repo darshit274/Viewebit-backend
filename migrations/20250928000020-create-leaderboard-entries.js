@@ -40,7 +40,7 @@ module.exports = {
         onUpdate: 'CASCADE'
       },
       test_series_id: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: 'test_series',
