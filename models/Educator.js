@@ -95,6 +95,22 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DATE,
       allowNull: true
     },
+    reset_otp: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    reset_otp_expiry: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    reset_token: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    reset_token_expiry: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     current_session_id: {
       type: DataTypes.STRING(36),
       allowNull: true,
