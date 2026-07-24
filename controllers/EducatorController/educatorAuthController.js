@@ -182,7 +182,7 @@ exports.resendOTP = async (req, res, next) => {
 exports.getProfile = async (req, res, next) => {
     try {
         const educator = await Educator.findByPk(req.educator.id, {
-            attributes: { exclude: ['password', 'otp', 'otpExpiry', 'current_session_id'] }
+            attributes: { exclude: ['password', 'otp', 'otpExpiry', 'reset_otp', 'reset_otp_expiry', 'reset_token', 'reset_token_expiry', 'current_session_id'] }
         });
         if (!educator) return next(new ErrorHandler('Educator not found', 404));
         res.status(200).json({ success: true, data: educator });
@@ -245,7 +245,9 @@ exports.forgotPassword = async (req, res, next) => {
                 });
             } catch (error) {
                 console.error("Error sending Educator password reset email:", error);
-                return next(new ErrorHandler("Failed to send reset code. Please try again.", 500));
+                // Do not return a distinct error here - doing so would let an attacker
+                // distinguish "registered email, mail send failed" from "unregistered email"
+                // by response shape/status, defeating the enumeration protection below.
             }
         }
 
