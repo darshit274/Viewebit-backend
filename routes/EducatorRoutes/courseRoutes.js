@@ -16,6 +16,7 @@ router.post('/', courseController.createCourse);
 router.get('/:uuid', courseController.getCourseByUuid);
 router.put('/:uuid', courseController.updateCourse);
 router.patch('/:uuid/status', courseController.publishCourse);
+router.delete('/:uuid', courseController.deleteCourse);
 
 router.post('/:courseUuid/modules', courseController.createModule);
 router.patch('/:courseUuid/modules/reorder', courseController.reorderModules);

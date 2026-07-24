@@ -125,6 +125,28 @@ exports.publishCourse = async (req, res, next) => {
     }
 };
 
+exports.deleteCourse = async (req, res, next) => {
+    try {
+        const course = await Course.findOne({ where: { uuid: req.params.uuid, educator_id: req.educator.id } });
+        if (!course) return next(new ErrorHandler('Course not found', 404));
+
+        if (course.test_series_id) {
+            const activeSubscriptions = await Subscription.count({
+                where: { test_series_id: course.test_series_id, status: 'completed' }
+            });
+            if (activeSubscriptions > 0) {
+                return next(new ErrorHandler('Cannot delete a course with active student subscriptions', 400));
+            }
+        }
+
+        await course.destroy();
+        res.status(200).json({ success: true, message: 'Course deleted successfully' });
+    } catch (err) {
+        console.error('Delete course error:', err);
+        return next(new ErrorHandler('Failed to delete course', 500));
+    }
+};
+
 // Modules --------------------------------------------------------------------
 
 const findOwnedCourse = async (courseUuid, educatorId) => {

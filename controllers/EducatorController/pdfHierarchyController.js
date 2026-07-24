@@ -9,6 +9,7 @@
  */
 const { PdfCategory, Pdfs, sequelize } = require('../../models');
 const fs = require('fs');
+const path = require('path');
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { validatePDFFile } = require('../../utils/pdfUpload');
 const { PDF_UPLOAD_MAX_SIZE_BYTES, PDF_UPLOAD_MAX_SIZE_MB } = require('../../utils/uploadConfig');
@@ -42,12 +43,18 @@ exports.getCategoryContent = async (req, res, next) => {
         });
         if (!category) return next(new ErrorHandler('Category not found or not owned by you', 404));
 
+        const categoryJson = category.toJSON();
+        categoryJson.pdfs = (categoryJson.pdfs || []).map((pdf) => ({
+            ...pdf,
+            file_url: `${req.protocol}://${req.get('host')}/uploads/pdfs/${path.basename(pdf.file_path)}`
+        }));
+
         res.status(200).json({
             success: true,
             data: {
-                category,
-                childCount: category.childCategories?.length || 0,
-                pdfCount: category.pdfs?.length || 0
+                category: categoryJson,
+                childCount: categoryJson.childCategories?.length || 0,
+                pdfCount: categoryJson.pdfs?.length || 0
             }
         });
     } catch (err) {
