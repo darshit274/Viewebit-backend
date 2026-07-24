@@ -14,7 +14,7 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     question_id: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: {
         model: 'questions',

@@ -2,6 +2,77 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const tables = await queryInterface.showAllTables();
+
+    if (tables.includes('pdfs')) {
+      // pdfs already exists (created by 20240101000016-update-pdfs-for-uploads.js, which
+      // already provides id, title, description, category_id, file_path, original_filename,
+      // file_size, mime_type, access_level, test_series_id, exam_type_id, tags,
+      // download_count, view_count, is_active, is_featured, uploaded_by (with its FK to
+      // admins.id already correct), created_at, updated_at). Bring it up to the current
+      // model shape additively instead of re-creating.
+      const desc = await queryInterface.describeTable('pdfs');
+
+      // test_series_id was declared UUID referencing the pre-reset test_series.id (which was
+      // itself UUID at the time). Since test_series.id is now an auto-increment INTEGER (see
+      // 20250928000008-create-test-series.js), drop any stale FK constraint left over from the
+      // reset and retype/re-link this column.
+      const [staleFks] = await queryInterface.sequelize.query(`
+        SELECT CONSTRAINT_NAME
+        FROM information_schema.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pdfs'
+          AND COLUMN_NAME = 'test_series_id'
+          AND REFERENCED_TABLE_NAME IS NOT NULL
+      `);
+      for (const row of staleFks) {
+        await queryInterface.removeConstraint('pdfs', row.CONSTRAINT_NAME);
+      }
+
+      if (desc.test_series_id && desc.test_series_id.type.toUpperCase().includes('CHAR')) {
+        await queryInterface.changeColumn('pdfs', 'test_series_id', {
+          type: Sequelize.INTEGER,
+          allowNull: true
+        });
+      }
+
+      const [existingFk] = await queryInterface.sequelize.query(`
+        SELECT CONSTRAINT_NAME
+        FROM information_schema.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'pdfs'
+          AND COLUMN_NAME = 'test_series_id'
+          AND REFERENCED_TABLE_NAME = 'test_series'
+      `);
+      if (existingFk.length === 0) {
+        await queryInterface.addConstraint('pdfs', {
+          fields: ['test_series_id'],
+          type: 'foreign key',
+          name: 'pdfs_test_series_id_fkey',
+          references: { table: 'test_series', field: 'id' },
+          onDelete: 'SET NULL',
+          onUpdate: 'CASCADE'
+        });
+      }
+
+      // Pricing columns added in the redesigned schema - genuinely missing from the old table.
+      const pricingColumns = {
+        price: { type: Sequelize.DECIMAL(10, 2), allowNull: false, defaultValue: 0.00, comment: 'Price for premium PDFs' },
+        currency: { type: Sequelize.STRING(10), allowNull: false, defaultValue: 'INR', comment: 'Currency for pricing' },
+        is_free: { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: true, comment: 'Whether the PDF is free to access' },
+        discount_percentage: { type: Sequelize.DECIMAL(5, 2), allowNull: false, defaultValue: 0.00, comment: 'Discount percentage if any' },
+        subscription_required: { type: Sequelize.BOOLEAN, allowNull: false, defaultValue: false, comment: 'Whether subscription is required to access' },
+        preview_pages: { type: Sequelize.INTEGER, allowNull: false, defaultValue: 0, comment: 'Number of preview pages available for free' }
+      };
+      for (const [name, definition] of Object.entries(pricingColumns)) {
+        if (!desc[name]) {
+          await queryInterface.addColumn('pdfs', name, definition);
+        }
+      }
+
+      return;
+    }
+
     await queryInterface.createTable('pdfs', {
       id: {
         type: Sequelize.CHAR(36),

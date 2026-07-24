@@ -2,6 +2,14 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const tables = await queryInterface.showAllTables();
+    // The 2024 create-admins-table migration already provides every column this migration
+    // would add (id, name, email, password, role, avatar, isActive, lastLogin, permissions,
+    // created_at, updated_at) with physically-equivalent types - nothing to do if it ran.
+    if (tables.includes('admins')) {
+      return;
+    }
+
     await queryInterface.createTable('admins', {
       id: {
         type: Sequelize.CHAR(36),

@@ -22,7 +22,7 @@ module.exports = {
 
       // Foreign Keys
       question_id: {
-        type: Sequelize.UUID,
+        type: Sequelize.INTEGER,
         allowNull: false,
         references: {
           model: 'questions',

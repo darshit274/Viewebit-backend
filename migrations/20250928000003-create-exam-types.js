@@ -2,6 +2,13 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const tables = await queryInterface.showAllTables();
+    // The 2024 create-exam-types migration already provides every column here
+    // (id, name, code, description, is_active, created_at, updated_at) - nothing to do.
+    if (tables.includes('exam_types')) {
+      return;
+    }
+
     await queryInterface.createTable('exam_types', {
       id: {
         type: Sequelize.INTEGER,

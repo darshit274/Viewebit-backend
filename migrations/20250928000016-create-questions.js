@@ -2,6 +2,21 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const tables = await queryInterface.showAllTables();
+    if (tables.includes('questions')) {
+      const table = await queryInterface.describeTable('questions');
+      // Already in the current (id INTEGER + separate uuid + category_id) shape - nothing to do.
+      if (table.uuid && table.category_id) {
+        return;
+      }
+      // Old 2024-era shape (UUID primary key, no category_id) - safe to reset, no data to preserve.
+      // FK checks disabled since older tables (e.g. the legacy 'user_answers') may still hold a
+      // stale constraint pointing at this table's old shape.
+      await queryInterface.sequelize.query('SET FOREIGN_KEY_CHECKS = 0');
+      await queryInterface.dropTable('questions');
+      await queryInterface.sequelize.query('SET FOREIGN_KEY_CHECKS = 1');
+    }
+
     await queryInterface.createTable('questions', {
       id: {
         type: Sequelize.INTEGER,
