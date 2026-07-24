@@ -298,3 +298,46 @@ exports.verifyResetOTP = async (req, res, next) => {
         return next(new ErrorHandler('Failed to verify code', 500));
     }
 };
+
+// Forgot password - Step 3: Set new password using the reset token from Step 2
+exports.resetPassword = async (req, res, next) => {
+    try {
+        const { email, resetToken, newPassword } = req.body;
+
+        if (!newPassword || newPassword.length < 6) {
+            return next(new ErrorHandler('Password must be at least 6 characters', 400));
+        }
+
+        const educator = await Educator.findOne({ where: { email } });
+        if (!educator) return next(new ErrorHandler('Reset link expired, please try again', 400));
+
+        if (!educator.reset_token || !educator.reset_token_expiry) {
+            return next(new ErrorHandler('Reset link expired, please try again', 400));
+        }
+
+        if (new Date() > new Date(educator.reset_token_expiry)) {
+            educator.reset_token = null;
+            educator.reset_token_expiry = null;
+            await educator.save();
+            return next(new ErrorHandler('Reset link expired, please try again', 400));
+        }
+
+        if (educator.reset_token !== resetToken) {
+            return next(new ErrorHandler('Reset link expired, please try again', 400));
+        }
+
+        educator.password = await bcrypt.hash(newPassword, 10);
+        educator.reset_token = null;
+        educator.reset_token_expiry = null;
+        educator.current_session_id = null;
+        await educator.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Password reset successfully'
+        });
+    } catch (err) {
+        console.error('Educator reset password error:', err);
+        return next(new ErrorHandler('Failed to reset password', 500));
+    }
+};
