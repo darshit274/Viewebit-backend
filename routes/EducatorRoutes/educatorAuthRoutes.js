@@ -8,6 +8,7 @@ const { educatorAuth } = require('../../utils/EducatorAuth');
 router.post('/login', educatorAuthController.login);
 router.post('/verify-otp', educatorAuthController.verifyOTP);
 router.post('/resend-otp', educatorAuthController.resendOTP);
+router.post('/forgot-password', educatorAuthController.forgotPassword);
 
 // Protected routes (authentication required)
 router.post('/logout', educatorAuth, educatorAuthController.logout);

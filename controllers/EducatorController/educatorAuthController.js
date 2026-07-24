@@ -204,3 +204,57 @@ exports.logout = async (req, res, next) => {
         return next(new ErrorHandler('Logout failed', 500));
     }
 };
+
+// Forgot password - Step 1: Send reset OTP if the email is registered
+exports.forgotPassword = async (req, res, next) => {
+    try {
+        const { email } = req.body;
+
+        const educator = await Educator.findOne({ where: { email } });
+
+        if (educator) {
+            const otp = generate6DigitOTP();
+            const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+            educator.reset_otp = otp.toString();
+            educator.reset_otp_expiry = otpExpiry;
+            await educator.save();
+
+            try {
+                await sendMail({
+                    receiver: email,
+                    subject: `Viewebit Educator Panel - Password Reset Code`,
+                    content: 'content',
+                    service: null,
+                    host: "smtp.gmail.com",
+                    htmlContent: `
+                    <div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f6f8;">
+                      <div style="max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                        <h2 style="color: #333; text-align: center;">Password Reset Request</h2>
+                        <p>Hi <strong>${educator.name}</strong>,</p>
+                        <p>Use the following code to reset your password:</p>
+                        <h1 style="text-align: center; color: #7C3AED; letter-spacing: 4px; background-color: #f0f0f0; padding: 15px; border-radius: 8px;">${otp}</h1>
+                        <p style="color: #666;">This code is valid for <strong>10 minutes</strong>. If you didn't request this, you can safely ignore this email.</p>
+                        <br/>
+                        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit Academy - Educator Panel</p>
+                      </div>
+                    </div>
+                  `,
+                    cc: null,
+                    bcc: null
+                });
+            } catch (error) {
+                console.error("Error sending Educator password reset email:", error);
+                return next(new ErrorHandler("Failed to send reset code. Please try again.", 500));
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'If that email is registered, a code has been sent.'
+        });
+    } catch (err) {
+        console.error('Educator forgot password error:', err);
+        return next(new ErrorHandler('Failed to process request', 500));
+    }
+};
