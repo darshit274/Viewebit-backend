@@ -258,3 +258,43 @@ exports.forgotPassword = async (req, res, next) => {
         return next(new ErrorHandler('Failed to process request', 500));
     }
 };
+
+// Forgot password - Step 2: Verify OTP and issue a short-lived reset token
+exports.verifyResetOTP = async (req, res, next) => {
+    try {
+        const { email, otp } = req.body;
+
+        const educator = await Educator.findOne({ where: { email } });
+        if (!educator) return next(new ErrorHandler('Invalid or expired code', 400));
+
+        if (!educator.reset_otp || !educator.reset_otp_expiry) {
+            return next(new ErrorHandler('Invalid or expired code', 400));
+        }
+
+        if (new Date() > new Date(educator.reset_otp_expiry)) {
+            educator.reset_otp = null;
+            educator.reset_otp_expiry = null;
+            await educator.save();
+            return next(new ErrorHandler('Invalid or expired code', 400));
+        }
+
+        if (educator.reset_otp !== otp.toString()) {
+            return next(new ErrorHandler('Invalid or expired code', 400));
+        }
+
+        const resetToken = require('crypto').randomBytes(32).toString('hex');
+        educator.reset_otp = null;
+        educator.reset_otp_expiry = null;
+        educator.reset_token = resetToken;
+        educator.reset_token_expiry = new Date(Date.now() + 10 * 60 * 1000);
+        await educator.save();
+
+        res.status(200).json({
+            success: true,
+            data: { resetToken }
+        });
+    } catch (err) {
+        console.error('Educator verify reset OTP error:', err);
+        return next(new ErrorHandler('Failed to verify code', 500));
+    }
+};
