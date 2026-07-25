@@ -81,22 +81,46 @@ const resolveGrandfatheredAccess = async (course, userId) => {
 exports.getPublishedCourses = async (req, res, next) => {
     try {
         const userId = req.user?.uuid;
-        const courses = await Course.findAll({
+        const includeOptions = [
+            { model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'pricing_type', 'price'] },
+            { model: Educator, as: 'educator', attributes: ['id', 'name', 'avatar', 'designation'] }
+        ];
+
+        const publishedCourses = await Course.findAll({
             where: { status: 'published' },
-            include: [
-                { model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'pricing_type', 'price'] },
-                { model: Educator, as: 'educator', attributes: ['id', 'name', 'avatar', 'designation'] }
-            ],
+            include: includeOptions,
             order: [['created_at', 'DESC']]
         });
 
-        const data = await Promise.all(courses.map(async (course) => {
-            const hasAccess = await resolveCourseAccess(course, userId);
+        // Grandfathered courses: non-published courses this specific student
+        // still has access to (see resolveGrandfatheredAccess) — kept visible
+        // in their list even though new students can no longer find them.
+        let grandfatheredCourses = [];
+        if (userId) {
+            const unpublishedCourses = await Course.findAll({
+                where: { status: { [Op.ne]: 'published' } },
+                include: includeOptions,
+                order: [['created_at', 'DESC']]
+            });
+            const accessFlags = await Promise.all(
+                unpublishedCourses.map((course) => resolveGrandfatheredAccess(course, userId))
+            );
+            grandfatheredCourses = unpublishedCourses.filter((_, index) => accessFlags[index]);
+        }
+
+        const allCourses = [...publishedCourses, ...grandfatheredCourses];
+
+        const data = await Promise.all(allCourses.map(async (course) => {
+            const hasAccess = course.status === 'published'
+                ? await resolveCourseAccess(course, userId)
+                : true; // already filtered to grandfathered-access-only above
+
             return {
                 uuid: course.uuid,
                 title: course.title,
                 description: course.description,
                 thumbnail_url: course.thumbnail_url,
+                status: course.status,
                 educator: course.educator,
                 isPremium: course.testSeries ? course.testSeries.pricing_type === 'paid' : false,
                 price: course.testSeries?.price ?? 0,
