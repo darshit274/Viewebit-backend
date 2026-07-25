@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Educator } = require('../../models');
+const { Educator, Institution } = require('../../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { sendMail } = require('../../utils/verifyEmail');
@@ -182,7 +182,8 @@ exports.resendOTP = async (req, res, next) => {
 exports.getProfile = async (req, res, next) => {
     try {
         const educator = await Educator.findByPk(req.educator.id, {
-            attributes: { exclude: ['password', 'otp', 'otpExpiry', 'reset_otp', 'reset_otp_expiry', 'reset_token', 'reset_token_expiry', 'current_session_id'] }
+            attributes: { exclude: ['password', 'otp', 'otpExpiry', 'reset_otp', 'reset_otp_expiry', 'reset_token', 'reset_token_expiry', 'current_session_id'] },
+            include: [{ model: Institution, as: 'institution', attributes: ['id', 'pricing_mode'] }]
         });
         if (!educator) return next(new ErrorHandler('Educator not found', 404));
         res.status(200).json({ success: true, data: educator });

@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress } = require('../../models');
+const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, Institution } = require('../../models');
 const { Op } = require('sequelize');
 
 // My Courses ---------------------------------------------------------------
@@ -8,7 +8,7 @@ exports.getMyCourses = async (req, res, next) => {
     try {
         const courses = await Course.findAll({
             where: { educator_id: req.educator.id },
-            include: [{ model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name'] }],
+            include: [{ model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'price', 'pricing_type', 'educator_id'] }],
             order: [['created_at', 'DESC']]
         });
 
@@ -37,7 +37,7 @@ exports.getCourseByUuid = async (req, res, next) => {
         const course = await Course.findOne({
             where: { uuid: req.params.uuid, educator_id: req.educator.id },
             include: [
-                { model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name'] },
+                { model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'price', 'pricing_type', 'educator_id'] },
                 {
                     model: CourseModule,
                     as: 'modules',
@@ -57,10 +57,38 @@ exports.getCourseByUuid = async (req, res, next) => {
 
 exports.createCourse = async (req, res, next) => {
     try {
-        const { title, description, test_series_id, thumbnail_url } = req.body;
+        const { title, description, test_series_id, thumbnail_url, price } = req.body;
         if (!title) return next(new ErrorHandler('Title is required', 400));
 
-        if (test_series_id) {
+        const institution = req.educator.institution_id
+            ? await Institution.findByPk(req.educator.institution_id, { attributes: ['id', 'pricing_mode'] })
+            : null;
+        const pricingMode = institution?.pricing_mode || 'coaching_center';
+
+        if (price !== undefined && pricingMode !== 'private_educator') {
+            return next(new ErrorHandler('Only private-educator institutions can set course pricing directly', 400));
+        }
+
+        let finalTestSeriesId = test_series_id || null;
+
+        if (price !== undefined) {
+            // A price always creates and links a fresh, educator-owned series —
+            // any test_series_id also present in the request is ignored, so the
+            // two inputs never conflict.
+            const numericPrice = Number(price);
+            if (isNaN(numericPrice) || numericPrice < 0) {
+                return next(new ErrorHandler('A valid, non-negative price is required', 400));
+            }
+            const newSeries = await TestSeries.create({
+                name: title,
+                pricing_type: numericPrice > 0 ? 'paid' : 'free',
+                price: numericPrice,
+                currency: 'INR',
+                institution_id: req.educator.institution_id || null,
+                educator_id: req.educator.id
+            });
+            finalTestSeriesId = newSeries.id;
+        } else if (test_series_id) {
             const testSeries = await TestSeries.findByPk(test_series_id);
             if (!testSeries) return next(new ErrorHandler('Test series not found', 404));
 
@@ -72,7 +100,7 @@ exports.createCourse = async (req, res, next) => {
             title,
             description,
             thumbnail_url,
-            test_series_id: test_series_id || null,
+            test_series_id: finalTestSeriesId,
             educator_id: req.educator.id,
             branch_id: req.educator.branch_id,
             department_id: req.educator.department_id
@@ -90,7 +118,43 @@ exports.updateCourse = async (req, res, next) => {
         const course = await Course.findOne({ where: { uuid: req.params.uuid, educator_id: req.educator.id } });
         if (!course) return next(new ErrorHandler('Course not found', 404));
 
-        const { title, description, thumbnail_url, completion_threshold_percent } = req.body;
+        const { title, description, thumbnail_url, completion_threshold_percent, price } = req.body;
+
+        if (price !== undefined) {
+            const institution = req.educator.institution_id
+                ? await Institution.findByPk(req.educator.institution_id, { attributes: ['id', 'pricing_mode'] })
+                : null;
+            const pricingMode = institution?.pricing_mode || 'coaching_center';
+
+            if (pricingMode !== 'private_educator') {
+                return next(new ErrorHandler('Only private-educator institutions can set course pricing directly', 400));
+            }
+
+            const numericPrice = Number(price);
+            if (isNaN(numericPrice) || numericPrice < 0) {
+                return next(new ErrorHandler('A valid, non-negative price is required', 400));
+            }
+            const pricingType = numericPrice > 0 ? 'paid' : 'free';
+
+            if (course.test_series_id) {
+                const existingSeries = await TestSeries.findByPk(course.test_series_id);
+                if (!existingSeries || existingSeries.educator_id !== req.educator.id) {
+                    return next(new ErrorHandler('You can only price a test series you created yourself for this course', 400));
+                }
+                await existingSeries.update({ price: numericPrice, pricing_type: pricingType });
+            } else {
+                const newSeries = await TestSeries.create({
+                    name: title || course.title,
+                    pricing_type: pricingType,
+                    price: numericPrice,
+                    currency: 'INR',
+                    institution_id: req.educator.institution_id || null,
+                    educator_id: req.educator.id
+                });
+                await course.update({ test_series_id: newSeries.id });
+            }
+        }
+
         await course.update({
             ...(title !== undefined && { title }),
             ...(description !== undefined && { description }),
@@ -396,7 +460,11 @@ exports.getAvailableTestSeries = async (req, res, next) => {
         const linkedIds = alreadyLinked.map((c) => c.test_series_id);
 
         const testSeries = await TestSeries.findAll({
-            where: { is_active: true, id: { [Op.notIn]: linkedIds.length ? linkedIds : [0] } },
+            where: {
+                is_active: true,
+                id: { [Op.notIn]: linkedIds.length ? linkedIds : [0] },
+                institution_id: req.educator.institution_id || null
+            },
             attributes: ['id', 'uuid', 'name'],
             order: [['name', 'ASC']]
         });
