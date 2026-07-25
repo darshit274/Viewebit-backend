@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, LessonProgress, Educator } = require('../../models');
+const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, LessonProgress, Educator, Certificate, Assignment, AssignmentSubmission } = require('../../models');
 const { Op } = require('sequelize');
 
 // Determines whether the logged-in student can access a course's paid content.
@@ -24,6 +24,58 @@ const resolveCourseAccess = async (course, userId) => {
         }
     });
     return !!subscription;
+};
+
+// Whether a student has ever actually engaged with a course — used to decide
+// grandfathered access to an unpublished free course, where there's no
+// Subscription row to check (free content never creates one).
+const hasCourseActivity = async (course, userId) => {
+    const certificateCount = await Certificate.count({ where: { course_id: course.id, user_id: userId } });
+    if (certificateCount > 0) return true;
+
+    const assignmentIds = (await Assignment.findAll({ where: { course_id: course.id }, attributes: ['id'] })).map((a) => a.id);
+    if (assignmentIds.length > 0) {
+        const submissionCount = await AssignmentSubmission.count({ where: { assignment_id: assignmentIds, user_id: userId } });
+        if (submissionCount > 0) return true;
+    }
+
+    const moduleIds = (await CourseModule.findAll({ where: { course_id: course.id }, attributes: ['id'] })).map((m) => m.id);
+    if (moduleIds.length > 0) {
+        const lessonIds = (await Lesson.findAll({ where: { course_module_id: moduleIds }, attributes: ['id'] })).map((l) => l.id);
+        if (lessonIds.length > 0) {
+            const progressCount = await LessonProgress.count({ where: { lesson_id: lessonIds, user_id: userId } });
+            if (progressCount > 0) return true;
+        }
+    }
+
+    return false;
+};
+
+// Determines whether a student keeps access to a course that has been
+// unpublished (status !== 'published'). Paid courses honor an existing valid
+// subscription, same as when published; free courses (or courses with no
+// linked TestSeries) have no subscription record, so access is grandfathered
+// only for students who already engaged with the course before it was
+// unpublished.
+const resolveGrandfatheredAccess = async (course, userId) => {
+    if (!userId) return false;
+
+    if (course.testSeries && course.testSeries.pricing_type !== 'free') {
+        const subscription = await Subscription.findOne({
+            where: {
+                user_id: userId,
+                test_series_id: course.testSeries.id,
+                status: 'completed',
+                [Op.or]: [
+                    { expiry_date: null },
+                    { expiry_date: { [Op.gt]: new Date() } }
+                ]
+            }
+        });
+        if (subscription) return true;
+    }
+
+    return hasCourseActivity(course, userId);
 };
 
 exports.getPublishedCourses = async (req, res, next) => {
@@ -63,7 +115,7 @@ exports.getCourseDetail = async (req, res, next) => {
     try {
         const userId = req.user?.uuid;
         const course = await Course.findOne({
-            where: { uuid: req.params.uuid, status: 'published' },
+            where: { uuid: req.params.uuid },
             include: [
                 { model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'pricing_type', 'price'] },
                 { model: Educator, as: 'educator', attributes: ['id', 'name', 'avatar', 'designation'] },
@@ -91,7 +143,17 @@ exports.getCourseDetail = async (req, res, next) => {
         });
         if (!course) return next(new ErrorHandler('Course not found', 404));
 
-        const hasAccess = await resolveCourseAccess(course, userId);
+        const hasAccess = course.status === 'published'
+            ? await resolveCourseAccess(course, userId)
+            : await resolveGrandfatheredAccess(course, userId);
+
+        // Unpublished courses stay invisible to students without grandfathered
+        // access — the same 404 a nonexistent course would return, so their
+        // existence isn't leaked.
+        if (course.status !== 'published' && !hasAccess) {
+            return next(new ErrorHandler('Course not found', 404));
+        }
+
         const courseJson = course.toJSON();
 
         // Lock lesson content details for paid courses the student hasn't
