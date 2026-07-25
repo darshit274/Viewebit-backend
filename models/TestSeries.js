@@ -119,6 +119,11 @@ module.exports = (sequelize, DataTypes) => {
     department_id: {
       type: DataTypes.INTEGER,
       allowNull: true
+    },
+    educator_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Set when this series was self-created by a private-educator-mode Educator via the Course Builder pricing flow, rather than by an Admin'
     }
   }, {
     tableName: 'new_test_series',
@@ -142,6 +147,9 @@ module.exports = (sequelize, DataTypes) => {
     }
     if (models.Course) {
       TestSeries.hasOne(models.Course, { foreignKey: 'test_series_id', as: 'course' });
+    }
+    if (models.Educator) {
+      TestSeries.belongsTo(models.Educator, { foreignKey: 'educator_id', as: 'educator' });
     }
   };
 
