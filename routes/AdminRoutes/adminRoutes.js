@@ -156,6 +156,10 @@ router.use('/test-management', testManagementRoutes);
 const institutionRoutes = require('./institutionRoutes');
 router.use('/institutions', institutionRoutes);
 
+// Course management routes (view all courses + set price for coaching-center institutions)
+const courseManagementRoutes = require('./courseManagementRoutes');
+router.use('/courses', courseManagementRoutes);
+
 const branchRoutes = require('./branchRoutes');
 router.use('/branches', branchRoutes);
 
