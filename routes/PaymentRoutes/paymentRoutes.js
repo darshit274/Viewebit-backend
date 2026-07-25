@@ -7,7 +7,7 @@ router.use('/checkout', paymentCheckoutRouter);
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { authToken } = require('../../utils/AuthToken');
-const { User, TestSeries, Subscription, Pdfs, PdfCategory } = require('../../models');
+const { User, TestSeries, Subscription, Pdfs, PdfCategory, Course } = require('../../models');
 const { Op } = require('sequelize');
 const {
   razorpayInstance,
@@ -78,6 +78,14 @@ router.post('/create-order', authToken, async (req, res) => {
         return res.status(400).json({
           success: false,
           message: 'This test series is free. No payment required.'
+        });
+      }
+
+      const linkedCourse = await Course.findOne({ where: { test_series_id: itemDetails.id } });
+      if (linkedCourse && linkedCourse.status !== 'published') {
+        return res.status(400).json({
+          success: false,
+          message: 'This course is not currently open for new enrollments.'
         });
       }
 

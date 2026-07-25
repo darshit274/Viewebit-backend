@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Subscription, User, TestSeries, ExamType, PdfCategory } = require('../../models');
+const { Subscription, User, TestSeries, ExamType, PdfCategory, Course } = require('../../models');
 const { Op } = require('sequelize');
 const { updateUserSubscriptionStatus } = require('../../utils/subscriptionHelper');
 
@@ -128,7 +128,12 @@ exports.createSubscription = async (req, res, next) => {
         if (!testSeries) {
             return next(new ErrorHandler('Test series not found', 404));
         }
-        
+
+        const linkedCourse = await Course.findOne({ where: { test_series_id: testSeries.id } });
+        if (linkedCourse && linkedCourse.status !== 'published') {
+            return next(new ErrorHandler('This course is not currently open for new enrollments', 400));
+        }
+
         // Check if user already has an active subscription for this test series
         const existingSubscription = await Subscription.findOne({
             where: {
