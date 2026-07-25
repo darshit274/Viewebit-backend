@@ -72,7 +72,7 @@ const resolveGrandfatheredAccess = async (course, userId) => {
                 ]
             }
         });
-        if (subscription) return true;
+        return !!subscription;
     }
 
     return hasCourseActivity(course, userId);
