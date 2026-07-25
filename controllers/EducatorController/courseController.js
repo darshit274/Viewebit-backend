@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription } = require('../../models');
+const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress } = require('../../models');
 const { Op } = require('sequelize');
 
 // My Courses ---------------------------------------------------------------
@@ -136,6 +136,35 @@ exports.deleteCourse = async (req, res, next) => {
             });
             if (activeSubscriptions > 0) {
                 return next(new ErrorHandler('Cannot delete a course with active student subscriptions', 400));
+            }
+        }
+
+        // Beyond active subscriptions: block deletion if any student has ever
+        // earned a certificate, submitted an assignment, or made lesson
+        // progress in this course — covers refunded subscriptions and
+        // courses with no linked test series (neither of which the
+        // subscription check above sees).
+        const certificateCount = await Certificate.count({ where: { course_id: course.id } });
+        if (certificateCount > 0) {
+            return next(new ErrorHandler('Cannot delete a course with issued student certificates', 400));
+        }
+
+        const assignmentIds = (await Assignment.findAll({ where: { course_id: course.id }, attributes: ['id'] })).map((a) => a.id);
+        if (assignmentIds.length > 0) {
+            const submissionCount = await AssignmentSubmission.count({ where: { assignment_id: assignmentIds } });
+            if (submissionCount > 0) {
+                return next(new ErrorHandler('Cannot delete a course with student assignment submissions', 400));
+            }
+        }
+
+        const moduleIds = (await CourseModule.findAll({ where: { course_id: course.id }, attributes: ['id'] })).map((m) => m.id);
+        if (moduleIds.length > 0) {
+            const lessonIds = (await Lesson.findAll({ where: { course_module_id: moduleIds }, attributes: ['id'] })).map((l) => l.id);
+            if (lessonIds.length > 0) {
+                const progressCount = await LessonProgress.count({ where: { lesson_id: lessonIds } });
+                if (progressCount > 0) {
+                    return next(new ErrorHandler('Cannot delete a course with student lesson progress', 400));
+                }
             }
         }
 
