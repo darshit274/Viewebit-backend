@@ -59,6 +59,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
       allowNull: false
+    },
+    pricing_mode: {
+      type: DataTypes.ENUM('school', 'private_educator', 'coaching_center'),
+      defaultValue: 'coaching_center',
+      allowNull: false,
+      comment: 'Who may price courses under this institution: school = always free, private_educator = the educator sets it, coaching_center = only an admin sets it'
     }
   }, {
     sequelize,

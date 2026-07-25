@@ -2,6 +2,8 @@ const ErrorHandler = require('../../utils/default/errorHandler');
 const { Institution, Branch } = require('../../models');
 const { Op } = require('sequelize');
 
+const PRICING_MODES = ['school', 'private_educator', 'coaching_center'];
+
 exports.getInstitutions = async (req, res, next) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -52,9 +54,12 @@ exports.getInstitutionById = async (req, res, next) => {
 
 exports.createInstitution = async (req, res, next) => {
     try {
-        const { name, slug, logo_url, contact_email, is_active = true } = req.body;
+        const { name, slug, logo_url, contact_email, is_active = true, pricing_mode = 'coaching_center' } = req.body;
         if (!name || !slug) {
             return next(new ErrorHandler('Name and slug are required', 400));
+        }
+        if (!PRICING_MODES.includes(pricing_mode)) {
+            return next(new ErrorHandler('Invalid pricing_mode', 400));
         }
 
         const existing = await Institution.findOne({ where: { slug } });
@@ -62,7 +67,7 @@ exports.createInstitution = async (req, res, next) => {
             return next(new ErrorHandler('Institution with this slug already exists', 400));
         }
 
-        const institution = await Institution.create({ name, slug, logo_url, contact_email, is_active });
+        const institution = await Institution.create({ name, slug, logo_url, contact_email, is_active, pricing_mode });
         res.status(201).json({ success: true, message: 'Institution created successfully', data: institution });
     } catch (err) {
         console.error('Create institution error:', err);
@@ -73,7 +78,7 @@ exports.createInstitution = async (req, res, next) => {
 exports.updateInstitution = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const { name, slug, logo_url, contact_email, is_active } = req.body;
+        const { name, slug, logo_url, contact_email, is_active, pricing_mode } = req.body;
 
         const institution = await Institution.findByPk(id);
         if (!institution) return next(new ErrorHandler('Institution not found', 404));
@@ -83,12 +88,17 @@ exports.updateInstitution = async (req, res, next) => {
             if (existing) return next(new ErrorHandler('Institution with this slug already exists', 400));
         }
 
+        if (pricing_mode !== undefined && !PRICING_MODES.includes(pricing_mode)) {
+            return next(new ErrorHandler('Invalid pricing_mode', 400));
+        }
+
         await institution.update({
             ...(name !== undefined && { name }),
             ...(slug !== undefined && { slug }),
             ...(logo_url !== undefined && { logo_url }),
             ...(contact_email !== undefined && { contact_email }),
-            ...(is_active !== undefined && { is_active })
+            ...(is_active !== undefined && { is_active }),
+            ...(pricing_mode !== undefined && { pricing_mode })
         });
 
         res.status(200).json({ success: true, message: 'Institution updated successfully', data: institution });
