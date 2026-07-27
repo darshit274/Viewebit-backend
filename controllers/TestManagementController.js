@@ -484,7 +484,10 @@ class TestManagementController {
         supports_multilanguage: true,
         validity_days: validity_days || 365,
         is_course_closed: is_course_closed || false,
-        display_order: nextDisplayOrder
+        display_order: nextDisplayOrder,
+        // Scope the series to the creating admin's institution so it shows up
+        // in that institution's educator Course Builder dropdown.
+        institution_id: req.admin?.institution_id || null
       });
 
       // Transform response to match frontend expectations

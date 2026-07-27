@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, Institution } = require('../../models');
+const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, Institution, sequelize } = require('../../models');
 const { Op } = require('sequelize');
 
 // My Courses ---------------------------------------------------------------
@@ -56,6 +56,7 @@ exports.getCourseByUuid = async (req, res, next) => {
 };
 
 exports.createCourse = async (req, res, next) => {
+    let transaction;
     try {
         const { title, description, test_series_id, thumbnail_url, price } = req.body;
         if (!title) return next(new ErrorHandler('Title is required', 400));
@@ -65,20 +66,49 @@ exports.createCourse = async (req, res, next) => {
             : null;
         const pricingMode = institution?.pricing_mode || 'coaching_center';
 
-        if (price !== undefined && pricingMode !== 'private_educator') {
+        // A blank or null price means "the client did not supply one" — only a
+        // real value counts as an attempt to set pricing.
+        const priceSupplied = price !== undefined && price !== null && price !== '';
+
+        if (priceSupplied && pricingMode !== 'private_educator') {
             return next(new ErrorHandler('Only private-educator institutions can set course pricing directly', 400));
         }
 
         let finalTestSeriesId = test_series_id || null;
+        let numericPrice = null;
 
-        if (price !== undefined) {
+        if (priceSupplied) {
             // A price always creates and links a fresh, educator-owned series —
             // any test_series_id also present in the request is ignored, so the
             // two inputs never conflict.
-            const numericPrice = Number(price);
+            numericPrice = Number(price);
             if (isNaN(numericPrice) || numericPrice < 0) {
                 return next(new ErrorHandler('A valid, non-negative price is required', 400));
             }
+        } else if (test_series_id) {
+            const testSeries = await TestSeries.findByPk(test_series_id);
+            if (!testSeries) return next(new ErrorHandler('Test series not found', 404));
+
+            // Linking an existing series is the other way a course can end up
+            // priced, so it has to honour exactly the same pricing_mode rules
+            // as the price path above.
+            if (testSeries.institution_id !== (req.educator.institution_id || null)) {
+                return next(new ErrorHandler('This test series belongs to another institution', 400));
+            }
+            if (pricingMode === 'school' && testSeries.pricing_type !== 'free') {
+                return next(new ErrorHandler('School-mode institutions can only link a free test series', 400));
+            }
+            if (pricingMode === 'private_educator' && testSeries.educator_id !== req.educator.id) {
+                return next(new ErrorHandler('You can only link a test series you created yourself', 400));
+            }
+
+            const existing = await Course.findOne({ where: { test_series_id } });
+            if (existing) return next(new ErrorHandler('This test series is already linked to another course', 400));
+        }
+
+        transaction = await sequelize.transaction();
+
+        if (priceSupplied) {
             const newSeries = await TestSeries.create({
                 name: title,
                 pricing_type: numericPrice > 0 ? 'paid' : 'free',
@@ -86,14 +116,8 @@ exports.createCourse = async (req, res, next) => {
                 currency: 'INR',
                 institution_id: req.educator.institution_id || null,
                 educator_id: req.educator.id
-            });
+            }, { transaction });
             finalTestSeriesId = newSeries.id;
-        } else if (test_series_id) {
-            const testSeries = await TestSeries.findByPk(test_series_id);
-            if (!testSeries) return next(new ErrorHandler('Test series not found', 404));
-
-            const existing = await Course.findOne({ where: { test_series_id } });
-            if (existing) return next(new ErrorHandler('This test series is already linked to another course', 400));
         }
 
         const course = await Course.create({
@@ -104,23 +128,31 @@ exports.createCourse = async (req, res, next) => {
             educator_id: req.educator.id,
             branch_id: req.educator.branch_id,
             department_id: req.educator.department_id
-        });
+        }, { transaction });
+
+        await transaction.commit();
 
         res.status(201).json({ success: true, message: 'Course created successfully', data: course });
     } catch (err) {
+        if (transaction && !transaction.finished) await transaction.rollback();
         console.error('Create course error:', err);
         return next(new ErrorHandler('Failed to create course', 500));
     }
 };
 
 exports.updateCourse = async (req, res, next) => {
+    let transaction;
     try {
         const course = await Course.findOne({ where: { uuid: req.params.uuid, educator_id: req.educator.id } });
         if (!course) return next(new ErrorHandler('Course not found', 404));
 
         const { title, description, thumbnail_url, completion_threshold_percent, price } = req.body;
 
-        if (price !== undefined) {
+        // A blank or null price means "the client did not supply one" — only a
+        // real value counts as an attempt to set pricing.
+        const priceSupplied = price !== undefined && price !== null && price !== '';
+
+        if (priceSupplied) {
             const institution = req.educator.institution_id
                 ? await Institution.findByPk(req.educator.institution_id, { attributes: ['id', 'pricing_mode'] })
                 : null;
@@ -143,6 +175,10 @@ exports.updateCourse = async (req, res, next) => {
                 }
                 await existingSeries.update({ price: numericPrice, pricing_type: pricingType });
             } else {
+                // Create-then-link has to be atomic so a failure can't leave an
+                // orphaned series, and two concurrent updates can't each create
+                // one for the same course.
+                transaction = await sequelize.transaction();
                 const newSeries = await TestSeries.create({
                     name: title || course.title,
                     pricing_type: pricingType,
@@ -150,8 +186,9 @@ exports.updateCourse = async (req, res, next) => {
                     currency: 'INR',
                     institution_id: req.educator.institution_id || null,
                     educator_id: req.educator.id
-                });
-                await course.update({ test_series_id: newSeries.id });
+                }, { transaction });
+                await course.update({ test_series_id: newSeries.id }, { transaction });
+                await transaction.commit();
             }
         }
 
@@ -164,6 +201,7 @@ exports.updateCourse = async (req, res, next) => {
 
         res.status(200).json({ success: true, message: 'Course updated successfully', data: course });
     } catch (err) {
+        if (transaction && !transaction.finished) await transaction.rollback();
         console.error('Update course error:', err);
         return next(new ErrorHandler('Failed to update course', 500));
     }
