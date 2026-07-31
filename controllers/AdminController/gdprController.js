@@ -220,3 +220,31 @@ exports.anonymizeSubject = async (req, res, next) => {
     return next(new ErrorHandler('Failed to anonymize record', 500));
   }
 };
+
+exports.listRequests = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+
+    const where = {};
+    if (req.admin.role === 'institution_admin') {
+      where.institution_id = req.admin.institution_id;
+    }
+
+    const { count, rows } = await DataSubjectRequest.findAndCountAll({
+      where,
+      order: [['created_at', 'DESC']],
+      limit,
+      offset: (page - 1) * limit
+    });
+
+    res.status(200).json({
+      success: true,
+      data: rows,
+      pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) || 1 }
+    });
+  } catch (err) {
+    console.error('GDPR list requests error:', err);
+    return next(new ErrorHandler('Failed to load data subject requests', 500));
+  }
+};
