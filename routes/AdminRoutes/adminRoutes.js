@@ -178,6 +178,10 @@ router.use('/educators', educatorManagementRoutes);
 const admissionsRoutes = require('./admissionsRoutes');
 router.use('/admissions', admissionsRoutes);
 
+// GDPR data-subject-rights routes (admin-mediated export / anonymize)
+const gdprRoutes = require('./gdprRoutes');
+router.use('/gdpr', gdprRoutes);
+
 // Admin management routes (super admin only)
 router.post('/create', adminAuth, requireRole(['super_admin']), adminController.createAdmin);
 
