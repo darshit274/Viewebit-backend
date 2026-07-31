@@ -211,6 +211,15 @@ module.exports = (sequelize, DataTypes) => {
     applied_at: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    is_anonymized: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    anonymized_at: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   }, {
     sequelize,

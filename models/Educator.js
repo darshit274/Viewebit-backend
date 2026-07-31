@@ -120,6 +120,15 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
       comment: 'A private TestSeries container auto-created to hold this educator\'s own quiz Category tree'
+    },
+    is_anonymized: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false
+    },
+    anonymized_at: {
+      type: DataTypes.DATE,
+      allowNull: true
     }
   }, {
     sequelize,
