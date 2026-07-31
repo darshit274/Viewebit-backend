@@ -8,5 +8,6 @@ router.use(adminAuth, requireRole(['super_admin', 'institution_admin']));
 
 router.get('/search', gdprController.searchSubject);
 router.get('/:subjectType/:uuid/export', gdprController.exportSubject);
+router.post('/:subjectType/:uuid/anonymize', gdprController.anonymizeSubject);
 
 module.exports = router;
