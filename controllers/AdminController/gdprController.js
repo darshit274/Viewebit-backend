@@ -80,16 +80,21 @@ exports.exportSubject = async (req, res, next) => {
         Notification.findAll({ where: { user_id: uuid } }),
         PushToken.findAll({ where: { user_id: uuid } }),
         LeaderboardEntry.findAll({ where: { user_id: uuid } }),
-        QuestionReport.findAll({ where: { user_id: uuid } }),
-        QuestionReport.findAll({ where: { reviewed_by: uuid } }),
+        QuestionReport.findAll({ where: { user_id: subject.id } }),
+        QuestionReport.findAll({ where: { reviewed_by: subject.id } }),
         AssignmentSubmission.findAll({ where: { user_id: uuid } }),
         LessonProgress.findAll({ where: { user_id: uuid } }),
         LiveSessionAttendance.findAll({ where: { user_id: uuid } }),
         Certificate.findAll({ where: { user_id: uuid } })
       ]);
 
+      const {
+        password, otp, otpExpiry, current_session_id, device_id,
+        ...safeProfile
+      } = subject.toJSON();
+
       payload = {
-        subjectType, profile: subject.toJSON(), testSessions, subscriptions, notifications,
+        subjectType, profile: safeProfile, testSessions, subscriptions, notifications,
         pushTokens, leaderboardEntries, submittedReports, reviewedReports,
         assignmentSubmissions, lessonProgress, liveSessionAttendance, certificates
       };
@@ -100,7 +105,12 @@ exports.exportSubject = async (req, res, next) => {
         LiveSession.findAll({ where: { educator_id: uuid } })
       ]);
 
-      payload = { subjectType, profile: subject.toJSON(), courses, assignments, liveSessions };
+      const {
+        password, otp, otpExpiry, reset_otp, reset_otp_expiry, reset_token, reset_token_expiry, current_session_id,
+        ...safeProfile
+      } = subject.toJSON();
+
+      payload = { subjectType, profile: safeProfile, courses, assignments, liveSessions };
     }
 
     await DataSubjectRequest.create({
