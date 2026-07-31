@@ -19,9 +19,19 @@ function assertValidSubjectType(subjectType, next) {
 }
 
 function assertInstitutionScope(req, subject, next) {
-  if (req.admin.role === 'institution_admin' && subject.institution_id !== req.admin.institution_id) {
-    next(new ErrorHandler('This record belongs to a different institution', 403));
-    return false;
+  if (req.admin.role === 'institution_admin') {
+    // An institution_admin with no institution of their own has no scope to match
+    // against. Without this guard `null !== null` is false, so such an admin would
+    // pass the check for every subject that also has a NULL institution_id
+    // (e.g. every self-signup consumer student).
+    if (req.admin.institution_id === null || req.admin.institution_id === undefined) {
+      next(new ErrorHandler('This record belongs to a different institution', 403));
+      return false;
+    }
+    if (subject.institution_id !== req.admin.institution_id) {
+      next(new ErrorHandler('This record belongs to a different institution', 403));
+      return false;
+    }
   }
   return true;
 }
@@ -70,6 +80,11 @@ exports.exportSubject = async (req, res, next) => {
     if (!subject) return next(new ErrorHandler('No matching record found', 404));
     if (!assertInstitutionScope(req, subject, next)) return;
 
+    // Use the subject's own stored identifier from here on, not the raw route param.
+    // The lookup above is collation-insensitive (case / trailing spaces), so `uuid`
+    // may be a non-canonical spelling of the same value.
+    const subjectId = subjectType === 'student' ? subject.uuid : subject.id;
+
     let payload;
     if (subjectType === 'student') {
       const [
@@ -77,17 +92,17 @@ exports.exportSubject = async (req, res, next) => {
         submittedReports, reviewedReports, assignmentSubmissions, lessonProgress,
         liveSessionAttendance, certificates
       ] = await Promise.all([
-        TestSession.findAll({ where: { user_id: uuid } }),
-        Subscription.findAll({ where: { user_id: uuid } }),
-        Notification.findAll({ where: { user_id: uuid } }),
-        PushToken.findAll({ where: { user_id: uuid } }),
-        LeaderboardEntry.findAll({ where: { user_id: uuid } }),
+        TestSession.findAll({ where: { user_id: subjectId } }),
+        Subscription.findAll({ where: { user_id: subjectId } }),
+        Notification.findAll({ where: { user_id: subjectId } }),
+        PushToken.findAll({ where: { user_id: subjectId } }),
+        LeaderboardEntry.findAll({ where: { user_id: subjectId } }),
         QuestionReport.findAll({ where: { user_id: subject.id } }),
         QuestionReport.findAll({ where: { reviewed_by: subject.id } }),
-        AssignmentSubmission.findAll({ where: { user_id: uuid } }),
-        LessonProgress.findAll({ where: { user_id: uuid } }),
-        LiveSessionAttendance.findAll({ where: { user_id: uuid } }),
-        Certificate.findAll({ where: { user_id: uuid } })
+        AssignmentSubmission.findAll({ where: { user_id: subjectId } }),
+        LessonProgress.findAll({ where: { user_id: subjectId } }),
+        LiveSessionAttendance.findAll({ where: { user_id: subjectId } }),
+        Certificate.findAll({ where: { user_id: subjectId } })
       ]);
 
       const {
@@ -102,9 +117,9 @@ exports.exportSubject = async (req, res, next) => {
       };
     } else {
       const [courses, assignments, liveSessions] = await Promise.all([
-        Course.findAll({ where: { educator_id: uuid }, attributes: ['uuid', 'title', 'status', 'created_at'] }),
-        Assignment.findAll({ where: { educator_id: uuid } }),
-        LiveSession.findAll({ where: { educator_id: uuid } })
+        Course.findAll({ where: { educator_id: subjectId }, attributes: ['uuid', 'title', 'status', 'created_at'] }),
+        Assignment.findAll({ where: { educator_id: subjectId } }),
+        LiveSession.findAll({ where: { educator_id: subjectId } })
       ]);
 
       const {
@@ -117,14 +132,14 @@ exports.exportSubject = async (req, res, next) => {
 
     await DataSubjectRequest.create({
       subject_type: subjectType,
-      subject_uuid: uuid,
+      subject_uuid: subjectId,
       request_type: 'export',
       performed_by_admin_id: req.admin.id,
       institution_id: req.admin.institution_id || subject.institution_id || null,
       reason: null
     });
 
-    res.setHeader('Content-Disposition', `attachment; filename="${subjectType}-${uuid}-export.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${subjectType}-${subjectId}-export.json"`);
     res.setHeader('Content-Type', 'application/json');
     res.status(200).send(JSON.stringify(payload, null, 2));
   } catch (err) {
@@ -153,7 +168,12 @@ exports.anonymizeSubject = async (req, res, next) => {
       return next(new ErrorHandler('This record has already been anonymized', 400));
     }
 
-    const shortId = uuid.slice(0, 8);
+    // Use the subject's own stored identifier from here on, not the raw route param.
+    // The lookup above is collation-insensitive (case / trailing spaces), so `uuid`
+    // may be a non-canonical spelling of the same value.
+    const subjectId = subjectType === 'student' ? subject.uuid : subject.id;
+
+    const shortId = String(subjectId).slice(0, 8);
     const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
 
     transaction = await sequelize.transaction();
@@ -174,12 +194,21 @@ exports.anonymizeSubject = async (req, res, next) => {
         avatarUrl: null,
         otp: null,
         otpExpiry: null,
-        current_session_id: null,
+        // Must be a fresh unguessable value, NOT null. utils/AuthToken.js only enforces
+        // the single-session check when current_session_id is truthy, so nulling it
+        // would *disable* the check and leave the subject's existing 30d JWT valid.
+        current_session_id: crypto.randomUUID(),
         device_id: null,
         isActive: false,
         is_anonymized: true,
         anonymized_at: new Date()
       }, { transaction });
+
+      // Erased subjects must stop receiving push notifications. The send path only
+      // filters on is_active/expires_at, never on isActive/is_anonymized, so the rows
+      // have to go. Hard delete matches the existing convention: cleanupExpiredTokens()
+      // in services/NotificationService.js already destroys is_active:false rows.
+      await PushToken.destroy({ where: { user_id: subjectId }, transaction });
     } else {
       await subject.update({
         email: `deleted-${shortId}@anonymized.viewebit.local`,
@@ -204,7 +233,7 @@ exports.anonymizeSubject = async (req, res, next) => {
 
     await DataSubjectRequest.create({
       subject_type: subjectType,
-      subject_uuid: uuid,
+      subject_uuid: subjectId,
       request_type: 'anonymize',
       performed_by_admin_id: req.admin.id,
       institution_id: req.admin.institution_id || subject.institution_id || null,
@@ -228,6 +257,16 @@ exports.listRequests = async (req, res, next) => {
 
     const where = {};
     if (req.admin.role === 'institution_admin') {
+      if (req.admin.institution_id === null || req.admin.institution_id === undefined) {
+        // Without this, `where.institution_id = null` compiles to `institution_id IS NULL`
+        // and returns every audit row that has no institution. Such an admin has no
+        // institution scope, so they see nothing.
+        return res.status(200).json({
+          success: true,
+          data: [],
+          pagination: { page, limit, total: 0, totalPages: 1 }
+        });
+      }
       where.institution_id = req.admin.institution_id;
     }
 
