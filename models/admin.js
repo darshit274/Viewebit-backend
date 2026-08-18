@@ -15,6 +15,9 @@ module.exports = (sequelize, DataTypes) => {
       if (models.Department) {
         Admin.belongsTo(models.Department, { foreignKey: 'department_id', as: 'department' });
       }
+      if (models.AdminSetting) {
+        Admin.hasOne(models.AdminSetting, { foreignKey: 'admin_id', as: 'settings' });
+      }
     }
   }
 

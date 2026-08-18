@@ -7,6 +7,7 @@ const pdfController = require('../../controllers/AdminController/pdfController')
 const examTypesController = require('../../controllers/AdminController/examTypesController');
 const categoriesController = require('../../controllers/AdminController/categoriesController');
 const notificationController = require('../../controllers/AdminController/notificationController');
+const settingsController = require('../../controllers/AdminController/settingsController');
 const { adminAuth, requireRole } = require('../../utils/AdminAuth');
 
 // Public routes (no authentication required)
@@ -18,6 +19,12 @@ router.post('/resend-otp', adminController.resendOTP);
 router.post('/logout', adminAuth, adminController.logout);
 router.get('/profile', adminAuth, adminController.getProfile);
 router.get('/dashboard/stats', adminAuth, adminController.getDashboardStats);
+
+// Settings routes
+router.get('/settings', adminAuth, settingsController.getSettings);
+router.put('/settings', adminAuth, settingsController.updateSettings);
+router.put('/settings/:section', adminAuth, settingsController.updateSettings);
+router.post('/settings/avatar', adminAuth, settingsController.uploadAvatar.single('avatar'), settingsController.updateAvatar);
 
 // Analytics routes
 router.get('/analytics/registrations', adminAuth, adminController.getRegistrationAnalytics);

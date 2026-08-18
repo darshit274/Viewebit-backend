@@ -269,9 +269,9 @@ exports.getDashboardStats = async (req, res, next) => {
         let totalPDFs = 0;
         let totalQuestions = 0;
         let totalTestSessions = 0;
-        
+        const { Test, TestSeries, Question, TestSession, Pdfs } = require('../../models');
+
         try {
-            const { Test, TestSeries, Question, TestSession, Pdfs } = require('../../models');
             
             // New test system counts
             if (Test) totalTests = await Test.count({ where: { is_active: true } });
