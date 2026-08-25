@@ -1,3 +1,9 @@
+// NOTE: This controller is NOT currently mounted/reachable from any live
+// endpoint — its route file (`routes/AdminRoutes/questionImportRoutes.js`) is
+// never required/mounted by the app (confirmed via repo-wide grep). The live
+// Admin "Import Questions" feature is implemented separately in
+// `controllers/AdminController/questionsController.js`. Do not assume this
+// file and that controller share validation/behavior — they don't.
 const { QuestionImport, Question, Category, Admin, TestSeries } = require('../../models');
 const XLSX = require('xlsx');
 const csv = require('csv-parser');

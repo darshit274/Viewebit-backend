@@ -66,11 +66,18 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: EXPRESS_BODY_LIMIT }));
 app.use(express.urlencoded({ limit: EXPRESS_BODY_LIMIT, extended: true }));
 
-// Bump per-request timeout for long-running endpoints (PDF upload). The
-// `setTimeout` on req/res prevents Node's default 2-minute socket timeout from
-// killing big uploads. nginx proxy_read_timeout still has to be at least this big.
+// Bump per-request timeout for long-running endpoints (PDF/video/audio upload,
+// quiz-question bulk import). The `setTimeout` on req/res prevents Node's
+// default 2-minute socket timeout from killing big uploads. nginx
+// proxy_read_timeout still has to be at least this big.
 app.use((req, res, next) => {
-  if (req.path.includes('/upload') || req.path.endsWith('/upload')) {
+  if (
+    req.path.includes('/upload') ||
+    req.path.endsWith('/upload') ||
+    req.path.includes('/pdfs') ||
+    req.path.includes('/lessons/media') ||
+    req.path.includes('/parse-import')
+  ) {
     req.setTimeout(REQUEST_TIMEOUT_MS);
     res.setTimeout(REQUEST_TIMEOUT_MS);
   }

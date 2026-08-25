@@ -13,7 +13,12 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         const unique = Date.now() + '-' + crypto.randomBytes(6).toString('hex');
-        cb(null, `pdf-${unique}${path.extname(file.originalname)}`);
+        // Stored extension is always `.pdf` — never derived from the
+        // client-supplied originalname, which is attacker-controlled and
+        // could otherwise be used to spoof the content-type express.static
+        // serves the file back with (e.g. a `.html` filename + forged
+        // `application/pdf` Content-Type, or a PDF/HTML polyglot).
+        cb(null, `pdf-${unique}.pdf`);
     }
 });
 

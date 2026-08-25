@@ -1,3 +1,8 @@
+// NOTE: This route file is NOT currently mounted/reachable from any live
+// endpoint (confirmed via repo-wide grep — nothing requires this module).
+// The live Admin "Import Questions" feature is implemented separately in
+// `controllers/AdminController/questionsController.js`. Do not assume this
+// file and that controller share validation/behavior — they don't.
 const express = require('express');
 const router = express.Router();
 const questionImportController = require('../../controllers/AdminController/questionImportController');

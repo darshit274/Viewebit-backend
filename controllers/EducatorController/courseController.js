@@ -8,7 +8,7 @@ const fs = require('fs').promises;
 // the course-PDF handler needs the sync API (existsSync/unlinkSync) for cleanup-on-failure paths.
 const fsSync = require('fs');
 const { getOrCreateQuizBank, createChildCategory } = require('../../utils/quizCategoryHelpers');
-const { validatePDFFile, PDF_UPLOAD_MAX_SIZE_MB } = require('../../utils/pdfUpload');
+const { validatePDFFile } = require('../../utils/pdfUpload');
 const { VIDEO_UPLOAD_MAX_SIZE_BYTES, AUDIO_UPLOAD_MAX_SIZE_BYTES } = require('../../utils/lessonMediaUpload');
 
 // Configure multer for course featured-image uploads
@@ -798,6 +798,17 @@ exports.uploadCoursePdf = async (req, res, next) => {
         }
 
         const category = await findOrCreateCoursePdfRoot(course, req.educator);
+        if (category.node_type === 'container') {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler('Cannot upload PDFs into a category that contains sub-categories', 400));
+        }
+
+        const siblingMax = await Pdfs.findOne({
+            attributes: [[sequelize.fn('MAX', sequelize.col('display_order')), 'maxOrder']],
+            where: { category_id: category.id },
+            raw: true
+        });
+        const nextDisplayOrder = (Number(siblingMax?.maxOrder) || 0) + 1;
 
         const pdf = await Pdfs.create({
             title: title.trim(),
@@ -807,7 +818,8 @@ exports.uploadCoursePdf = async (req, res, next) => {
             original_filename: req.file.originalname,
             file_size: req.file.size,
             mime_type: req.file.mimetype,
-            uploaded_by_educator_id: req.educator.id
+            uploaded_by_educator_id: req.educator.id,
+            display_order: nextDisplayOrder
         });
 
         if (category.node_type === 'unset') {
