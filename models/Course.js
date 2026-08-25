@@ -30,6 +30,12 @@ module.exports = (sequelize, DataTypes) => {
           as: 'categories'
         });
       }
+      if (models.PdfCategory) {
+        Course.belongsTo(models.PdfCategory, { foreignKey: 'pdf_category_id', as: 'pdfCategoryRoot' });
+      }
+      if (models.Category) {
+        Course.belongsTo(models.Category, { foreignKey: 'quiz_category_id', as: 'quizCategoryRoot' });
+      }
     }
   }
 
@@ -74,6 +80,16 @@ module.exports = (sequelize, DataTypes) => {
     thumbnail_url: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    pdf_category_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Auto-created root PdfCategory for this course\'s inline PDF uploads'
+    },
+    quiz_category_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Auto-created root Category for this course\'s inline quiz creation'
     },
     status: {
       type: DataTypes.ENUM('draft', 'published', 'archived'),
