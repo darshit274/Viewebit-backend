@@ -9,6 +9,7 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const { getOrCreateQuizBank, createChildCategory } = require('../../utils/quizCategoryHelpers');
 const { validatePDFFile, PDF_UPLOAD_MAX_SIZE_MB } = require('../../utils/pdfUpload');
+const { VIDEO_UPLOAD_MAX_SIZE_BYTES, AUDIO_UPLOAD_MAX_SIZE_BYTES } = require('../../utils/lessonMediaUpload');
 
 // Configure multer for course featured-image uploads
 const thumbnailStorage = multer.diskStorage({
@@ -817,6 +818,43 @@ exports.uploadCoursePdf = async (req, res, next) => {
     } catch (err) {
         console.error('Upload course PDF error:', err);
         return next(new ErrorHandler('Failed to upload PDF', 500));
+    }
+};
+
+// Inline video/audio upload from the course builder — the resulting URL is
+// written directly into Lesson.video_url by the frontend (no schema change).
+exports.uploadLessonMedia = async (req, res, next) => {
+    try {
+        const { courseUuid } = req.params;
+        const { kind } = req.body;
+
+        if (!req.file) return next(new ErrorHandler('No file provided', 400));
+        if (!['video', 'audio'].includes(kind)) {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler('kind must be "video" or "audio"', 400));
+        }
+        const cap = kind === 'video' ? VIDEO_UPLOAD_MAX_SIZE_BYTES : AUDIO_UPLOAD_MAX_SIZE_BYTES;
+        if (req.file.size > cap) {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler(`File exceeds the ${kind} upload limit`, 400));
+        }
+        if (!req.file.mimetype.startsWith(`${kind}/`)) {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler(`File does not match kind=${kind}`, 400));
+        }
+
+        const course = await Course.findOne({ where: { uuid: courseUuid, educator_id: req.educator.id } });
+        if (!course) {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler('Course not found or not owned by you', 404));
+        }
+
+        const relativePath = `/uploads/lesson_media/${req.file.filename}`;
+        const url = toFullUploadUrl(req, relativePath);
+        res.status(201).json({ success: true, data: { url } });
+    } catch (err) {
+        console.error('Upload lesson media error:', err);
+        return next(new ErrorHandler('Failed to upload media', 500));
     }
 };
 

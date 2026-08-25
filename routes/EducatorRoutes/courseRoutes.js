@@ -4,6 +4,7 @@ const router = express.Router();
 const courseController = require('../../controllers/EducatorController/courseController');
 const { educatorAuth } = require('../../utils/EducatorAuth');
 const { coursePdfUploadMiddleware } = require('../../utils/coursePdfUpload');
+const { lessonMediaUploadMiddleware } = require('../../utils/lessonMediaUpload');
 
 router.use(educatorAuth);
 
@@ -27,6 +28,7 @@ router.delete('/:uuid', courseController.deleteCourse);
 router.post('/:uuid/thumbnail', courseController.uploadThumbnail.single('thumbnail'), courseController.uploadCourseThumbnail);
 router.post('/:courseUuid/quiz-categories', courseController.createCourseQuizCategory);
 router.post('/:courseUuid/pdfs', coursePdfUploadMiddleware, courseController.uploadCoursePdf);
+router.post('/:courseUuid/lessons/media', lessonMediaUploadMiddleware, courseController.uploadLessonMedia);
 
 router.post('/:courseUuid/modules', courseController.createModule);
 router.patch('/:courseUuid/modules/reorder', courseController.reorderModules);
