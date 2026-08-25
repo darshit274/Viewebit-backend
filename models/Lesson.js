@@ -16,6 +16,9 @@ module.exports = (sequelize, DataTypes) => {
       if (models.LiveSession) {
         Lesson.belongsTo(models.LiveSession, { foreignKey: 'live_session_id', as: 'liveSession' });
       }
+      if (models.Assignment) {
+        Lesson.belongsTo(models.Assignment, { foreignKey: 'assignment_id', as: 'assignment' });
+      }
       Lesson.hasMany(models.LessonProgress, { foreignKey: 'lesson_id', as: 'progress' });
     }
   }
@@ -41,7 +44,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     lesson_type: {
-      type: DataTypes.ENUM('video', 'document', 'quiz', 'live'),
+      type: DataTypes.ENUM('video', 'document', 'text', 'pdf', 'audio', 'quiz', 'live', 'assignment'),
       allowNull: false
     },
     video_url: {
@@ -71,6 +74,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
       comment: 'Points at a LiveSession row (added in Phase 5); nullable until scheduled'
+    },
+    assignment_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Points at an existing Assignment row — reused, not duplicated (same pattern as pdf_id/category_id)'
     },
     duration_minutes: {
       type: DataTypes.INTEGER,

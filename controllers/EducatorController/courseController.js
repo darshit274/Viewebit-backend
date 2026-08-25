@@ -1,6 +1,61 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, Institution, sequelize } = require('../../models');
+const { Course, CourseModule, Lesson, TestSeries, Category, CourseCategory, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, LiveSession, Institution, sequelize } = require('../../models');
 const { Op } = require('sequelize');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
+
+// Configure multer for course featured-image uploads
+const thumbnailStorage = multer.diskStorage({
+    destination: async (req, file, cb) => {
+        const uploadDir = path.join(__dirname, '../../uploads/course-thumbnails');
+        try {
+            await fs.mkdir(uploadDir, { recursive: true });
+            cb(null, uploadDir);
+        } catch (error) {
+            cb(error, null);
+        }
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, `course-${req.educator.id}-${uniqueSuffix}${path.extname(file.originalname)}`);
+    }
+});
+
+exports.uploadThumbnail = multer({
+    storage: thumbnailStorage,
+    limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /jpeg|jpg|png|gif|webp/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+        if (mimetype && extname) return cb(null, true);
+        cb(new Error('Only JPG, PNG, GIF, and WebP files are allowed'));
+    }
+});
+
+const COURSE_CATEGORY_INCLUDE = { model: CourseCategory, as: 'categories', attributes: ['id', 'uuid', 'name'], through: { attributes: [] } };
+
+function toFullUploadUrl(req, relativePath) {
+    if (relativePath && relativePath.startsWith('/uploads/')) {
+        return `${req.protocol}://${req.get('host')}${relativePath}`;
+    }
+    return relativePath || null;
+}
+
+function withFullThumbnailUrl(req, courseJson) {
+    return { ...courseJson, thumbnail_url: toFullUploadUrl(req, courseJson.thumbnail_url) };
+}
+
+// Returns { ok: true, ids } or { ok: false } if any requested id isn't owned
+// by this educator — callers turn a false result into a 400 themselves so
+// the specific error message survives their existing try/catch.
+async function resolveOwnedCategoryIds(educatorId, categoryIds) {
+    if (!categoryIds || !categoryIds.length) return { ok: true, ids: [] };
+    const owned = await CourseCategory.findAll({ where: { id: categoryIds, educator_id: educatorId }, attributes: ['id'] });
+    if (owned.length !== categoryIds.length) return { ok: false };
+    return { ok: true, ids: owned.map((c) => c.id) };
+}
 
 // My Courses ---------------------------------------------------------------
 
@@ -8,7 +63,10 @@ exports.getMyCourses = async (req, res, next) => {
     try {
         const courses = await Course.findAll({
             where: { educator_id: req.educator.id },
-            include: [{ model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'price', 'pricing_type', 'educator_id'] }],
+            include: [
+                { model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'price', 'pricing_type', 'educator_id'] },
+                COURSE_CATEGORY_INCLUDE
+            ],
             order: [['created_at', 'DESC']]
         });
 
@@ -22,7 +80,7 @@ exports.getMyCourses = async (req, res, next) => {
                     where: { test_series_id: course.test_series_id, status: 'completed' }
                 });
             }
-            return { ...courseJson, studentCount };
+            return withFullThumbnailUrl(req, { ...courseJson, studentCount });
         }));
 
         res.status(200).json({ success: true, data: withCounts });
@@ -38,17 +96,29 @@ exports.getCourseByUuid = async (req, res, next) => {
             where: { uuid: req.params.uuid, educator_id: req.educator.id },
             include: [
                 { model: TestSeries, as: 'testSeries', attributes: ['id', 'uuid', 'name', 'price', 'pricing_type', 'educator_id'] },
+                COURSE_CATEGORY_INCLUDE,
                 {
                     model: CourseModule,
                     as: 'modules',
-                    include: [{ model: Lesson, as: 'lessons', separate: true, order: [['display_order', 'ASC']] }],
+                    include: [{
+                        model: Lesson,
+                        as: 'lessons',
+                        include: [
+                            { model: Pdfs, as: 'pdf', attributes: ['id', 'title'] },
+                            { model: Category, as: 'quizCategory', attributes: ['id', 'uuid', 'name'] },
+                            { model: LiveSession, as: 'liveSession', attributes: ['id', 'uuid', 'title', 'meeting_provider', 'meeting_url', 'scheduled_start', 'status'] },
+                            { model: Assignment, as: 'assignment', attributes: ['id', 'uuid', 'title', 'submission_type'] }
+                        ],
+                        separate: true,
+                        order: [['display_order', 'ASC']]
+                    }],
                     separate: true,
                     order: [['display_order', 'ASC']]
                 }
             ]
         });
         if (!course) return next(new ErrorHandler('Course not found', 404));
-        res.status(200).json({ success: true, data: course });
+        res.status(200).json({ success: true, data: withFullThumbnailUrl(req, course.toJSON()) });
     } catch (err) {
         console.error('Get course by uuid error:', err);
         return next(new ErrorHandler('Failed to fetch course', 500));
@@ -58,8 +128,11 @@ exports.getCourseByUuid = async (req, res, next) => {
 exports.createCourse = async (req, res, next) => {
     let transaction;
     try {
-        const { title, description, test_series_id, thumbnail_url, price } = req.body;
+        const { title, description, test_series_id, thumbnail_url, price, category_ids } = req.body;
         if (!title) return next(new ErrorHandler('Title is required', 400));
+
+        const resolvedCategories = await resolveOwnedCategoryIds(req.educator.id, category_ids);
+        if (!resolvedCategories.ok) return next(new ErrorHandler('One or more categories were not found', 400));
 
         const institution = req.educator.institution_id
             ? await Institution.findByPk(req.educator.institution_id, { attributes: ['id', 'pricing_mode'] })
@@ -130,9 +203,14 @@ exports.createCourse = async (req, res, next) => {
             department_id: req.educator.department_id
         }, { transaction });
 
+        if (resolvedCategories.ids.length) {
+            await course.setCategories(resolvedCategories.ids, { transaction });
+        }
+
         await transaction.commit();
 
-        res.status(201).json({ success: true, message: 'Course created successfully', data: course });
+        const created = await Course.findByPk(course.id, { include: [COURSE_CATEGORY_INCLUDE] });
+        res.status(201).json({ success: true, message: 'Course created successfully', data: withFullThumbnailUrl(req, created.toJSON()) });
     } catch (err) {
         if (transaction && !transaction.finished) await transaction.rollback();
         console.error('Create course error:', err);
@@ -146,7 +224,14 @@ exports.updateCourse = async (req, res, next) => {
         const course = await Course.findOne({ where: { uuid: req.params.uuid, educator_id: req.educator.id } });
         if (!course) return next(new ErrorHandler('Course not found', 404));
 
-        const { title, description, thumbnail_url, completion_threshold_percent, price } = req.body;
+        const { title, description, thumbnail_url, completion_threshold_percent, price, category_ids } = req.body;
+
+        const resolvedCategories = category_ids !== undefined
+            ? await resolveOwnedCategoryIds(req.educator.id, category_ids)
+            : null;
+        if (resolvedCategories && !resolvedCategories.ok) {
+            return next(new ErrorHandler('One or more categories were not found', 400));
+        }
 
         // A blank or null price means "the client did not supply one" — only a
         // real value counts as an attempt to set pricing.
@@ -199,7 +284,12 @@ exports.updateCourse = async (req, res, next) => {
             ...(completion_threshold_percent !== undefined && { completion_threshold_percent })
         });
 
-        res.status(200).json({ success: true, message: 'Course updated successfully', data: course });
+        if (resolvedCategories) {
+            await course.setCategories(resolvedCategories.ids);
+        }
+
+        const updated = await Course.findByPk(course.id, { include: [COURSE_CATEGORY_INCLUDE] });
+        res.status(200).json({ success: true, message: 'Course updated successfully', data: withFullThumbnailUrl(req, updated.toJSON()) });
     } catch (err) {
         if (transaction && !transaction.finished) await transaction.rollback();
         console.error('Update course error:', err);
@@ -371,30 +461,47 @@ const findOwnedModule = async (moduleUuid, educatorId) => {
     });
 };
 
+// Shared existence/ownership checks for the lessons's linkable entities —
+// called from both createLesson and updateLesson so a lesson can never end
+// up pointing at another educator's (or another course's) content.
+async function validateLessonLinks(req, courseId, { pdf_id, category_id, live_session_id, assignment_id }) {
+    if (pdf_id) {
+        const pdf = await Pdfs.findByPk(pdf_id);
+        if (!pdf) return 'PDF not found';
+    }
+    if (category_id) {
+        // Quiz lessons must point at a question_holder Category this educator
+        // authored themselves (see EducatorController/quizHierarchyController.js)
+        // — this is the same Category model the real quiz-taking screens use.
+        const category = await Category.findOne({ where: { id: category_id, educator_id: req.educator.id } });
+        if (!category) return 'Quiz category not found or not owned by you';
+    }
+    if (live_session_id) {
+        const liveSession = await LiveSession.findOne({ where: { id: live_session_id, educator_id: req.educator.id, course_id: courseId } });
+        if (!liveSession) return 'Live session not found, not owned by you, or belongs to a different course';
+    }
+    if (assignment_id) {
+        const assignment = await Assignment.findOne({ where: { id: assignment_id, educator_id: req.educator.id, course_id: courseId } });
+        if (!assignment) return 'Assignment not found, not owned by you, or belongs to a different course';
+    }
+    return null;
+}
+
 exports.createLesson = async (req, res, next) => {
     try {
         const { moduleUuid } = req.params;
-        const { title, lesson_type, video_url, content_html, pdf_id, category_id, duration_minutes, is_free_preview } = req.body;
+        const { title, lesson_type, video_url, content_html, pdf_id, category_id, live_session_id, assignment_id, duration_minutes, is_free_preview } = req.body;
 
         if (!title || !lesson_type) return next(new ErrorHandler('Title and lesson_type are required', 400));
-        if (!['video', 'document', 'quiz', 'live'].includes(lesson_type)) {
+        if (!['video', 'document', 'text', 'pdf', 'audio', 'quiz', 'live', 'assignment'].includes(lesson_type)) {
             return next(new ErrorHandler('Invalid lesson_type', 400));
         }
 
         const module = await findOwnedModule(moduleUuid, req.educator.id);
         if (!module) return next(new ErrorHandler('Module not found or not owned by you', 404));
 
-        if (pdf_id) {
-            const pdf = await Pdfs.findByPk(pdf_id);
-            if (!pdf) return next(new ErrorHandler('PDF not found', 404));
-        }
-        if (category_id) {
-            // Quiz lessons must point at a question_holder Category this educator
-            // authored themselves (see EducatorController/quizHierarchyController.js)
-            // — this is the same Category model the real quiz-taking screens use.
-            const category = await Category.findOne({ where: { id: category_id, educator_id: req.educator.id } });
-            if (!category) return next(new ErrorHandler('Quiz category not found or not owned by you', 404));
-        }
+        const linkError = await validateLessonLinks(req, module.course.id, { pdf_id, category_id, live_session_id, assignment_id });
+        if (linkError) return next(new ErrorHandler(linkError, 404));
 
         const display_order = await Lesson.count({ where: { course_module_id: module.id } });
         const lesson = await Lesson.create({
@@ -405,6 +512,8 @@ exports.createLesson = async (req, res, next) => {
             content_html: content_html || null,
             pdf_id: pdf_id || null,
             category_id: category_id || null,
+            live_session_id: live_session_id || null,
+            assignment_id: assignment_id || null,
             duration_minutes: duration_minutes || null,
             is_free_preview: is_free_preview ?? false,
             display_order
@@ -429,13 +538,19 @@ exports.updateLesson = async (req, res, next) => {
         });
         if (!lesson) return next(new ErrorHandler('Lesson not found or not owned by you', 404));
 
-        const { title, video_url, content_html, pdf_id, category_id, duration_minutes, is_free_preview, is_active } = req.body;
+        const { title, video_url, content_html, pdf_id, category_id, live_session_id, assignment_id, duration_minutes, is_free_preview, is_active } = req.body;
+
+        const linkError = await validateLessonLinks(req, lesson.module.course.id, { pdf_id, category_id, live_session_id, assignment_id });
+        if (linkError) return next(new ErrorHandler(linkError, 404));
+
         await lesson.update({
             ...(title !== undefined && { title }),
             ...(video_url !== undefined && { video_url }),
             ...(content_html !== undefined && { content_html }),
             ...(pdf_id !== undefined && { pdf_id }),
             ...(category_id !== undefined && { category_id }),
+            ...(live_session_id !== undefined && { live_session_id }),
+            ...(assignment_id !== undefined && { assignment_id }),
             ...(duration_minutes !== undefined && { duration_minutes }),
             ...(is_free_preview !== undefined && { is_free_preview }),
             ...(is_active !== undefined && { is_active })
@@ -547,5 +662,109 @@ exports.getAvailablePdfs = async (req, res, next) => {
     } catch (err) {
         console.error('Get available pdfs error:', err);
         return next(new ErrorHandler('Failed to fetch PDFs', 500));
+    }
+};
+
+// Unlike getAvailableQuizCategories/getAvailablePdfs above (educator-wide),
+// assignments and live sessions belong to one specific Course — linking one
+// from a different course into this lesson would be a data-integrity bug,
+// so both endpoints below require and filter by course_id.
+exports.getAvailableAssignments = async (req, res, next) => {
+    try {
+        const courseId = parseInt(req.query.course_id, 10);
+        if (!courseId) return next(new ErrorHandler('course_id is required', 400));
+
+        const assignments = await Assignment.findAll({
+            where: { educator_id: req.educator.id, course_id: courseId },
+            attributes: ['id', 'uuid', 'title', 'submission_type'],
+            order: [['title', 'ASC']],
+            limit: 200
+        });
+        res.status(200).json({ success: true, data: assignments });
+    } catch (err) {
+        console.error('Get available assignments error:', err);
+        return next(new ErrorHandler('Failed to fetch assignments', 500));
+    }
+};
+
+exports.getAvailableLiveSessions = async (req, res, next) => {
+    try {
+        const courseId = parseInt(req.query.course_id, 10);
+        if (!courseId) return next(new ErrorHandler('course_id is required', 400));
+
+        const where = { educator_id: req.educator.id, course_id: courseId };
+        if (req.query.provider) where.meeting_provider = req.query.provider;
+
+        const liveSessions = await LiveSession.findAll({
+            where,
+            attributes: ['id', 'uuid', 'title', 'meeting_provider', 'meeting_url', 'scheduled_start', 'status'],
+            order: [['scheduled_start', 'DESC']],
+            limit: 200
+        });
+        res.status(200).json({ success: true, data: liveSessions });
+    } catch (err) {
+        console.error('Get available live sessions error:', err);
+        return next(new ErrorHandler('Failed to fetch live sessions', 500));
+    }
+};
+
+// Course Categories (course taxonomy, distinct from the quiz-hierarchy Category
+// model above) ---------------------------------------------------------------
+
+exports.getCourseCategories = async (req, res, next) => {
+    try {
+        const categories = await CourseCategory.findAll({
+            where: { educator_id: req.educator.id },
+            attributes: ['id', 'uuid', 'name'],
+            order: [['name', 'ASC']]
+        });
+        res.status(200).json({ success: true, data: categories });
+    } catch (err) {
+        console.error('Get course categories error:', err);
+        return next(new ErrorHandler('Failed to fetch course categories', 500));
+    }
+};
+
+exports.createCourseCategory = async (req, res, next) => {
+    try {
+        const { name } = req.body;
+        if (!name || !name.trim()) return next(new ErrorHandler('Category name is required', 400));
+
+        const existing = await CourseCategory.findOne({ where: { educator_id: req.educator.id, name: name.trim() } });
+        if (existing) return next(new ErrorHandler('You already have a category with this name', 400));
+
+        const category = await CourseCategory.create({ educator_id: req.educator.id, name: name.trim() });
+        res.status(201).json({ success: true, message: 'Category created', data: category });
+    } catch (err) {
+        console.error('Create course category error:', err);
+        return next(new ErrorHandler('Failed to create category', 500));
+    }
+};
+
+// Course Thumbnail Upload -----------------------------------------------------
+
+exports.uploadCourseThumbnail = async (req, res, next) => {
+    try {
+        if (!req.file) return next(new ErrorHandler('No image file uploaded', 400));
+
+        const course = await Course.findOne({ where: { uuid: req.params.uuid, educator_id: req.educator.id } });
+        if (!course) return next(new ErrorHandler('Course not found', 404));
+
+        if (course.thumbnail_url && course.thumbnail_url.startsWith('/uploads/')) {
+            const oldPath = path.join(__dirname, '../..', course.thumbnail_url);
+            try {
+                await fs.unlink(oldPath);
+            } catch (error) {
+                console.log('Error deleting old course thumbnail:', error.message);
+            }
+        }
+
+        const relativePath = `/uploads/course-thumbnails/${req.file.filename}`;
+        await course.update({ thumbnail_url: relativePath });
+
+        res.status(200).json({ success: true, message: 'Thumbnail uploaded', data: { thumbnail_url: toFullUploadUrl(req, relativePath) } });
+    } catch (err) {
+        console.error('Upload course thumbnail error:', err);
+        return next(new ErrorHandler('Failed to upload thumbnail', 500));
     }
 };

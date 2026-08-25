@@ -10,6 +10,12 @@ router.use(educatorAuth);
 router.get('/available-test-series', courseController.getAvailableTestSeries);
 router.get('/available-quiz-categories', courseController.getAvailableQuizCategories);
 router.get('/available-pdfs', courseController.getAvailablePdfs);
+router.get('/available-assignments', courseController.getAvailableAssignments);
+router.get('/available-live-sessions', courseController.getAvailableLiveSessions);
+
+// Course taxonomy (categories) — also placed before /:uuid
+router.get('/categories', courseController.getCourseCategories);
+router.post('/categories', courseController.createCourseCategory);
 
 router.get('/', courseController.getMyCourses);
 router.post('/', courseController.createCourse);
@@ -17,6 +23,7 @@ router.get('/:uuid', courseController.getCourseByUuid);
 router.put('/:uuid', courseController.updateCourse);
 router.patch('/:uuid/status', courseController.publishCourse);
 router.delete('/:uuid', courseController.deleteCourse);
+router.post('/:uuid/thumbnail', courseController.uploadThumbnail.single('thumbnail'), courseController.uploadCourseThumbnail);
 
 router.post('/:courseUuid/modules', courseController.createModule);
 router.patch('/:courseUuid/modules/reorder', courseController.reorderModules);

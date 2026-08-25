@@ -22,6 +22,14 @@ module.exports = (sequelize, DataTypes) => {
       if (models.Certificate) {
         Course.hasMany(models.Certificate, { foreignKey: 'course_id', as: 'certificates' });
       }
+      if (models.CourseCategory && models.CourseCategoryLink) {
+        Course.belongsToMany(models.CourseCategory, {
+          through: models.CourseCategoryLink,
+          foreignKey: 'course_id',
+          otherKey: 'course_category_id',
+          as: 'categories'
+        });
+      }
     }
   }
 
