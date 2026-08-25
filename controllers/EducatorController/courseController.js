@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const { getOrCreateQuizBank, createChildCategory } = require('../../utils/quizCategoryHelpers');
 
 // Configure multer for course featured-image uploads
 const thumbnailStorage = multer.diskStorage({
@@ -55,6 +56,30 @@ async function resolveOwnedCategoryIds(educatorId, categoryIds) {
     const owned = await CourseCategory.findAll({ where: { id: categoryIds, educator_id: educatorId }, attributes: ['id'] });
     if (owned.length !== categoryIds.length) return { ok: false };
     return { ok: true, ids: owned.map((c) => c.id) };
+}
+
+// Lazily creates (once per course, cached on courses.quiz_category_id) a
+// "container" quiz category scoped to this course, living under the
+// educator's own quiz bank, that inline-created quiz categories nest under.
+async function findOrCreateCourseQuizRoot(course, educator) {
+    if (course.quiz_category_id) {
+        const existing = await Category.findByPk(course.quiz_category_id);
+        if (existing) return existing;
+    }
+
+    const quizBank = await getOrCreateQuizBank(educator);
+    const root = await createChildCategory({
+        parentCategory: null,
+        testSeriesId: quizBank.id,
+        hierarchyLevel: 0,
+        educatorId: educator.id,
+        name: `${course.title} — Course Quizzes`,
+        description: `Auto-created container for quizzes created inline from the "${course.title}" course builder.`,
+        nodeType: 'container'
+    });
+
+    await course.update({ quiz_category_id: root.id });
+    return root;
 }
 
 // My Courses ---------------------------------------------------------------
@@ -684,6 +709,37 @@ exports.getAvailableAssignments = async (req, res, next) => {
     } catch (err) {
         console.error('Get available assignments error:', err);
         return next(new ErrorHandler('Failed to fetch assignments', 500));
+    }
+};
+
+// Inline quiz creation from the course builder — creates (or reuses) a
+// course-scoped root category, then a named quiz category as its child.
+exports.createCourseQuizCategory = async (req, res, next) => {
+    try {
+        const { courseUuid } = req.params;
+        const { name } = req.body;
+        if (!name || !name.trim()) return next(new ErrorHandler('Quiz name is required', 400));
+
+        const course = await Course.findOne({ where: { uuid: courseUuid, educator_id: req.educator.id } });
+        if (!course) return next(new ErrorHandler('Course not found or not owned by you', 404));
+
+        const root = await findOrCreateCourseQuizRoot(course, req.educator);
+        const category = await createChildCategory({
+            parentCategory: root,
+            testSeriesId: root.test_series_id,
+            hierarchyLevel: root.hierarchy_level + 1,
+            educatorId: req.educator.id,
+            name,
+            description: null
+        });
+
+        res.status(201).json({
+            success: true,
+            data: { id: category.id, uuid: category.uuid, name: category.name, node_type: category.node_type }
+        });
+    } catch (err) {
+        console.error('Create course quiz category error:', err);
+        return next(new ErrorHandler('Failed to create quiz', 500));
     }
 };
 

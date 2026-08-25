@@ -24,6 +24,7 @@ router.put('/:uuid', courseController.updateCourse);
 router.patch('/:uuid/status', courseController.publishCourse);
 router.delete('/:uuid', courseController.deleteCourse);
 router.post('/:uuid/thumbnail', courseController.uploadThumbnail.single('thumbnail'), courseController.uploadCourseThumbnail);
+router.post('/:courseUuid/quiz-categories', courseController.createCourseQuizCategory);
 
 router.post('/:courseUuid/modules', courseController.createModule);
 router.patch('/:courseUuid/modules/reorder', courseController.reorderModules);
