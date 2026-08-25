@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const pdfController = require('../../controllers/AdminController/pdfController');
+const pdfHierarchyController = require('../../controllers/AdminController/pdfHierarchyController');
 const { authToken } = require('../../utils/AuthToken');
+
+// ===== Hierarchy (student-facing tree navigation) =====
+// More specific routes first so they don't get swallowed by /:id below.
+router.get('/hierarchy/roots', pdfHierarchyController.studentGetRootCategories);
+router.get('/hierarchy/categories/:categoryUuid', pdfHierarchyController.studentGetCategoryContent);
 
 // Public routes (no auth required)
 router.get('/', pdfController.getPdfs);

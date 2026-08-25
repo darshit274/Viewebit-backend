@@ -31,6 +31,14 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'uploaded_by',
         as: 'uploader'
       });
+
+      // Educator relationship — set instead of uploaded_by when an Educator uploads
+      if (models.Educator) {
+        Pdfs.belongsTo(models.Educator, {
+          foreignKey: 'uploaded_by_educator_id',
+          as: 'educatorUploader'
+        });
+      }
       
       // Test relationship - commented out until Test model is properly implemented
       // Pdfs.belongsTo(models.Test, {
@@ -179,6 +187,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+
+    // Position within a leaf (pdf_holder) category — lower number shown first
+    display_order: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      comment: 'Sibling order within the same category (lower = shown first)'
+    },
     
     // Test relationship (optional) - disabled for now
     // test_id: {
@@ -196,7 +212,12 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
-    
+    uploaded_by_educator_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Set instead of uploaded_by when an Educator uploads this PDF via the Educator Panel'
+    },
+
     created_at: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW

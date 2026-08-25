@@ -96,6 +96,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       comment: 'Order of question from Excel import or manual creation'
     },
+    display_order: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      comment: 'Controls display position within a category — lower number shown first'
+    },
     
     created_at: {
       type: DataTypes.DATE,

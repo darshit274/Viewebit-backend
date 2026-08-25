@@ -50,7 +50,17 @@ const validateSubmission = [
   body('query_message')
     .trim()
     .notEmpty().withMessage('Query message is required')
-    .isLength({ min: 10, max: 5000 }).withMessage('Query message must be between 10 and 5000 characters')
+    .isLength({ min: 10, max: 5000 }).withMessage('Query message must be between 10 and 5000 characters'),
+
+  body('role')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isLength({ max: 50 }).withMessage('Role must not exceed 50 characters'),
+
+  body('institution_name')
+    .optional({ checkFalsy: true })
+    .trim()
+    .isLength({ max: 255 }).withMessage('Institution name must not exceed 255 characters')
 ];
 
 const validateStatusUpdate = [

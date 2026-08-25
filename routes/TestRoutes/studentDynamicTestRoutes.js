@@ -87,6 +87,7 @@ async function getQuestionsRecursive(categoryId, shuffle = false) {
     order: shuffle
       ? sequelize.random()
       : [
+        ["display_order", "ASC"],
         ["question_order", "ASC"],
         ["id", "ASC"],
       ],
@@ -213,7 +214,7 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
       where,
       limit: parseInt(limit),
       offset: parseInt(offset),
-      order: [["created_at", "ASC"]],
+      order: [["display_order", "ASC"], ["created_at", "DESC"]],
       attributes: [
         "id",
         "uuid",
@@ -228,6 +229,7 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
         "currency",
         "discount_percentage",
         "is_featured",
+        "display_order",
         "created_at",
         "updated_at",
         "validity_days",
@@ -584,6 +586,7 @@ router.get("/dynamic/categories/:uuid", optionalAuth, async (req, res) => {
           is_active: true,
         },
         order: [
+          ["display_order", "ASC"],
           ["question_order", "ASC"],
           ["id", "ASC"],
         ],

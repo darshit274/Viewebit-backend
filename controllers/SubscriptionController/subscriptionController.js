@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Subscription, User, TestSeries, ExamType } = require('../../models');
+const { Subscription, User, TestSeries, ExamType, PdfCategory, Course } = require('../../models');
 const { Op } = require('sequelize');
 const { updateUserSubscriptionStatus } = require('../../utils/subscriptionHelper');
 
@@ -128,7 +128,12 @@ exports.createSubscription = async (req, res, next) => {
         if (!testSeries) {
             return next(new ErrorHandler('Test series not found', 404));
         }
-        
+
+        const linkedCourse = await Course.findOne({ where: { test_series_id: testSeries.id } });
+        if (linkedCourse && linkedCourse.status !== 'published') {
+            return next(new ErrorHandler('This course is not currently open for new enrollments', 400));
+        }
+
         // Check if user already has an active subscription for this test series
         const existingSubscription = await Subscription.findOne({
             where: {
@@ -461,47 +466,78 @@ exports.getSubscriptionStats = async (req, res, next) => {
     try {
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        
+        const { branch_id, department_id, date_from, date_to } = req.query;
+
+        // Branch/department filtering requires joining through the TestSeries a
+        // subscription was purchased against (Phase 0 added branch_id/department_id
+        // scoping there) — PDF-only subscriptions (test_series_id null) are excluded
+        // when a branch/department filter is active, since they have no org scoping.
+        const needsSeriesJoin = !!(branch_id || department_id);
+        const seriesWhere = {};
+        if (branch_id) seriesWhere.branch_id = branch_id;
+        if (department_id) seriesWhere.department_id = department_id;
+
+        const dateRangeWhere = {};
+        if (date_from || date_to) {
+            dateRangeWhere.purchase_date = {};
+            if (date_from) dateRangeWhere.purchase_date[Op.gte] = new Date(date_from);
+            if (date_to) {
+                const to = new Date(date_to);
+                to.setHours(23, 59, 59, 999);
+                dateRangeWhere.purchase_date[Op.lte] = to;
+            }
+        }
+
+        const baseWhere = { status: 'completed', ...dateRangeWhere };
+        const includeOptions = needsSeriesJoin
+            ? [{ model: TestSeries, as: 'testSeries', attributes: [], where: seriesWhere, required: true }]
+            : [];
+
         const [
             totalSubscriptions,
             activeSubscriptions,
             totalRevenue,
             monthlyRevenue
         ] = await Promise.all([
-            // Total subscriptions
-            Subscription.count({
-                where: { status: 'completed' }
-            }),
-            // Active subscriptions
+            Subscription.count({ where: baseWhere, include: includeOptions }),
             Subscription.count({
                 where: {
-                    status: 'completed',
+                    ...baseWhere,
                     [Op.or]: [
                         { expiry_date: null },
                         { expiry_date: { [Op.gt]: now } }
                     ]
-                }
+                },
+                include: includeOptions
             }),
-            // Total revenue
+            Subscription.sum('amount_paid', { where: baseWhere, include: includeOptions }),
             Subscription.sum('amount_paid', {
-                where: { status: 'completed' }
-            }),
-            // Monthly revenue
-            Subscription.sum('amount_paid', {
-                where: {
-                    status: 'completed',
-                    purchase_date: { [Op.gte]: startOfMonth }
-                }
+                where: { ...baseWhere, purchase_date: { [Op.gte]: startOfMonth } },
+                include: includeOptions
             })
         ]);
-        
+
         const expiredSubscriptions = await Subscription.count({
-            where: {
-                status: 'completed',
-                expiry_date: { [Op.lte]: now }
-            }
+            where: { ...baseWhere, expiry_date: { [Op.lte]: now } },
+            include: includeOptions
         });
-        
+
+        // Revenue trend — last 6 months (or the filtered date range if narrower),
+        // grouped by calendar month, for the Revenue page's chart.
+        const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+        const trendStart = dateRangeWhere.purchase_date?.[Op.gte] || sixMonthsAgo;
+        const revenueByMonth = await Subscription.findAll({
+            attributes: [
+                [require('sequelize').fn('DATE_FORMAT', require('sequelize').col('Subscription.purchase_date'), '%Y-%m'), 'month'],
+                [require('sequelize').fn('SUM', require('sequelize').col('amount_paid')), 'revenue']
+            ],
+            where: { status: 'completed', purchase_date: { [Op.gte]: trendStart } },
+            include: includeOptions,
+            group: [require('sequelize').fn('DATE_FORMAT', require('sequelize').col('Subscription.purchase_date'), '%Y-%m')],
+            order: [[require('sequelize').fn('DATE_FORMAT', require('sequelize').col('Subscription.purchase_date'), '%Y-%m'), 'ASC']],
+            raw: true
+        });
+
         res.status(200).json({
             success: true,
             data: {
@@ -509,7 +545,8 @@ exports.getSubscriptionStats = async (req, res, next) => {
                 active_subscriptions: activeSubscriptions || 0,
                 expired_subscriptions: expiredSubscriptions || 0,
                 total_revenue: totalRevenue || 0,
-                monthly_revenue: monthlyRevenue || 0
+                monthly_revenue: monthlyRevenue || 0,
+                revenue_trend: revenueByMonth.map((r) => ({ month: r.month, revenue: parseFloat(r.revenue) || 0 }))
             }
         });
     } catch (err) {
@@ -571,44 +608,52 @@ exports.exportSubscriptions = async (req, res, next) => {
 // Admin: Create manual subscription
 exports.createManualSubscription = async (req, res, next) => {
     try {
-        const { 
-            user_id, 
-            test_series_id, 
-            transaction_id, 
+        const {
+            user_id,
+            test_series_id,
+            pdf_category_uuid,
+            transaction_id,
             payment_method,
             amount_paid,
             currency = 'INR',
             status = 'completed',
             expiry_date
         } = req.body;
-        
-        // Validate required fields
-        if (!user_id || !test_series_id || !transaction_id || !amount_paid) {
-            return next(new ErrorHandler('Missing required fields', 400));
+
+        const isPdfCategory = !!pdf_category_uuid;
+        const isTestSeries  = !!test_series_id;
+
+        // Require exactly one of the two subscription targets
+        if (!user_id || !transaction_id || amount_paid == null || (!isTestSeries && !isPdfCategory)) {
+            return next(new ErrorHandler('Missing required fields: user_id, transaction_id, amount_paid, and one of test_series_id or pdf_category_uuid', 400));
         }
-        
+
         // Check if user exists
         const user = await User.findOne({ where: { uuid: user_id } });
         if (!user) {
             return next(new ErrorHandler('User not found', 404));
         }
-        
-        // Check if test series exists
-        const testSeries = await TestSeries.findByPk(test_series_id);
-        if (!testSeries) {
-            return next(new ErrorHandler('Test series not found', 404));
+
+        let pdfCategory = null;
+        if (isPdfCategory) {
+            pdfCategory = await PdfCategory.findOne({ where: { uuid: pdf_category_uuid } });
+            if (!pdfCategory) {
+                return next(new ErrorHandler('PDF category not found', 404));
+            }
+        } else {
+            const testSeries = await TestSeries.findByPk(test_series_id);
+            if (!testSeries) {
+                return next(new ErrorHandler('Test series not found', 404));
+            }
         }
-        
+
         // Check if transaction ID already exists
-        const existingTransaction = await Subscription.findOne({
-            where: { transaction_id }
-        });
-        
+        const existingTransaction = await Subscription.findOne({ where: { transaction_id } });
         if (existingTransaction) {
             return next(new ErrorHandler('Transaction ID already exists', 400));
         }
-        
-        // Use provided expiry date or calculate with default duration (365 days)
+
+        // Use provided expiry date or default to 365 days
         const DEFAULT_SUBSCRIPTION_DAYS = 365;
         let finalExpiryDate = null;
         if (expiry_date) {
@@ -617,24 +662,29 @@ exports.createManualSubscription = async (req, res, next) => {
             finalExpiryDate = new Date();
             finalExpiryDate.setDate(finalExpiryDate.getDate() + DEFAULT_SUBSCRIPTION_DAYS);
         }
-        
-        // Create subscription
-        const subscription = await Subscription.create({
+
+        const subscriptionPayload = {
             user_id,
-            test_series_id,
+            test_series_id: isTestSeries ? test_series_id : null,
             transaction_id,
             payment_method,
             amount_paid,
             currency,
             status,
             purchase_date: new Date(),
-            expiry_date: finalExpiryDate
-        });
-        
+            expiry_date: finalExpiryDate,
+            metadata: isPdfCategory ? {
+                plan_type: 'pdf_category',
+                pdf_category_id: pdfCategory.id,
+                pdf_category_uuid: pdfCategory.uuid,
+            } : null,
+        };
+
+        const subscription = await Subscription.create(subscriptionPayload);
+
         // Update user's subscription status
         await updateUserSubscriptionStatus(user_id);
-        
-        // Fetch the created subscription with details
+
         const createdSubscription = await Subscription.findByPk(subscription.id, {
             include: [
                 {
@@ -642,14 +692,14 @@ exports.createManualSubscription = async (req, res, next) => {
                     as: 'user',
                     attributes: ['uuid', 'username', 'email']
                 },
-                {
+                ...(isTestSeries ? [{
                     model: TestSeries,
                     as: 'testSeries',
                     attributes: ['id', 'name', 'price']
-                }
+                }] : [])
             ]
         });
-        
+
         res.status(201).json({
             success: true,
             message: 'Manual subscription created successfully',

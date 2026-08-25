@@ -123,7 +123,7 @@ module.exports = {
         defaultValue: 0
       },
       created_by: {
-        type: Sequelize.CHAR(36),
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: 'admins',

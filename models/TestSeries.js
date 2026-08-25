@@ -101,6 +101,29 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false,
       allowNull: false,
       comment: 'When true, prevents new enrollments for this course'
+    },
+    display_order: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+      comment: 'Controls display position in app and web — lower number shown first'
+    },
+    institution_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    branch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    department_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    educator_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Set when this series was self-created by a private-educator-mode Educator via the Course Builder pricing flow, rather than by an Admin'
     }
   }, {
     tableName: 'new_test_series',
@@ -109,10 +132,25 @@ module.exports = (sequelize, DataTypes) => {
   });
 
   TestSeries.associate = function(models) {
-    TestSeries.hasMany(models.Category, { 
-      foreignKey: 'test_series_id', 
-      as: 'categories' 
+    TestSeries.hasMany(models.Category, {
+      foreignKey: 'test_series_id',
+      as: 'categories'
     });
+    if (models.Institution) {
+      TestSeries.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
+    }
+    if (models.Branch) {
+      TestSeries.belongsTo(models.Branch, { foreignKey: 'branch_id', as: 'branch' });
+    }
+    if (models.Department) {
+      TestSeries.belongsTo(models.Department, { foreignKey: 'department_id', as: 'department' });
+    }
+    if (models.Course) {
+      TestSeries.hasOne(models.Course, { foreignKey: 'test_series_id', as: 'course' });
+    }
+    if (models.Educator) {
+      TestSeries.belongsTo(models.Educator, { foreignKey: 'educator_id', as: 'educator' });
+    }
   };
 
   return TestSeries;

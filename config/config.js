@@ -4,7 +4,7 @@ module.exports = {
   development: {
     username: process.env.DB_USERNAME || "root",
     password: process.env.DB_PASSWORD || null,
-    database: process.env.DB_NAME || "MockTale",
+    database: process.env.DB_NAME || "viewebit",
     host: process.env.DB_HOST || "localhost",
     dialect: process.env.DB_DIALECT || "mysql",
     port: process.env.DB_PORT || 3306,
@@ -27,7 +27,7 @@ module.exports = {
   test: {
     username: process.env.DB_USERNAME || "root",
     password: process.env.DB_PASSWORD || null,
-    database: process.env.DB_NAME || "MockTale_test",
+    database: process.env.DB_NAME || "viewebit_test",
     host: process.env.DB_HOST || "localhost",
     dialect: process.env.DB_DIALECT || "mysql",
     logging: false,
@@ -49,7 +49,7 @@ module.exports = {
   production: {
     username: process.env.DB_USERNAME || "root",
     password: process.env.DB_PASSWORD || null,
-    database: process.env.DB_NAME || "MockTale",
+    database: process.env.DB_NAME || "viewebit",
     host: process.env.DB_HOST,
     dialect: process.env.DB_DIALECT || "mysql",
     port: process.env.DB_PORT || 3306,

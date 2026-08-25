@@ -2,6 +2,15 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const tables = await queryInterface.showAllTables();
+    // The 2024 create-pdf-categories migration already provides every column here
+    // (id, name, slug, description, icon, color, sort_order, is_active, created_at,
+    // updated_at) - nothing to do. Later dedicated migrations (hierarchy, pricing,
+    // institution scoping, educator_id) add everything else the model needs.
+    if (tables.includes('pdf_categories')) {
+      return;
+    }
+
     await queryInterface.createTable('pdf_categories', {
       id: {
         type: Sequelize.INTEGER,

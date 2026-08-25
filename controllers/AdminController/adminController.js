@@ -1,4 +1,4 @@
-const ErrorHandler = require('../../utils/default/errorHandler');
+﻿const ErrorHandler = require('../../utils/default/errorHandler');
 const { Admin, User, Subscription, TestSeries } = require('../../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -43,7 +43,7 @@ exports.login = async (req, res, next) => {
         try {
             await sendMail({
                 receiver: email,
-                subject: `MockTale Admin - Login Verification Code`,
+                subject: `Viewebit Admin - Login Verification Code`,
                 content: 'content',
                 service: null,
                 host: "smtp.gmail.com",
@@ -57,7 +57,7 @@ exports.login = async (req, res, next) => {
                     <p style="color: #666;">This verification code is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
                     <p style="color: #e74c3c; margin-top: 20px;"><strong>Security Notice:</strong> If you did not attempt to log in, please contact your system administrator immediately.</p>
                     <br/>
-                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale Academy - Admin Panel</p>
+                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit Academy - Admin Panel</p>
                   </div>
                 </div>
               `,
@@ -113,17 +113,21 @@ exports.verifyOTP = async (req, res, next) => {
             return next(new ErrorHandler('Invalid verification code', 401));
         }
 
-        // Clear OTP after successful verification
+        // Clear OTP after successful verification and generate a new session ID
+        // (invalidates any previous session on another device)
+        const sessionId = require('crypto').randomUUID();
         admin.otp = null;
         admin.otpExpiry = null;
         admin.lastLogin = new Date();
+        admin.current_session_id = sessionId;
         await admin.save();
 
-        // Generate JWT token
+        // Generate JWT token (includes sessionId to enforce single-device login)
         const payload = {
             id: admin.id,
             email: admin.email,
-            role: admin.role
+            role: admin.role,
+            sessionId
         };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '8h' });
 
@@ -177,7 +181,7 @@ exports.resendOTP = async (req, res, next) => {
         try {
             await sendMail({
                 receiver: email,
-                subject: `MockTale Admin - New Verification Code`,
+                subject: `Viewebit Admin - New Verification Code`,
                 content: 'content',
                 service: null,
                 host: "smtp.gmail.com",
@@ -190,7 +194,7 @@ exports.resendOTP = async (req, res, next) => {
                     <h1 style="text-align: center; color: #007bff; letter-spacing: 4px; background-color: #f0f0f0; padding: 15px; border-radius: 8px;">${otp}</h1>
                     <p style="color: #666;">This verification code is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
                     <br/>
-                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale Academy - Admin Panel</p>
+                    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit Academy - Admin Panel</p>
                   </div>
                 </div>
               `,
@@ -235,10 +239,13 @@ exports.getProfile = async (req, res, next) => {
     }
 };
 
-// Admin logout
+// Admin logout — clears the session so the token cannot be reused
 exports.logout = async (req, res, next) => {
     try {
-        // In a more complex setup, you might want to blacklist the token
+        await Admin.update(
+            { current_session_id: null },
+            { where: { id: req.admin.id } }
+        );
         res.status(200).json({
             success: true,
             message: 'Logout successful'
@@ -262,9 +269,9 @@ exports.getDashboardStats = async (req, res, next) => {
         let totalPDFs = 0;
         let totalQuestions = 0;
         let totalTestSessions = 0;
-        
+        const { Test, TestSeries, Question, TestSession, Pdfs } = require('../../models');
+
         try {
-            const { Test, TestSeries, Question, TestSession, Pdfs } = require('../../models');
             
             // New test system counts
             if (Test) totalTests = await Test.count({ where: { is_active: true } });
@@ -370,28 +377,45 @@ exports.getDashboardStats = async (req, res, next) => {
 // Get all students with pagination
 exports.getStudents = async (req, res, next) => {
     try {
+        const { Op } = require('sequelize');
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 10;
+        const limit = Math.min(parseInt(req.query.limit) || 10, 100); // cap at 100
         const search = req.query.search || '';
         const sortBy = req.query.sortBy || 'created_at';
-        const sortOrder = req.query.sortOrder || 'DESC';
+        const sortOrder = (req.query.sortOrder || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
         const offset = (page - 1) * limit;
 
         const whereClause = {};
+
+        // Search by username, email, or phone
         if (search) {
-            whereClause[require('sequelize').Op.or] = [
-                { username: { [require('sequelize').Op.like]: `%${search}%` } },
-                { email: { [require('sequelize').Op.like]: `%${search}%` } }
+            whereClause[Op.or] = [
+                { username: { [Op.like]: `%${search}%` } },
+                { email: { [Op.like]: `%${search}%` } },
+                { phone: { [Op.like]: `%${search}%` } }
             ];
         }
 
+        // Filter by active status
+        if (req.query.is_active !== undefined && req.query.is_active !== '') {
+            whereClause.isActive = req.query.is_active === 'true';
+        }
+
+        // Filter by email verification
+        if (req.query.is_verified !== undefined && req.query.is_verified !== '') {
+            whereClause.isEmailVerified = req.query.is_verified === 'true';
+        }
+
+        const allowedSortFields = ['username', 'email', 'created_at', 'isEmailVerified', 'isActive'];
+        const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
+
         const { count, rows } = await User.findAndCountAll({
             where: whereClause,
-            attributes: ['uuid', 'username', 'email', 'phone', 'profileImage', 'isEmailVerified', 'isActive', 'created_at'],
+            attributes: ['uuid', 'username', 'email', 'phone', 'profileImage', 'isEmailVerified', 'isActive', 'created_at', 'device_id'],
             limit,
             offset,
-            order: [[sortBy, sortOrder]]
+            order: [[safeSortBy, sortOrder]]
         });
 
         res.status(200).json({
@@ -843,6 +867,59 @@ exports.getRecentActivity = async (req, res, next) => {
     }
 };
 
+// Analytics: test attempts broken down per test series
+exports.getTestSeriesAttemptAnalytics = async (req, res, next) => {
+    try {
+        const period = req.query.period || 'week';
+        const { sequelize } = require('../../models');
+
+        let startDate = new Date();
+        if (period === 'month') {
+            startDate.setMonth(startDate.getMonth() - 1);
+        } else {
+            startDate.setDate(startDate.getDate() - 7);
+        }
+
+        const rows = await sequelize.query(`
+            SELECT
+                ts.id,
+                ts.name,
+                COUNT(sess.id)                                                                      AS total_attempts,
+                SUM(CASE WHEN sess.status = 'completed' THEN 1 ELSE 0 END)                         AS completed_attempts,
+                ROUND(AVG(CASE WHEN sess.status = 'completed' THEN sess.calculated_score ELSE NULL END), 1) AS avg_score
+            FROM new_test_series ts
+            LEFT JOIN categories c     ON c.test_series_id = ts.id
+            LEFT JOIN sub_categories sc ON sc.category_id  = c.id
+            LEFT JOIN tests t           ON t.sub_category_id = sc.id
+            LEFT JOIN test_sessions sess ON sess.test_id = t.id
+                                        AND sess.created_at >= :startDate
+            WHERE ts.is_active = 1
+            GROUP BY ts.id, ts.name
+            HAVING COUNT(sess.id) > 0
+            ORDER BY total_attempts DESC
+            LIMIT 10
+        `, {
+            replacements: { startDate },
+            type: sequelize.QueryTypes.SELECT
+        });
+
+        const data = rows.map(row => ({
+            name: row.name,
+            total_attempts: parseInt(row.total_attempts) || 0,
+            completed_attempts: parseInt(row.completed_attempts) || 0,
+            avg_score: parseFloat(row.avg_score) || 0,
+            completion_rate: row.total_attempts > 0
+                ? Math.round((parseInt(row.completed_attempts) / parseInt(row.total_attempts)) * 100)
+                : 0
+        }));
+
+        res.status(200).json({ success: true, data });
+    } catch (err) {
+        console.error('Test series attempt analytics error:', err);
+        return next(new ErrorHandler('Failed to fetch test series attempt analytics', 500));
+    }
+};
+
 // Additional user management methods
 exports.getUserStats = async (req, res, next) => {
     try {
@@ -949,6 +1026,328 @@ exports.toggleUserPremium = async (req, res, next) => {
         console.error('Toggle user premium error:', err);
         const error = new ErrorHandler('Failed to toggle user premium status', 500);
         return next(error);
+    }
+};
+
+// Reset a user's device lock — clears device_id so they can login from a new device
+exports.resetUserDevice = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        const user = await User.findOne({ where: { uuid: id } });
+        if (!user) {
+            return next(new ErrorHandler('User not found', 404));
+        }
+
+        await user.update({ device_id: null });
+
+        res.status(200).json({
+            success: true,
+            message: `Device lock removed for ${user.username}. They can now login from any device.`
+        });
+    } catch (err) {
+        console.error('Reset user device error:', err);
+        return next(new ErrorHandler('Failed to reset device lock', 500));
+    }
+};
+
+// List test attempts grouped by student — one row per student with their latest
+// attempt summary plus a total/completed count. Admin uses this to spot active
+// students for paid-package follow-up; clicking a row opens the per-student
+// history via getStudentTestAttemptsForAdmin below.
+exports.getTestAttempts = async (req, res, next) => {
+    try {
+        const {
+            page = 1,
+            limit = 20,
+            search = '',
+            status = 'all',
+            dateFrom = '',
+            dateTo = '',
+        } = req.query;
+
+        const offset = (parseInt(page) - 1) * parseInt(limit);
+        const { TestSession, sequelize } = require('../../models');
+
+        // Build session-level filters (status, date range)
+        const sessionWhere = {};
+        if (status && status !== 'all') sessionWhere.status = status;
+        if (dateFrom || dateTo) {
+            sessionWhere.created_at = {};
+            if (dateFrom) sessionWhere.created_at[Op.gte] = new Date(dateFrom);
+            if (dateTo) {
+                const toDate = new Date(dateTo);
+                toDate.setHours(23, 59, 59, 999);
+                sessionWhere.created_at[Op.lte] = toDate;
+            }
+        }
+
+        // If admin is searching by user fields, narrow sessions to matching user_ids first
+        const trimmedSearch = String(search).trim();
+        if (trimmedSearch) {
+            const like = `%${trimmedSearch}%`;
+            const matchingUsers = await User.findAll({
+                where: {
+                    [Op.or]: [
+                        { username: { [Op.like]: like } },
+                        { email:    { [Op.like]: like } },
+                        { phone:    { [Op.like]: like } },
+                    ],
+                },
+                attributes: ['uuid'],
+                raw: true,
+            });
+            const userIds = matchingUsers.map((u) => u.uuid);
+            if (userIds.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    data: [],
+                    pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 },
+                });
+            }
+            sessionWhere.user_id = { [Op.in]: userIds };
+        }
+
+        // Total distinct students matching filters (for pagination)
+        const totalStudents = await TestSession.count({
+            where: sessionWhere,
+            distinct: true,
+            col: 'user_id',
+        });
+
+        // One row per user: count attempts + take the latest created_at
+        const grouped = await TestSession.findAll({
+            where: sessionWhere,
+            attributes: [
+                'user_id',
+                [sequelize.fn('COUNT', sequelize.col('id')), 'total_attempts'],
+                [sequelize.fn('SUM', sequelize.literal('CASE WHEN is_completed = 1 THEN 1 ELSE 0 END')), 'completed_attempts'],
+                [sequelize.fn('MAX', sequelize.col('created_at')), 'latest_created_at'],
+            ],
+            group: ['user_id'],
+            order: [[sequelize.fn('MAX', sequelize.col('created_at')), 'DESC']],
+            limit: parseInt(limit),
+            offset,
+            raw: true,
+        });
+
+        // Fetch the actual latest session row + user info for each grouped user
+        const data = await Promise.all(grouped.map(async (g) => {
+            const [latestSession, user] = await Promise.all([
+                TestSession.findOne({
+                    where: { ...sessionWhere, user_id: g.user_id },
+                    order: [['created_at', 'DESC']],
+                }),
+                User.findOne({
+                    where: { uuid: g.user_id },
+                    attributes: ['uuid', 'username', 'email', 'phone', 'isEmailVerified', 'created_at'],
+                }),
+            ]);
+
+            return {
+                studentUuid: g.user_id,
+                studentName: user?.username || null,
+                studentEmail: user?.email || null,
+                studentPhone: user?.phone || null,
+                studentSignedUpAt: user?.created_at || null,
+                totalAttempts: parseInt(g.total_attempts) || 0,
+                completedAttempts: parseInt(g.completed_attempts) || 0,
+                latestAttempt: latestSession ? {
+                    sessionId: latestSession.id,
+                    testName: latestSession.test_name,
+                    categoryName: latestSession.category_name,
+                    status: latestSession.status,
+                    isCompleted: latestSession.is_completed,
+                    isSubmitted: latestSession.is_submitted,
+                    startedAt: latestSession.started_at,
+                    completedAt: latestSession.completed_at,
+                    createdAt: latestSession.created_at,
+                    totalQuestions: latestSession.total_questions,
+                    totalCorrect: latestSession.total_correct,
+                    totalWrong: latestSession.total_wrong,
+                    totalUnanswered: latestSession.total_unanswered,
+                    percentage: latestSession.percentage,
+                    finalScore: latestSession.final_score,
+                    timeSpentSeconds: latestSession.time_spent_seconds,
+                } : null,
+            };
+        }));
+
+        res.status(200).json({
+            success: true,
+            data,
+            pagination: {
+                total: totalStudents,
+                page: parseInt(page),
+                limit: parseInt(limit),
+                totalPages: Math.ceil(totalStudents / parseInt(limit)),
+            },
+        });
+    } catch (err) {
+        console.error('Get test attempts error:', err);
+        return next(new ErrorHandler('Failed to fetch test attempts', 500));
+    }
+};
+
+// Get full test attempt history for a single student (admin view), including
+// the test-series → category hierarchy so admin can see exactly what each
+// attempt belongs to.
+exports.getStudentTestAttemptsForAdmin = async (req, res, next) => {
+    try {
+        const { uuid } = req.params;
+        const { TestSession, Category, TestSeries, Test, SubCategory } = require('../../models');
+
+        const user = await User.findOne({
+            where: { uuid },
+            attributes: ['uuid', 'username', 'email', 'phone', 'isEmailVerified', 'isActive', 'created_at'],
+        });
+        if (!user) {
+            return next(new ErrorHandler('Student not found', 404));
+        }
+
+        const sessions = await TestSession.findAll({
+            where: { user_id: uuid },
+            order: [['created_at', 'DESC']],
+        });
+
+        // Cache category lookups so we don't refetch for repeat tests
+        const categoryCache = {};
+        const buildHierarchy = async (session) => {
+            // Prefer the category_uuid stored in session_data (new dynamic system)
+            let categoryUuid = session.session_data?.category_uuid || null;
+
+            // Fall back to the legacy Test → SubCategory → Category → TestSeries chain
+            if (!categoryUuid && session.test_id) {
+                try {
+                    const oldTest = await Test.findByPk(session.test_id, {
+                        include: [{
+                            model: SubCategory,
+                            as: 'subCategory',
+                            include: [{
+                                model: Category,
+                                as: 'category',
+                                include: [{ model: TestSeries, as: 'testSeries', attributes: ['uuid'] }],
+                            }],
+                        }],
+                    });
+                    if (oldTest?.subCategory?.category?.testSeries?.uuid) {
+                        categoryUuid = oldTest.subCategory.category.testSeries.uuid;
+                    }
+                } catch (_) {
+                    // ignore — legacy lookup is best-effort
+                }
+            }
+
+            let seriesName = null;
+            let parentCategoryNames = [];
+            let categoryName = session.category_name || session.test_name || null;
+
+            if (categoryUuid) {
+                if (!categoryCache[categoryUuid]) {
+                    categoryCache[categoryUuid] = await Category.findOne({
+                        where: { uuid: categoryUuid },
+                        include: [{
+                            model: TestSeries,
+                            as: 'testSeries',
+                            attributes: ['uuid', 'name'],
+                        }],
+                        attributes: ['id', 'uuid', 'name', 'parent_category_id'],
+                    });
+                }
+                const cat = categoryCache[categoryUuid];
+                if (cat) {
+                    seriesName = cat.testSeries?.name || null;
+                    categoryName = cat.name || categoryName;
+                    let parentId = cat.parent_category_id;
+                    while (parentId) {
+                        const parent = await Category.findByPk(parentId, {
+                            attributes: ['id', 'name', 'parent_category_id'],
+                        });
+                        if (!parent) break;
+                        parentCategoryNames.unshift(parent.name);
+                        parentId = parent.parent_category_id;
+                    }
+                }
+            }
+
+            const parts = [];
+            if (seriesName) parts.push(seriesName);
+            parts.push(...parentCategoryNames);
+            if (categoryName) parts.push(categoryName);
+
+            return {
+                seriesName,
+                categoryName,
+                subCategoryName: parentCategoryNames[parentCategoryNames.length - 1] || null,
+                parentCategoryNames,
+                hierarchyPath: parts.join(' → ') || (session.test_name || 'General'),
+            };
+        };
+
+        const attempts = await Promise.all(sessions.map(async (s) => {
+            const hierarchy = await buildHierarchy(s);
+            return {
+                sessionId: s.id,
+                testName: s.test_name,
+                categoryName: hierarchy.categoryName,
+                seriesName: hierarchy.seriesName,
+                subCategoryName: hierarchy.subCategoryName,
+                hierarchyPath: hierarchy.hierarchyPath,
+                status: s.status,
+                isCompleted: s.is_completed,
+                isSubmitted: s.is_submitted,
+                startedAt: s.started_at,
+                completedAt: s.completed_at,
+                createdAt: s.created_at,
+                totalQuestions: s.total_questions,
+                totalCorrect: s.total_correct,
+                totalWrong: s.total_wrong,
+                totalUnanswered: s.total_unanswered,
+                percentage: s.percentage,
+                finalScore: s.final_score,
+                timeSpentSeconds: s.time_spent_seconds,
+            };
+        }));
+
+        // Summary stats
+        const totalAttempts = attempts.length;
+        const completedAttempts = attempts.filter((a) => a.isCompleted).length;
+        const inProgressAttempts = attempts.filter((a) => a.status === 'active' || a.status === 'paused').length;
+        const uniqueTests = new Set(attempts.map((a) => a.hierarchyPath).filter(Boolean)).size;
+        const uniqueSeries = new Set(attempts.map((a) => a.seriesName).filter(Boolean)).size;
+        const avgPercentage = (() => {
+            const scored = attempts.filter((a) => a.isCompleted && a.percentage !== null);
+            if (scored.length === 0) return null;
+            const sum = scored.reduce((acc, a) => acc + parseFloat(a.percentage || 0), 0);
+            return Math.round((sum / scored.length) * 10) / 10;
+        })();
+
+        res.status(200).json({
+            success: true,
+            data: {
+                student: {
+                    uuid: user.uuid,
+                    name: user.username,
+                    email: user.email,
+                    phone: user.phone,
+                    isEmailVerified: user.isEmailVerified,
+                    isActive: user.isActive,
+                    signedUpAt: user.created_at,
+                },
+                summary: {
+                    totalAttempts,
+                    completedAttempts,
+                    inProgressAttempts,
+                    uniqueTests,
+                    uniqueSeries,
+                    avgPercentage,
+                },
+                attempts,
+            },
+        });
+    } catch (err) {
+        console.error('Get student test attempts (admin) error:', err);
+        return next(new ErrorHandler('Failed to fetch student test attempts', 500));
     }
 };
 

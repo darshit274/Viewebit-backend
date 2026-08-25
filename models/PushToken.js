@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
       autoIncrement: true
     },
     user_id: {
-      type: DataTypes.STRING,
+      type: DataTypes.CHAR(36),
       allowNull: false,
       references: {
         model: 'users',
@@ -28,9 +28,8 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     push_token: {
-      type: DataTypes.TEXT,
+      type: DataTypes.STRING(512),
       allowNull: false,
-      unique: true,
       comment: 'Expo/Firebase push token'
     },
     platform: {

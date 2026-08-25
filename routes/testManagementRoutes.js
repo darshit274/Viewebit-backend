@@ -45,6 +45,19 @@ router.put('/simple-hierarchy/questions/:questionUuid', adminAuth, testManagemen
 router.delete('/simple-hierarchy/questions/:questionUuid', adminAuth, testManagementController.deleteQuestion);
 
 // =====================
+// REORDER ROUTES
+// =====================
+
+// Reorder test series display positions
+router.post('/reorder', adminAuth, testManagementController.reorderTestSeries.bind(testManagementController));
+
+// Reorder categories within a parent
+router.post('/simple-hierarchy/categories/reorder', adminAuth, testManagementController.reorderCategories.bind(testManagementController));
+
+// Reorder questions within a category
+router.post('/simple-hierarchy/questions/reorder', adminAuth, testManagementController.reorderQuestions.bind(testManagementController));
+
+// =====================
 // TEST SERIES ROUTES
 // =====================
 

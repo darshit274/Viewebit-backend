@@ -1,4 +1,4 @@
-const ErrorHandler = require('../../utils/default/errorHandler');
+﻿const ErrorHandler = require('../../utils/default/errorHandler');
 const { User, TestSession, Test, sequelize } = require('../../models'); // ✅ Add sequelize instance
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
@@ -10,7 +10,7 @@ const { Sequelize, Op } = require('sequelize');
 
 exports.register = async (req, res, next) => {
     try {
-        const { username, name, email, password, phone, mobile } = req.body;
+        const { username, name, email, password, phone, mobile, device_id } = req.body;
 
         // Handle field mapping - accept both naming conventions
         const finalUsername = username || name;
@@ -51,7 +51,11 @@ exports.register = async (req, res, next) => {
             password: hashedPassword,
             otp,
             otpExpiry,
-            isEmailVerified: false
+            isEmailVerified: false,
+            // Lock the account to the signup device when the mobile app provides one.
+            // Web signups don't send device_id, so this stays null for them — web logins
+            // are not device-locked. Admin can clear via /admin/users/:id/reset-device.
+            device_id: device_id || null
         });
 
         // Generate JWT token
@@ -81,7 +85,7 @@ exports.register = async (req, res, next) => {
           <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
           <br/>
           <p style="font-size: 12px; color: #aaa; text-align: center;">If you did not request this, please ignore this email.</p>
-          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
         </div>
       </div>
     `,
@@ -124,7 +128,7 @@ exports.register = async (req, res, next) => {
 
 exports.login = async (req, res,    next) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, device_id } = req.body;
         // Find user by email
         const user = await User.findOne({ where: { email } });
         if (!user) {
@@ -134,18 +138,76 @@ exports.login = async (req, res,    next) => {
         if (!user.isEmailVerified) {
             return next(new ErrorHandler('Please verify your email before logging in', 403));
         }
-        
+
         // Check password
         const validated_password = await bcrypt.compare(password, user.password);
         if (!validated_password) {
             return next(new ErrorHandler('Invalid email or password', 401));
         }
-        // Generate JWT token
-        const payload = { 
+
+        // Device lock check (app only — device_id is only sent by the mobile app, never by web)
+        if (device_id) {
+            if (user.device_id && user.device_id !== device_id) {
+                // Device mismatch — could be reinstall on same phone or a different device.
+                // Send OTP to the registered email so the student can verify their identity.
+                // If OTP is correct, the device_id is updated and they are logged in.
+                // This avoids admin intervention for legitimate reinstalls.
+                const otp = Math.floor(1000 + Math.random() * 9000);
+                const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+                await user.update({ otp, otpExpiry });
+
+                // Sign a short-lived token carrying the new device_id so otp_verify can
+                // update it after the student proves their identity via OTP.
+                const deviceChangeToken = jwt.sign(
+                    { userId: user.uuid, newDeviceId: device_id },
+                    process.env.JWT_SECRET,
+                    { expiresIn: '10m' }
+                );
+
+                try {
+                    await sendMail({
+                        receiver: user.email,
+                        subject: 'Device Verification - Viewebit Academy',
+                        service: null,
+                        host: 'smtp.gmail.com',
+                        content: '',
+                        htmlContent: `
+<div style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f6f8;">
+  <div style="max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+    <h2 style="color: #333; text-align: center;">Device Verification</h2>
+    <p>Hi <strong>${user.username}</strong>,</p>
+    <p>A login attempt was detected from a new device installation. Use the OTP below to verify:</p>
+    <h1 style="text-align: center; color: #007bff; letter-spacing: 4px;">${otp}</h1>
+    <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
+    <p style="color: #666;">If you did not reinstall the app, please contact support immediately.</p>
+    <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
+  </div>
+</div>`
+                    });
+                } catch (_) { /* email failure should not block the response */ }
+
+                return res.status(403).json({
+                    success: false,
+                    errorCode: 'DEVICE_VERIFICATION_REQUIRED',
+                    message: 'New device detected. Enter the OTP sent to your registered email to continue.',
+                    deviceChangeToken
+                });
+            }
+            // First login from app, or same device — save/confirm device_id
+            await user.update({ device_id });
+        }
+
+        // Generate a unique session ID and save it — invalidates any previous session
+        const sessionId = require('crypto').randomUUID();
+        await user.update({ current_session_id: sessionId, lastLogin: new Date() });
+
+        // Generate JWT token (includes sessionId to enforce single-device login)
+        const payload = {
             uuid: user.uuid,  // Use UUID as primary identifier
-            email: user.email 
+            email: user.email,
+            sessionId
         };
-        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '30d' });
         res.status(200).json({
             success: true,
             message: 'Login successful',
@@ -169,8 +231,8 @@ exports.login = async (req, res,    next) => {
 
 exports.otp_verify = async (req, res, next) => {
     try {
-        const { email, otp } = req.body;
-        // Find user by email   
+        const { email, otp, deviceChangeToken } = req.body;
+        // Find user by email
         const user = await User.findOne({ where: { email } });
         if (!user) {
             return next(new ErrorHandler('Invalid email !', 401));
@@ -179,12 +241,12 @@ exports.otp_verify = async (req, res, next) => {
         if (!user.otp || !user.otpExpiry) {
             return next(new ErrorHandler('No OTP found. Please request a new one.', 400));
         }
-        
+
         // Check if OTP has expired
         if (new Date() > user.otpExpiry) {
             return next(new ErrorHandler('OTP has expired. Please request a new one.', 400));
         }
-        
+
         // Check OTP
         if (user.otp !== parseInt(otp)) {
             return next(new ErrorHandler('Invalid OTP', 401));
@@ -194,8 +256,18 @@ exports.otp_verify = async (req, res, next) => {
         user.otp = null;
         user.otpExpiry = null;
         user.isEmailVerified = true;
-        await user.save();  
 
+        // If this OTP was for device re-enrollment, update the device_id
+        if (deviceChangeToken) {
+            try {
+                const decoded = jwt.verify(deviceChangeToken, process.env.JWT_SECRET);
+                if (decoded.userId === user.uuid && decoded.newDeviceId) {
+                    user.device_id = decoded.newDeviceId;
+                }
+            } catch (_) { /* invalid/expired token — ignore, device_id unchanged */ }
+        }
+
+        await user.save();
 
         res.status(200).json({
             success: true,
@@ -243,7 +315,7 @@ exports.forgotPassword = async (req, res, next) => {
           <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
           <br/>
           <p style="font-size: 12px; color: #aaa; text-align: center;">If you did not request this, please ignore this email.</p>
-          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+          <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
         </div>
       </div>
     `,
@@ -369,7 +441,7 @@ exports.resendOTP = async (req, res, next) => {
                         <p style="color: #666;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
                         <br/>
                         <p style="font-size: 12px; color: #aaa; text-align: center;">If you did not request this, please ignore this email.</p>
-                        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} MockTale</p>
+                        <p style="font-size: 12px; color: #aaa; text-align: center;">&copy; ${new Date().getFullYear()} Viewebit</p>
                     </div>
                 </div>`,
                 cc: null,
@@ -586,6 +658,20 @@ async function calculateUserRank(userUuid, userAvgScore) {
 
     return (betterUsers?.length || 0) + 1;
 }
+
+// Logout — clears the session so no other device can use this session
+exports.logout = async (req, res, next) => {
+    try {
+        await User.update(
+            { current_session_id: null },
+            { where: { uuid: req.user.uuid } }
+        );
+        res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (err) {
+        console.error('Logout error:', err);
+        return next(new ErrorHandler('Error while logging out', 500));
+    }
+};
 
 // Change user password
 exports.changePassword = async (req, res, next) => {

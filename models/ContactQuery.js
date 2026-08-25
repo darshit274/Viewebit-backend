@@ -46,6 +46,14 @@ module.exports = (sequelize) => {
         }
       }
     },
+    role: {
+      type: DataTypes.STRING(50),
+      allowNull: true
+    },
+    institution_name: {
+      type: DataTypes.STRING(255),
+      allowNull: true
+    },
     query_message: {
       type: DataTypes.TEXT,
       allowNull: false,

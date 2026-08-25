@@ -361,6 +361,38 @@ router.post('/submit', async (req, res) => {
 
         console.log(`✅ Created TestSession: ${testSession.id}`);
 
+        // Non-blocking: check whether this quiz is used as a Lesson/Assignment in
+        // a Course and, if so, whether completing it pushes the student over that
+        // course's certificate threshold. Never let a failure here break the
+        // quiz-submission response — this runs after the response would normally
+        // be considered "done" from the student's perspective.
+        if (category) {
+            (async () => {
+                try {
+                    const { Lesson, Assignment, CourseModule } = require('../models');
+                    const { autoIssueIfEligible } = require('../controllers/CertificateController/certificateController');
+
+                    const quizLessons = await Lesson.findAll({
+                        where: { category_id: category.id, lesson_type: 'quiz' },
+                        include: [{ model: CourseModule, as: 'module', attributes: ['course_id'] }]
+                    });
+                    const courseIds = new Set(quizLessons.map((l) => l.module?.course_id).filter(Boolean));
+
+                    const quizAssignments = await Assignment.findAll({
+                        where: { category_id: category.id, submission_type: 'quiz' },
+                        attributes: ['course_id']
+                    });
+                    quizAssignments.forEach((a) => courseIds.add(a.course_id));
+
+                    for (const courseId of courseIds) {
+                        await autoIssueIfEligible(userId, courseId);
+                    }
+                } catch (certErr) {
+                    console.error('Certificate auto-issue check failed (non-fatal):', certErr.message);
+                }
+            })();
+        }
+
         // Save individual answers to UserAnswer table
         // This enables session-based solution retrieval and tracking user progress
         try {

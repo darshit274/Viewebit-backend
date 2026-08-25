@@ -2,6 +2,14 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const tables = await queryInterface.showAllTables();
+    // By the time this runs, the 2024 create-users migration plus its later ALTERs
+    // (otp, phone, subscription fields, lastLogin, isActive, isEmailVerified, otpExpiry)
+    // already provide every column here with physically-equivalent types - nothing to do.
+    if (tables.includes('users')) {
+      return;
+    }
+
     await queryInterface.createTable('users', {
       uuid: {
         type: Sequelize.CHAR(36),

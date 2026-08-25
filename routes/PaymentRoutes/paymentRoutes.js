@@ -7,7 +7,7 @@ router.use('/checkout', paymentCheckoutRouter);
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { authToken } = require('../../utils/AuthToken');
-const { User, TestSeries, Subscription, Pdfs } = require('../../models');
+const { User, TestSeries, Subscription, Pdfs, PdfCategory, Course } = require('../../models');
 const { Op } = require('sequelize');
 const {
   razorpayInstance,
@@ -36,15 +36,15 @@ router.post('/create-order', authToken, async (req, res) => {
   try {
     console.log('🚀 Payment order creation started');
     console.log('👤 User:', req.user ? req.user.uuid : 'No user found');
-    const { testSeriesId, pdfId, planType = 'test_series' } = req.body;
+    const { testSeriesId, pdfId, pdfCategoryId, planType = 'test_series' } = req.body;
     const userId = req.user.uuid;
-    console.log('📦 Parsed request data:', { testSeriesId, pdfId, planType, userId });
+    console.log('📦 Parsed request data:', { testSeriesId, pdfId, pdfCategoryId, planType, userId });
 
     // Validate required fields
-    if (!testSeriesId && !pdfId) {
+    if (!testSeriesId && !pdfId && !pdfCategoryId) {
       return res.status(400).json({
         success: false,
-        message: 'Either testSeriesId or pdfId is required'
+        message: 'Either testSeriesId, pdfId or pdfCategoryId is required'
       });
     }
 
@@ -78,6 +78,14 @@ router.post('/create-order', authToken, async (req, res) => {
         return res.status(400).json({
           success: false,
           message: 'This test series is free. No payment required.'
+        });
+      }
+
+      const linkedCourse = await Course.findOne({ where: { test_series_id: itemDetails.id } });
+      if (linkedCourse && linkedCourse.status !== 'published') {
+        return res.status(400).json({
+          success: false,
+          message: 'This course is not currently open for new enrollments.'
         });
       }
 
@@ -147,6 +155,109 @@ router.post('/create-order', authToken, async (req, res) => {
           calculatedAmount: amount,
           isNaN: isNaN(amount),
           isInteger: Number.isInteger(amount)
+        });
+      }
+    } else if (planType === 'pdf_category' && pdfCategoryId) {
+      // Whole PDF category purchase — pricing lives on the ROOT category
+      // (same model as test series: one payment unlocks everything inside).
+      console.log('🔍 PDF Category Payment - Looking for category:', pdfCategoryId);
+
+      itemDetails = await PdfCategory.findOne({
+        where: { uuid: pdfCategoryId },
+        attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
+      });
+
+      if (!itemDetails) {
+        return res.status(404).json({
+          success: false,
+          message: 'PDF category not found'
+        });
+      }
+
+      if (itemDetails.parent_category_id !== null) {
+        return res.status(400).json({
+          success: false,
+          message: 'Only main (root) PDF categories can be purchased'
+        });
+      }
+
+      if (itemDetails.pricing_type !== 'paid') {
+        return res.status(400).json({
+          success: false,
+          message: itemDetails.pricing_type === 'free'
+            ? 'This PDF category is free. No payment required.'
+            : 'This PDF category is not available for purchase.'
+        });
+      }
+
+      const basePrice = parseFloat(itemDetails.price || 0);
+      const discountPercentage = parseFloat(itemDetails.discount_percentage || 0);
+      const discountedPrice = discountPercentage > 0
+        ? basePrice * (1 - discountPercentage / 100)
+        : basePrice;
+      amount = Math.round(discountedPrice * 100); // paise
+
+      console.log('💰 PDF category pricing:', {
+        category: itemDetails.name,
+        basePrice,
+        discountPercentage,
+        discountedPrice,
+        amountInPaise: amount,
+      });
+
+      // Duplicate purchase / pending payment guards (same as test series)
+      const completedCategorySubs = await Subscription.findAll({
+        where: {
+          user_id: userId,
+          test_series_id: null,
+          status: 'completed',
+          [Op.or]: [
+            { expiry_date: null },
+            { expiry_date: { [Op.gt]: new Date() } }
+          ]
+        },
+        attributes: ['id', 'purchase_date', 'expiry_date', 'metadata'],
+      });
+      const alreadyOwned = completedCategorySubs.find((sub) => {
+        const md = parseSubscriptionMetadata(sub.metadata);
+        return md.pdf_category_uuid === itemDetails.uuid;
+      });
+      if (alreadyOwned) {
+        return res.status(400).json({
+          success: false,
+          message: 'You already have access to this PDF category',
+          errorCode: 'ALREADY_SUBSCRIBED',
+          data: {
+            subscriptionId: alreadyOwned.id,
+            purchaseDate: alreadyOwned.purchase_date,
+            expiryDate: alreadyOwned.expiry_date
+          }
+        });
+      }
+
+      const pendingCategorySubs = await Subscription.findAll({
+        where: {
+          user_id: userId,
+          test_series_id: null,
+          status: 'pending',
+          created_at: { [Op.gt]: new Date(Date.now() - 5 * 60 * 1000) }
+        },
+        attributes: ['id', 'transaction_id', 'created_at', 'metadata'],
+        order: [['created_at', 'DESC']],
+      });
+      const recentPending = pendingCategorySubs.find((sub) => {
+        const md = parseSubscriptionMetadata(sub.metadata);
+        return md.pdf_category_uuid === itemDetails.uuid;
+      });
+      if (recentPending) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have a recent pending payment for this PDF category. Please wait or complete the existing payment.',
+          errorCode: 'PAYMENT_PENDING',
+          data: {
+            transactionId: recentPending.transaction_id,
+            createdAt: recentPending.created_at
+          }
         });
       }
     }
@@ -240,7 +351,7 @@ router.post('/create-order', authToken, async (req, res) => {
         ...razorpayConfig.notes,
         user_id: userId.substring(0, 40), // Limit length for Razorpay
         plan_type: planType,
-        item_id: (testSeriesId || pdfId).toString().substring(0, 40),
+        item_id: (testSeriesId || pdfId || pdfCategoryId).toString().substring(0, 40),
         item_name: (itemDetails.name || itemDetails.title).substring(0, 50)
       }
     };
@@ -267,12 +378,17 @@ router.post('/create-order', authToken, async (req, res) => {
       status: 'pending',
       purchase_date: new Date(),
       expiry_date: new Date(Date.now() + (365 * 24 * 60 * 60 * 1000)), // 1 year from now
-      metadata: JSON.stringify({
+      // Pass a plain object — Sequelize handles JSON-column serialisation. Using
+      // JSON.stringify(...) here can lead to MySQL storing a JSON string value
+      // (instead of a JSON object), which then breaks metadata.pdf_id lookups.
+      metadata: {
         plan_type: planType,
         pdf_id: pdfId || null,
+        pdf_category_uuid: planType === 'pdf_category' ? itemDetails.uuid : null,
+        pdf_category_id: planType === 'pdf_category' ? itemDetails.id : null,
         razorpay_order_id: order.id,
         receipt_id: receiptId
-      })
+      }
     };
 
     await Subscription.create(subscriptionData);
@@ -363,13 +479,35 @@ router.post('/create-order', authToken, async (req, res) => {
 });
 
 // Verify Payment
+/**
+ * Subscription.metadata is a JSON column. Depending on how a row was originally
+ * written (older code used JSON.stringify(...)), the value coming back from
+ * Sequelize may be:
+ *   1. a plain JS object
+ *   2. a JSON string
+ *   3. a doubly-encoded JSON string
+ *   4. null / undefined
+ * Walk through up to two parse layers so every case lands on a plain object.
+ */
+const parseSubscriptionMetadata = (raw) => {
+  if (raw == null) return {};
+  let v = raw;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  return v && typeof v === 'object' ? v : {};
+};
+
 router.post('/verify-payment', authToken, async (req, res) => {
   try {
-    const { 
-      razorpay_order_id, 
-      razorpay_payment_id, 
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
       razorpay_signature,
-      subscription_id 
+      subscription_id
     } = req.body;
     const userId = req.user.uuid;
 
@@ -436,16 +574,36 @@ router.post('/verify-payment', authToken, async (req, res) => {
         });
       }
 
-      // Update subscription status
+      // Build the metadata we want to persist
+      const mergedMetadata = {
+        ...parseSubscriptionMetadata(subscription.metadata),
+        razorpay_payment_id: razorpay_payment_id,
+        payment_status: payment.status,
+        payment_method: payment.method,
+        verified_at: new Date().toISOString()
+      };
+      console.log('💾 Writing merged metadata:', JSON.stringify(mergedMetadata));
+
+      // Update subscription status — pass plain objects so Sequelize handles the JSON serialisation
       await subscription.update({
         status: 'completed',
-        metadata: JSON.stringify({
-          ...JSON.parse(subscription.metadata || '{}'),
-          razorpay_payment_id: razorpay_payment_id,
-          payment_status: payment.status,
-          payment_method: payment.method,
-          verified_at: new Date().toISOString()
-        })
+        metadata: mergedMetadata
+      });
+
+      // Re-read straight from DB so we can SEE what actually got persisted
+      const verifyPersisted = await Subscription.findOne({
+        where: { id: subscription.id },
+        attributes: ['id', 'status', 'metadata', 'test_series_id', 'expiry_date']
+      });
+      console.log('🔍 Persisted subscription:', {
+        id: verifyPersisted?.id,
+        status: verifyPersisted?.status,
+        test_series_id: verifyPersisted?.test_series_id,
+        expiry_date: verifyPersisted?.expiry_date,
+        metadata_typeof: typeof verifyPersisted?.metadata,
+        metadata: typeof verifyPersisted?.metadata === 'string'
+          ? verifyPersisted.metadata
+          : JSON.stringify(verifyPersisted?.metadata)
       });
 
       // Update user subscription status
@@ -480,11 +638,11 @@ router.post('/verify-payment', authToken, async (req, res) => {
       // Update subscription status to failed
       await subscription.update({
         status: 'failed',
-        metadata: JSON.stringify({
-          ...JSON.parse(subscription.metadata || '{}'),
+        metadata: {
+          ...parseSubscriptionMetadata(subscription.metadata),
           error: razorpayError.message,
           failed_at: new Date().toISOString()
-        })
+        }
       });
 
       res.status(400).json({
@@ -587,7 +745,7 @@ router.get('/status/:orderId', authToken, async (req, res) => {
     let paymentDetails = null;
     if (subscription.status === 'completed') {
       try {
-        const metadata = JSON.parse(subscription.metadata || '{}');
+        const metadata = parseSubscriptionMetadata(subscription.metadata);
         if (metadata.razorpay_payment_id) {
           paymentDetails = await razorpayInstance.payments.fetch(metadata.razorpay_payment_id);
         }

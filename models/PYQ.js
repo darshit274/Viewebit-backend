@@ -130,7 +130,7 @@ const PYQ = sequelize.define('PYQ', {
     
     // Admin Information
     created_by: {
-        type: DataTypes.UUID,
+        type: DataTypes.CHAR(36),
         allowNull: true,
         references: {
             model: 'admins',

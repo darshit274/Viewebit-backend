@@ -81,7 +81,7 @@ async function testPaymentFlow() {
     
     const checkoutResponse = await axios.get(checkoutUrl);
     
-    if (checkoutResponse.status === 200 && checkoutResponse.data.includes('MockTale Payment')) {
+    if (checkoutResponse.status === 200 && checkoutResponse.data.includes('Viewebit Payment')) {
       console.log('✅ Checkout page loads successfully');
       console.log(`🔗 Checkout URL: ${checkoutUrl}`);
     } else {

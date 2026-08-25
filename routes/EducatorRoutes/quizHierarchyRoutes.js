@@ -1,0 +1,23 @@
+const express = require('express');
+const router = express.Router();
+
+const quizHierarchyController = require('../../controllers/EducatorController/quizHierarchyController');
+const { educatorAuth } = require('../../utils/EducatorAuth');
+
+router.use(educatorAuth);
+
+router.get('/roots', quizHierarchyController.getRootCategories);
+router.get('/questions/import-template', quizHierarchyController.downloadImportTemplate);
+router.post('/questions/parse-import', quizHierarchyController.parseImportUploadMiddleware, quizHierarchyController.parseImportFile);
+router.get('/categories/:categoryUuid', quizHierarchyController.getCategoryContent);
+router.post('/categories', quizHierarchyController.createCategory);
+router.post('/categories/:parentUuid/subcategories', quizHierarchyController.createCategory);
+router.put('/categories/:categoryUuid', quizHierarchyController.updateCategory);
+router.delete('/categories/:categoryUuid', quizHierarchyController.deleteCategory);
+
+router.post('/categories/:categoryUuid/questions', quizHierarchyController.createQuestion);
+router.post('/categories/:categoryUuid/questions/bulk', quizHierarchyController.bulkCreateQuestions);
+router.put('/questions/:questionUuid', quizHierarchyController.updateQuestion);
+router.delete('/questions/:questionUuid', quizHierarchyController.deleteQuestion);
+
+module.exports = router;

@@ -34,9 +34,19 @@ exports.authToken = async (req, res, next) => {
     const user = await User.findOne({ where: { uuid: userUuid } });
     
     if (!user) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not found. Please login again.' 
+      return res.status(401).json({
+        success: false,
+        message: 'User not found. Please login again.'
+      });
+    }
+
+    // Single-device enforcement: only reject if the DB has an active session set
+    // and it doesn't match this token's session. Tokens without sessionId (pre-feature)
+    // are allowed through so existing users aren't force-logged-out on upgrade.
+    if (user.current_session_id && decoded.sessionId && user.current_session_id !== decoded.sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Your session was ended because you logged in from another device. Please login again.'
       });
     }
 

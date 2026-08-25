@@ -1,8 +1,32 @@
 const express = require('express');
 const router = express.Router();
 const { authToken } = require('../../utils/AuthToken');
-const { User, TestSeries, Subscription, Pdfs } = require('../../models');
+const { User, TestSeries, Subscription, Pdfs, PdfCategory } = require('../../models');
 const { Op } = require('sequelize');
+
+/**
+ * Subscription.metadata is a JSON column. Depending on how it was written
+ * (raw object vs JSON.stringify), Sequelize's MySQL driver may give us back:
+ *   1. a parsed object                  (normal case — write was object)
+ *   2. a JSON string                    (write was JSON.stringify(...))
+ *   3. a doubly-encoded JSON string     (write was JSON.stringify(...) and the
+ *                                        driver wrapped it again)
+ *   4. null / undefined                 (no metadata)
+ *
+ * Walk through up to two parse layers so every case lands on a plain object.
+ */
+const parseSubscriptionMetadata = (raw) => {
+  if (raw == null) return {};
+  let v = raw;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  if (typeof v === 'string') {
+    // double-encoded — one more parse
+    try { v = JSON.parse(v); } catch (_) { return {}; }
+  }
+  return v && typeof v === 'object' ? v : {};
+};
 
 // Simple test endpoint for mobile app connectivity
 router.get('/test', authToken, (req, res) => {
@@ -172,6 +196,136 @@ router.get('/test-series/:seriesId', authToken, async (req, res) => {
   }
 });
 
+// ===== PDF CATEGORY ACCESS (category-level pricing, mirrors test series) =====
+
+/** Walk up the pdf_categories tree to the root — pricing lives on the root only. */
+async function resolveRootPdfCategory(category) {
+  let node = category;
+  while (node && node.parent_category_id !== null) {
+    node = await PdfCategory.findByPk(node.parent_category_id, {
+      attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
+    });
+  }
+  return node;
+}
+
+/** Find the user's active purchase of a root PDF category (metadata.pdf_category_uuid). */
+async function findCategoryPurchase(userId, rootUuid) {
+  const candidates = await Subscription.findAll({
+    where: {
+      user_id: userId,
+      test_series_id: null,
+      status: 'completed',
+      [Op.or]: [
+        { expiry_date: null },
+        { expiry_date: { [Op.gt]: new Date() } }
+      ]
+    },
+    attributes: ['id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata'],
+  });
+  return candidates.find((sub) => {
+    const md = parseSubscriptionMetadata(sub.metadata);
+    return md.pdf_category_uuid === rootUuid;
+  }) || null;
+}
+
+// Check user's subscription status for a PDF category (whole-category purchase)
+router.get('/pdf-category/:categoryUuid', authToken, async (req, res) => {
+  try {
+    const { categoryUuid } = req.params;
+    const userId = req.user.uuid;
+
+    const category = await PdfCategory.findOne({
+      where: { uuid: categoryUuid },
+      attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
+    });
+    if (!category) {
+      return res.status(404).json({ success: false, message: 'PDF category not found' });
+    }
+
+    const root = await resolveRootPdfCategory(category);
+    const basePrice = parseFloat(root?.price || 0);
+    const discountPercentage = parseFloat(root?.discount_percentage || 0);
+    const discountedPrice = discountPercentage > 0
+      ? basePrice * (1 - discountPercentage / 100)
+      : basePrice;
+
+    const categoryInfo = {
+      id: root.id,
+      uuid: root.uuid,
+      name: root.name,
+      pricing_type: root.pricing_type,
+      price: basePrice,
+      discount_percentage: discountPercentage,
+      discounted_price: discountedPrice,
+    };
+
+    // Free → always accessible; restricted → never purchasable
+    if (root.pricing_type === 'free') {
+      return res.json({
+        success: true,
+        data: {
+          hasAccess: true,
+          accessType: 'free',
+          canPurchase: false,
+          showEnrollButton: false,
+          category: categoryInfo,
+        }
+      });
+    }
+    if (root.pricing_type === 'restricted') {
+      return res.json({
+        success: true,
+        data: {
+          hasAccess: false,
+          accessType: 'restricted',
+          canPurchase: false,
+          showEnrollButton: false,
+          category: categoryInfo,
+        }
+      });
+    }
+
+    const purchase = await findCategoryPurchase(userId, root.uuid);
+    if (purchase) {
+      return res.json({
+        success: true,
+        data: {
+          hasAccess: true,
+          accessType: 'purchased',
+          canPurchase: false,
+          showEnrollButton: false,
+          subscription: {
+            id: purchase.id,
+            purchaseDate: purchase.purchase_date,
+            expiryDate: purchase.expiry_date,
+            amountPaid: purchase.amount_paid,
+          },
+          category: categoryInfo,
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        hasAccess: false,
+        accessType: 'none',
+        canPurchase: true,
+        showEnrollButton: true,
+        category: categoryInfo,
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error checking PDF category access:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check PDF category access',
+      error: error.message
+    });
+  }
+});
+
 // Check user's subscription status for a PDF
 router.get('/pdf/:pdfId', authToken, async (req, res) => {
   try {
@@ -183,7 +337,7 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
     // Get PDF details
     const pdf = await Pdfs.findOne({
       where: { id: pdfId },
-      attributes: ['id', 'title', 'access_level', 'file_path']
+      attributes: ['id', 'title', 'access_level', 'file_path', 'category_id']
     });
 
     if (!pdf) {
@@ -233,18 +387,15 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
       amount_paid: sub.amount_paid
     })));
 
-    // Try different approaches to find the subscription
-    let pdfSubscription = null;
-
-    // Method 1: Direct string search in metadata (most reliable)
-    pdfSubscription = await Subscription.findOne({
+    // PDF purchases have test_series_id = NULL and metadata.pdf_id = <pdfId>.
+    // We deliberately do NOT filter by `metadata` here because JSON-column
+    // operators (Op.not: null, Op.like) behave inconsistently across MySQL
+    // versions; the JS filter below handles every shape.
+    const allCompletedPDFSubscriptions = await Subscription.findAll({
       where: {
         user_id: userId,
         test_series_id: null,
         status: 'completed',
-        metadata: {
-          [Op.like]: `%"pdf_id":"${pdfId}"%`
-        },
         [Op.or]: [
           { expiry_date: null },
           { expiry_date: { [Op.gt]: new Date() } }
@@ -253,45 +404,22 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
       attributes: ['id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata']
     });
 
-    // Method 2: If first method fails, search with JSON-based approach
-    if (!pdfSubscription) {
-      console.log('🔄 First method failed, trying JSON search approach...');
+    console.log('🔍 Candidate PDF subscriptions:', allCompletedPDFSubscriptions.length);
+    // Dump exact shape of metadata for every candidate so we can see what we got
+    allCompletedPDFSubscriptions.forEach((sub) => {
+      console.log(`  sub ${sub.id}: metadata typeof=${typeof sub.metadata}`,
+        typeof sub.metadata === 'string'
+          ? `value="${sub.metadata.substring(0, 200)}${sub.metadata.length > 200 ? '...' : ''}"`
+          : `value=${JSON.stringify(sub.metadata)}`);
+    });
 
-      const allCompletedPDFSubscriptions = await Subscription.findAll({
-        where: {
-          user_id: userId,
-          test_series_id: null,
-          status: 'completed',
-          metadata: { [Op.not]: null },
-          [Op.or]: [
-            { expiry_date: null },
-            { expiry_date: { [Op.gt]: new Date() } }
-          ]
-        },
-        attributes: ['id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata']
-      });
-
-      console.log('🔍 Found completed PDF subscriptions:', allCompletedPDFSubscriptions.length);
-
-      // Filter in JavaScript to find matching PDF
-      pdfSubscription = allCompletedPDFSubscriptions.find(sub => {
-        try {
-          if (sub.metadata) {
-            const metadata = JSON.parse(sub.metadata);
-            const matches = metadata.pdf_id === pdfId;
-            console.log(`🎯 Checking subscription ${sub.id}:`, {
-              metadata_pdf_id: metadata.pdf_id,
-              target_pdf_id: pdfId,
-              matches
-            });
-            return matches;
-          }
-        } catch (error) {
-          console.log('❌ Failed to parse metadata for subscription:', sub.id);
-        }
-        return false;
-      });
-    }
+    const pdfSubscription = allCompletedPDFSubscriptions.find((sub) => {
+      const metadata = parseSubscriptionMetadata(sub.metadata);
+      const storedPdfId = metadata && metadata.pdf_id;
+      const matches = storedPdfId === pdfId;
+      console.log(`  → sub ${sub.id}: parsed pdf_id=${storedPdfId}, target=${pdfId}, match=${matches}`);
+      return matches;
+    });
 
     console.log('🎯 PDF subscription query result:', pdfSubscription ? {
       id: pdfSubscription.id,
@@ -321,6 +449,51 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
           }
         }
       });
+    }
+
+    // No individual purchase — check whether the user bought the whole
+    // category this PDF lives in (category-level pricing flow).
+    if (pdf.category_id) {
+      const pdfCategory = await PdfCategory.findByPk(pdf.category_id, {
+        attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
+      });
+      if (pdfCategory) {
+        const root = await resolveRootPdfCategory(pdfCategory);
+        if (root) {
+          if (root.pricing_type === 'free') {
+            return res.json({
+              success: true,
+              data: {
+                hasAccess: true,
+                accessType: 'free',
+                canPurchase: false,
+                showEnrollButton: false,
+                pdf: { id: pdf.id, title: pdf.title, access_level: pdf.access_level }
+              }
+            });
+          }
+          const categoryPurchase = await findCategoryPurchase(userId, root.uuid);
+          if (categoryPurchase) {
+            console.log('✅ User has purchased the parent PDF category:', root.uuid);
+            return res.json({
+              success: true,
+              data: {
+                hasAccess: true,
+                accessType: 'purchased',
+                canPurchase: false,
+                showEnrollButton: false,
+                subscription: {
+                  id: categoryPurchase.id,
+                  purchaseDate: categoryPurchase.purchase_date,
+                  expiryDate: categoryPurchase.expiry_date,
+                  amountPaid: categoryPurchase.amount_paid,
+                },
+                pdf: { id: pdf.id, title: pdf.title, access_level: pdf.access_level }
+              }
+            });
+          }
+        }
+      }
     }
 
     console.log('🚫 User has not purchased this PDF');
@@ -368,7 +541,7 @@ router.get('/my-subscriptions', authToken, async (req, res) => {
         as: 'testSeries',
         attributes: ['id', 'uuid', 'name', 'description']
       }],
-      attributes: ['id', 'test_series_id', 'purchase_date', 'expiry_date', 'amount_paid'],
+      attributes: ['id', 'test_series_id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata'],
       order: [['purchase_date', 'DESC']]
     });
 

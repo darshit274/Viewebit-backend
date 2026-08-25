@@ -39,11 +39,11 @@ class TestSeriesController {
         where,
         limit: parseInt(limit),
         offset: parseInt(offset),
-        order: [['created_at', 'DESC']],
+        order: [['display_order', 'ASC'], ['created_at', 'DESC']],
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
           'is_active', 'pricing_type', 'price', 'currency',
-          'discount_percentage', 'is_featured',
+          'discount_percentage', 'is_featured', 'display_order',
           'created_at', 'updated_at'
         ]
       });
@@ -264,12 +264,12 @@ class TestSeriesController {
       const limit = parseInt(req.query.limit) || 6;
       
       const series = await TestSeries.findAll({
-        where: { 
+        where: {
           is_active: true,
-          is_featured: true 
+          is_featured: true
         },
         limit: limit,
-        order: [['created_at', 'DESC']],
+        order: [['display_order', 'ASC'], ['created_at', 'DESC']],
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
           'is_active', 'pricing_type', 'price', 'currency',
@@ -349,7 +349,7 @@ class TestSeriesController {
       }
 
       // Set up sorting
-      let order = [['created_at', 'DESC']]; // default newest
+      let order = [['display_order', 'ASC'], ['created_at', 'DESC']]; // default by admin-set order
       switch (sort) {
         case 'oldest':
           order = [['created_at', 'ASC']];
@@ -490,7 +490,7 @@ class TestSeriesController {
       }
 
       // Set up sorting
-      let order = [['created_at', 'DESC']]; // default newest
+      let order = [['display_order', 'ASC'], ['created_at', 'DESC']]; // default by admin-set order
       switch (sort) {
         case 'oldest':
           order = [['created_at', 'ASC']];
@@ -1024,7 +1024,7 @@ class TestSeriesController {
         where,
         limit: parseInt(limit),
         offset: parseInt(offset),
-        order: [['created_at', 'DESC']],
+        order: [['display_order', 'ASC'], ['created_at', 'DESC']],
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
           'is_active', 'pricing_type', 'price', 'currency',

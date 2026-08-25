@@ -7,6 +7,7 @@ const pdfController = require('../../controllers/AdminController/pdfController')
 const examTypesController = require('../../controllers/AdminController/examTypesController');
 const categoriesController = require('../../controllers/AdminController/categoriesController');
 const notificationController = require('../../controllers/AdminController/notificationController');
+const settingsController = require('../../controllers/AdminController/settingsController');
 const { adminAuth, requireRole } = require('../../utils/AdminAuth');
 
 // Public routes (no authentication required)
@@ -19,11 +20,23 @@ router.post('/logout', adminAuth, adminController.logout);
 router.get('/profile', adminAuth, adminController.getProfile);
 router.get('/dashboard/stats', adminAuth, adminController.getDashboardStats);
 
+// Settings routes
+router.get('/settings', adminAuth, settingsController.getSettings);
+router.put('/settings', adminAuth, settingsController.updateSettings);
+router.put('/settings/:section', adminAuth, settingsController.updateSettings);
+router.post('/settings/avatar', adminAuth, settingsController.uploadAvatar.single('avatar'), settingsController.updateAvatar);
+
 // Analytics routes
 router.get('/analytics/registrations', adminAuth, adminController.getRegistrationAnalytics);
 router.get('/analytics/test-attempts', adminAuth, adminController.getTestAttemptAnalytics);
 router.get('/analytics/categories', adminAuth, adminController.getCategoryAnalytics);
 router.get('/analytics/recent-activity', adminAuth, adminController.getRecentActivity);
+router.get('/analytics/test-series-attempts', adminAuth, adminController.getTestSeriesAttemptAnalytics);
+
+// Test attempts list — who is taking which test (for admin follow-up on paid packages)
+router.get('/test-attempts', adminAuth, adminController.getTestAttempts);
+// Full attempt history for one student (used by the "View" button on the Test Attempts page)
+router.get('/users/:uuid/test-attempts', adminAuth, adminController.getStudentTestAttemptsForAdmin);
 
 // Student management routes (alias for users)
 router.get('/students', adminAuth, adminController.getStudents);
@@ -42,6 +55,7 @@ router.delete('/users/:id', adminAuth, adminController.deleteStudent);
 router.patch('/users/:id/toggle-status', adminAuth, adminController.toggleUserStatus);
 router.patch('/users/:id/verify', adminAuth, adminController.verifyUser);
 router.patch('/users/:id/toggle-premium', adminAuth, adminController.toggleUserPremium);
+router.patch('/users/:id/reset-device', adminAuth, adminController.resetUserDevice);
 
 
 // Questions management routes
@@ -121,9 +135,17 @@ router.get('/subscriptions/:id', adminAuth, subscriptionController.getSubscripti
 router.patch('/subscriptions/:id/status', adminAuth, subscriptionController.updateSubscriptionStatus);
 router.post('/subscriptions/manual', adminAuth, subscriptionController.createManualSubscription);
 
+// Reports export routes (admissions/enrollments CSV; revenue export reuses /subscriptions/export above)
+const reportsExportController = require('../../controllers/AdminController/reportsExportController');
+router.get('/reports/enrollments/export', adminAuth, reportsExportController.exportEnrollments);
+
 // PDF Upload management routes
 const pdfUploadRoutes = require('./pdfUploadRoutes');
 router.use('/pdf', pdfUploadRoutes);
+
+// PDF Hierarchy (categories with sub-categories tree) — admin endpoints
+const pdfHierarchyRoutes = require('./pdfHierarchyRoutes');
+router.use('/pdf-hierarchy', pdfHierarchyRoutes);
 
 // PYQ management routes
 const pyqRoutes = require('./pyqRoutes');
@@ -137,7 +159,35 @@ router.use('/translations', translationRoutes);
 const testManagementRoutes = require('../testManagementRoutes');
 router.use('/test-management', testManagementRoutes);
 
+// Institution / Branch / Department management routes
+const institutionRoutes = require('./institutionRoutes');
+router.use('/institutions', institutionRoutes);
 
+// Course management routes (view all courses + set price for coaching-center institutions)
+const courseManagementRoutes = require('./courseManagementRoutes');
+router.use('/courses', courseManagementRoutes);
+
+const branchRoutes = require('./branchRoutes');
+router.use('/branches', branchRoutes);
+
+const departmentRoutes = require('./departmentRoutes');
+router.use('/departments', departmentRoutes);
+
+// Roles & Permissions management routes
+const roleRoutes = require('./roleRoutes');
+router.use('/roles', roleRoutes);
+
+// Educator account management routes (admin side)
+const educatorManagementRoutes = require('./educatorManagementRoutes');
+router.use('/educators', educatorManagementRoutes);
+
+// Admissions & Enrollments routes
+const admissionsRoutes = require('./admissionsRoutes');
+router.use('/admissions', admissionsRoutes);
+
+// GDPR data-subject-rights routes (admin-mediated export / anonymize)
+const gdprRoutes = require('./gdprRoutes');
+router.use('/gdpr', gdprRoutes);
 
 // Admin management routes (super admin only)
 router.post('/create', adminAuth, requireRole(['super_admin']), adminController.createAdmin);

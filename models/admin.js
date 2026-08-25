@@ -6,7 +6,18 @@ const {
 module.exports = (sequelize, DataTypes) => {
   class Admin extends Model {
     static associate(models) {
-      // Define associations here if needed
+      if (models.Institution) {
+        Admin.belongsTo(models.Institution, { foreignKey: 'institution_id', as: 'institution' });
+      }
+      if (models.Branch) {
+        Admin.belongsTo(models.Branch, { foreignKey: 'branch_id', as: 'branch' });
+      }
+      if (models.Department) {
+        Admin.belongsTo(models.Department, { foreignKey: 'department_id', as: 'department' });
+      }
+      if (models.AdminSetting) {
+        Admin.hasOne(models.AdminSetting, { foreignKey: 'admin_id', as: 'settings' });
+      }
     }
   }
 
@@ -15,6 +26,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true
+    },
+    institution_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    branch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    department_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
     },
     name: {
       type: DataTypes.STRING,
@@ -33,7 +56,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     role: {
-      type: DataTypes.ENUM('super_admin', 'admin', 'moderator'),
+      type: DataTypes.ENUM('super_admin', 'admin', 'moderator', 'institution_admin', 'branch_admin'),
       defaultValue: 'admin',
       allowNull: false
     },
@@ -62,6 +85,11 @@ module.exports = (sequelize, DataTypes) => {
     otpExpiry: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    current_session_id: {
+      type: DataTypes.STRING(36),
+      allowNull: true,
+      defaultValue: null
     }
   }, {
     sequelize,

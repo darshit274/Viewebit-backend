@@ -15,36 +15,22 @@ module.exports = {
     await queryInterface.sequelize.query('SET @count = 0;');
     await queryInterface.sequelize.query('UPDATE users SET id = @count:= @count + 1 ORDER BY created_at;');
 
-    // Now make id NOT NULL
-    await queryInterface.changeColumn('users', 'id', {
-      type: Sequelize.INTEGER,
-      allowNull: false
-    });
+    // Make id NOT NULL, AUTO_INCREMENT, and uniquely indexed in one statement (MySQL requires
+    // an AUTO_INCREMENT column to already be a key as part of the same ALTER). Using a native
+    // AUTO_INCREMENT instead of a trigger avoids needing SUPER privilege / binlog trust on
+    // managed MySQL, and avoids the race condition in the old trigger's SELECT MAX(id)+1.
+    await queryInterface.sequelize.query(
+      'ALTER TABLE users MODIFY id INT NOT NULL AUTO_INCREMENT, ADD UNIQUE INDEX idx_users_id (id)'
+    );
 
-    // Add unique index on id
-    await queryInterface.addIndex('users', ['id'], {
-      name: 'idx_users_id',
-      unique: true
-    });
-
-    // Create trigger to auto-populate id for new users
-    await queryInterface.sequelize.query(`
-      CREATE TRIGGER before_user_insert
-      BEFORE INSERT ON users
-      FOR EACH ROW
-      BEGIN
-        IF NEW.id IS NULL THEN
-          SET NEW.id = (SELECT IFNULL(MAX(id), 0) + 1 FROM users);
-        END IF;
-      END;
-    `);
+    // Make sure future auto-generated ids continue after the highest value just backfilled.
+    const [rows] = await queryInterface.sequelize.query('SELECT IFNULL(MAX(id), 0) AS maxId FROM users');
+    const nextId = Number(rows[0].maxId) + 1;
+    await queryInterface.sequelize.query(`ALTER TABLE users AUTO_INCREMENT = ${nextId}`);
   },
 
   async down(queryInterface, Sequelize) {
-    // Drop trigger
-    await queryInterface.sequelize.query('DROP TRIGGER IF EXISTS before_user_insert');
-
-    // Remove index
+    // Remove index (dropping the column implicitly drops AUTO_INCREMENT with it)
     await queryInterface.removeIndex('users', 'idx_users_id');
 
     // Remove id column

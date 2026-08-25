@@ -40,7 +40,7 @@ module.exports = {
         allowNull: true
       },
       viewed_by: {
-        type: Sequelize.CHAR(36),
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: 'admins',
@@ -54,7 +54,7 @@ module.exports = {
         allowNull: true
       },
       solved_by: {
-        type: Sequelize.CHAR(36),
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: 'admins',

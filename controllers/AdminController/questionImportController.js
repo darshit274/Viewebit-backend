@@ -1,3 +1,9 @@
+// NOTE: This controller is NOT currently mounted/reachable from any live
+// endpoint — its route file (`routes/AdminRoutes/questionImportRoutes.js`) is
+// never required/mounted by the app (confirmed via repo-wide grep). The live
+// Admin "Import Questions" feature is implemented separately in
+// `controllers/AdminController/questionsController.js`. Do not assume this
+// file and that controller share validation/behavior — they don't.
 const { QuestionImport, Question, Category, Admin, TestSeries } = require('../../models');
 const XLSX = require('xlsx');
 const csv = require('csv-parser');
@@ -5,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const ErrorHandler = require('../../utils/default/errorHandler');
+const { TEMPLATE_HEADERS, buildSampleRows, parseAndValidateFile } = require('../../utils/questionImportParser');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -48,24 +55,6 @@ const upload = multer({
   }
 });
 
-// Template structure for questions
-const TEMPLATE_HEADERS = {
-  'Question Text (English)': 'question_text',
-  'Question Text (Gujarati)': 'question_text_gujarati',
-  'Option A (English)': 'option_a',
-  'Option B (English)': 'option_b', 
-  'Option C (English)': 'option_c',
-  'Option D (English)': 'option_d',
-  'Option A (Gujarati)': 'option_a_gujarati',
-  'Option B (Gujarati)': 'option_b_gujarati',
-  'Option C (Gujarati)': 'option_c_gujarati',
-  'Option D (Gujarati)': 'option_d_gujarati',
-  'Correct Answer': 'correct_answer',
-  'Explanation (English)': 'explanation',
-  'Explanation (Gujarati)': 'explanation_gujarati',
-  'Marks': 'marks'
-};
-
 class QuestionImportController {
   // Download template file
   async downloadTemplate(req, res, next) {
@@ -77,40 +66,7 @@ class QuestionImportController {
       }
 
       // Create sample data
-      const sampleData = [
-        {
-          'Question Text (English)': 'What is the capital of Gujarat?',
-          'Question Text (Gujarati)': 'ગુજરાતની રાજધાની શું છે?',
-          'Option A (English)': 'Ahmedabad',
-          'Option B (English)': 'Gandhinagar',
-          'Option C (English)': 'Surat', 
-          'Option D (English)': 'Rajkot',
-          'Option A (Gujarati)': 'અમદાવાદ',
-          'Option B (Gujarati)': 'ગાંધીનગર',
-          'Option C (Gujarati)': 'સુરત',
-          'Option D (Gujarati)': 'રાજકોટ',
-          'Correct Answer': 'B',
-          'Explanation (English)': 'Gandhinagar is the capital city of Gujarat state in India.',
-          'Explanation (Gujarati)': 'ગાંધીનગર એ ભારતના ગુજરાત રાજ્યની રાજધાની છે.',
-          'Marks': 1
-        },
-        {
-          'Question Text (English)': 'Which river flows through Ahmedabad?',
-          'Question Text (Gujarati)': 'કઈ નદી અમદાવાદમાંથી વહે છે?',
-          'Option A (English)': 'Narmada',
-          'Option B (English)': 'Sabarmati',
-          'Option C (English)': 'Tapi',
-          'Option D (English)': 'Mahi',
-          'Option A (Gujarati)': 'નર્મદા',
-          'Option B (Gujarati)': 'સાબરમતી',
-          'Option C (Gujarati)': 'તાપી',
-          'Option D (Gujarati)': 'માહી',
-          'Correct Answer': 'B',
-          'Explanation (English)': 'The Sabarmati River flows through Ahmedabad city.',
-          'Explanation (Gujarati)': 'સાબરમતી નદી અમદાવાદ શહેરમાંથી વહે છે.',
-          'Marks': 1
-        }
-      ];
+      const sampleData = buildSampleRows();
 
       if (format === 'excel') {
         // Create Excel file
@@ -241,8 +197,8 @@ class QuestionImportController {
       // Update status to validating
       await importRecord.update({ import_status: 'validating' });
 
-      const validationResult = await this.parseAndValidateFile(filePath, fileType);
-      
+      const validationResult = await parseAndValidateFile(filePath, fileType);
+
       // Update import record with validation results
       await importRecord.update({
         import_status: validationResult.isValid ? 'validated' : 'failed',
@@ -259,213 +215,6 @@ class QuestionImportController {
         });
       }
     }
-  }
-
-  // Parse and validate file contents
-  async parseAndValidateFile(filePath, fileType) {
-    const errors = [];
-    const questions = [];
-    let totalRows = 0;
-
-    try {
-      if (fileType === 'excel') {
-        // Parse Excel file
-        const workbook = XLSX.readFile(filePath);
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        totalRows = jsonData.length;
-        
-        // Validate each row
-        jsonData.forEach((row, index) => {
-          const rowNumber = index + 2; // +2 because index starts at 0 and we skip header
-          const questionOrder = index + 1; // +1 because we want order to start from 1
-          const validationResult = this.validateQuestionRow(row, rowNumber, questionOrder);
-
-          if (validationResult.errors.length > 0) {
-            errors.push(...validationResult.errors);
-          } else {
-            questions.push(validationResult.question);
-          }
-        });
-        
-      } else if (fileType === 'csv') {
-        // Parse CSV file
-        return new Promise((resolve, reject) => {
-          const csvData = [];
-          let rowCount = 0;
-          
-          fs.createReadStream(filePath)
-            .pipe(csv())
-            .on('data', (row) => {
-              csvData.push(row);
-              rowCount++;
-            })
-            .on('end', () => {
-              totalRows = rowCount;
-              
-              // Validate each row
-              csvData.forEach((row, index) => {
-                const rowNumber = index + 2;
-                const questionOrder = index + 1; // +1 because we want order to start from 1
-                const validationResult = this.validateQuestionRow(row, rowNumber, questionOrder);
-
-                if (validationResult.errors.length > 0) {
-                  errors.push(...validationResult.errors);
-                } else {
-                  questions.push(validationResult.question);
-                }
-              });
-              
-              resolve({
-                isValid: errors.length === 0,
-                totalRows,
-                errors,
-                validQuestions: questions
-              });
-            })
-            .on('error', (error) => {
-              reject(error);
-            });
-        });
-      }
-
-      return {
-        isValid: errors.length === 0,
-        totalRows,
-        errors,
-        validQuestions: questions
-      };
-
-    } catch (error) {
-      console.error('File parsing error:', error);
-      throw new Error('Failed to parse file: ' + error.message);
-    }
-  }
-
-  // Validate individual question row
-  validateQuestionRow(row, rowNumber, questionOrder = null) {
-    const errors = [];
-    const question = {};
-
-    // Check if we have English or Gujarati content (or both)
-    const hasEnglishContent = row['Question Text (English)'] && row['Question Text (English)'].toString().trim() !== '';
-    const hasGujaratiContent = row['Question Text (Gujarati)'] && row['Question Text (Gujarati)'].toString().trim() !== '';
-
-    // Must have at least one language
-    if (!hasEnglishContent && !hasGujaratiContent) {
-      errors.push({
-        row: rowNumber,
-        field: 'Question Text',
-        error: 'Question text is required in at least one language (English or Gujarati)'
-      });
-      return { errors, question };
-    }
-
-    // Validate English fields if English content exists
-    if (hasEnglishContent) {
-      const englishRequiredFields = [
-        'Question Text (English)',
-        'Option A (English)',
-        'Option B (English)',
-        'Option C (English)',
-        'Option D (English)'
-      ];
-
-      englishRequiredFields.forEach(field => {
-        if (!row[field] || row[field].toString().trim() === '') {
-          errors.push({
-            row: rowNumber,
-            field: field,
-            error: `${field} is required when providing English content`
-          });
-        }
-      });
-    }
-
-    // Validate Gujarati fields if Gujarati content exists
-    if (hasGujaratiContent) {
-      const gujaratiRequiredFields = [
-        'Question Text (Gujarati)',
-        'Option A (Gujarati)',
-        'Option B (Gujarati)',
-        'Option C (Gujarati)',
-        'Option D (Gujarati)'
-      ];
-
-      gujaratiRequiredFields.forEach(field => {
-        if (!row[field] || row[field].toString().trim() === '') {
-          errors.push({
-            row: rowNumber,
-            field: field,
-            error: `${field} is required when providing Gujarati content`
-          });
-        }
-      });
-    }
-
-    // Correct Answer is always required
-    if (!row['Correct Answer'] || row['Correct Answer'].toString().trim() === '') {
-      errors.push({
-        row: rowNumber,
-        field: 'Correct Answer',
-        error: 'Correct Answer is required'
-      });
-    }
-
-    // Validate correct answer format
-    if (row['Correct Answer']) {
-      const correctAnswer = row['Correct Answer'].toString().toUpperCase().trim();
-      if (!['A', 'B', 'C', 'D'].includes(correctAnswer)) {
-        errors.push({
-          row: rowNumber,
-          field: 'Correct Answer',
-          error: 'Correct Answer must be A, B, C, or D'
-        });
-      }
-    }
-
-    // Validate marks (must be positive integer)
-    const marks = parseInt(row['Marks'] || 1);
-    if (isNaN(marks) || marks < 1 || marks > 10) {
-      errors.push({
-        row: rowNumber,
-        field: 'Marks',
-        error: 'Marks must be a number between 1 and 10'
-      });
-    }
-
-    // If no errors, create question object
-    if (errors.length === 0) {
-      // Handle English content (only if English content exists)
-      question.question_text = hasEnglishContent ? row['Question Text (English)'].toString().trim() : null;
-      question.option_a = hasEnglishContent ? row['Option A (English)'].toString().trim() : null;
-      question.option_b = hasEnglishContent ? row['Option B (English)'].toString().trim() : null;
-      question.option_c = hasEnglishContent ? row['Option C (English)'].toString().trim() : null;
-      question.option_d = hasEnglishContent ? row['Option D (English)'].toString().trim() : null;
-      question.explanation = (hasEnglishContent && row['Explanation (English)']) ? row['Explanation (English)'].toString().trim() : null;
-
-      // Handle Gujarati content (only if Gujarati content exists)
-      question.question_text_gujarati = hasGujaratiContent ? row['Question Text (Gujarati)'].toString().trim() : null;
-      question.option_a_gujarati = hasGujaratiContent ? row['Option A (Gujarati)'].toString().trim() : null;
-      question.option_b_gujarati = hasGujaratiContent ? row['Option B (Gujarati)'].toString().trim() : null;
-      question.option_c_gujarati = hasGujaratiContent ? row['Option C (Gujarati)'].toString().trim() : null;
-      question.option_d_gujarati = hasGujaratiContent ? row['Option D (Gujarati)'].toString().trim() : null;
-      question.explanation_gujarati = (hasGujaratiContent && row['Explanation (Gujarati)']) ? row['Explanation (Gujarati)'].toString().trim() : null;
-
-      // Common fields
-      question.correct_answer = row['Correct Answer'].toString().toUpperCase().trim();
-      question.marks = marks;
-      question.is_active = true;
-
-      // Preserve order from Excel
-      if (questionOrder !== null) {
-        question.question_order = questionOrder;
-      }
-    }
-
-    return { errors, question };
   }
 
   // Get import status
@@ -511,7 +260,7 @@ class QuestionImportController {
 
       // Re-parse file to get preview data
       const filePath = path.join(__dirname, '../../uploads/question_imports', importRecord.filename);
-      const parseResult = await this.parseAndValidateFile(filePath, importRecord.file_type);
+      const parseResult = await parseAndValidateFile(filePath, importRecord.file_type);
 
       // Return first 5 questions for preview
       const previewQuestions = parseResult.validQuestions.slice(0, 5);
@@ -575,7 +324,7 @@ class QuestionImportController {
       if (!importRecord) return;
 
       const filePath = path.join(__dirname, '../../uploads/question_imports', importRecord.filename);
-      const parseResult = await this.parseAndValidateFile(filePath, importRecord.file_type);
+      const parseResult = await parseAndValidateFile(filePath, importRecord.file_type);
 
       let successCount = 0;
       let failCount = 0;
