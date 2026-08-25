@@ -1,10 +1,14 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Course, CourseModule, Lesson, TestSeries, Category, CourseCategory, Pdfs, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, LiveSession, Institution, sequelize } = require('../../models');
+const { Course, CourseModule, Lesson, TestSeries, Category, CourseCategory, Pdfs, PdfCategory, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, LiveSession, Institution, sequelize } = require('../../models');
 const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+// `fs` above is the promises API (used by the existing thumbnail-upload code below);
+// the course-PDF handler needs the sync API (existsSync/unlinkSync) for cleanup-on-failure paths.
+const fsSync = require('fs');
 const { getOrCreateQuizBank, createChildCategory } = require('../../utils/quizCategoryHelpers');
+const { validatePDFFile, PDF_UPLOAD_MAX_SIZE_MB } = require('../../utils/pdfUpload');
 
 // Configure multer for course featured-image uploads
 const thumbnailStorage = multer.diskStorage({
@@ -80,6 +84,27 @@ async function findOrCreateCourseQuizRoot(course, educator) {
 
     await course.update({ quiz_category_id: root.id });
     return root;
+}
+
+// Lazily creates (once per course, cached on courses.pdf_category_id) a
+// "folder" PDF category scoped to this course, that inline PDF uploads land
+// in — mirroring the existing PDF Library folder/upload mechanics, just
+// without exposing the folder-picker step.
+async function findOrCreateCoursePdfRoot(course, educator) {
+    if (course.pdf_category_id) {
+        const existing = await PdfCategory.findByPk(course.pdf_category_id);
+        if (existing) return existing;
+    }
+
+    const category = await PdfCategory.create({
+        name: `${course.title} — Course PDFs`,
+        description: `Auto-created folder for PDFs uploaded inline from the "${course.title}" course builder.`,
+        node_type: 'unset',
+        educator_id: educator.id
+    });
+
+    await course.update({ pdf_category_id: category.id });
+    return category;
 }
 
 // My Courses ---------------------------------------------------------------
@@ -740,6 +765,58 @@ exports.createCourseQuizCategory = async (req, res, next) => {
     } catch (err) {
         console.error('Create course quiz category error:', err);
         return next(new ErrorHandler('Failed to create quiz', 500));
+    }
+};
+
+// Inline PDF upload from the course builder — creates (or reuses) a
+// course-scoped root PDF folder, then uploads directly into it, mirroring
+// the existing PDF Library folder/upload mechanics.
+exports.uploadCoursePdf = async (req, res, next) => {
+    try {
+        const { courseUuid } = req.params;
+        const { title, description } = req.body;
+
+        if (!req.file) return next(new ErrorHandler('No PDF file provided', 400));
+        if (req.file.mimetype !== 'application/pdf') {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler('Only PDF files are allowed', 400));
+        }
+        if (!validatePDFFile(req.file.path)) {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler('Invalid PDF — file signature check failed', 400));
+        }
+        if (!title || !title.trim()) {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler('Title is required', 400));
+        }
+
+        const course = await Course.findOne({ where: { uuid: courseUuid, educator_id: req.educator.id } });
+        if (!course) {
+            if (fsSync.existsSync(req.file.path)) fsSync.unlinkSync(req.file.path);
+            return next(new ErrorHandler('Course not found or not owned by you', 404));
+        }
+
+        const category = await findOrCreateCoursePdfRoot(course, req.educator);
+
+        const pdf = await Pdfs.create({
+            title: title.trim(),
+            description: description?.trim() || null,
+            category_id: category.id,
+            file_path: req.file.path,
+            original_filename: req.file.originalname,
+            file_size: req.file.size,
+            mime_type: req.file.mimetype,
+            uploaded_by_educator_id: req.educator.id
+        });
+
+        if (category.node_type === 'unset') {
+            await category.update({ node_type: 'pdf_holder' });
+        }
+
+        res.status(201).json({ success: true, data: { id: pdf.id, title: pdf.title } });
+    } catch (err) {
+        console.error('Upload course PDF error:', err);
+        return next(new ErrorHandler('Failed to upload PDF', 500));
     }
 };
 
