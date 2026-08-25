@@ -14,6 +14,7 @@ router.put('/categories/:categoryUuid', quizHierarchyController.updateCategory);
 router.delete('/categories/:categoryUuid', quizHierarchyController.deleteCategory);
 
 router.post('/categories/:categoryUuid/questions', quizHierarchyController.createQuestion);
+router.post('/categories/:categoryUuid/questions/bulk', quizHierarchyController.bulkCreateQuestions);
 router.put('/questions/:questionUuid', quizHierarchyController.updateQuestion);
 router.delete('/questions/:questionUuid', quizHierarchyController.deleteQuestion);
 

@@ -194,6 +194,74 @@ exports.createQuestion = async (req, res, next) => {
     }
 };
 
+exports.bulkCreateQuestions = async (req, res, next) => {
+    const t = await sequelize.transaction();
+    try {
+        const { categoryUuid } = req.params;
+        const { questions } = req.body;
+
+        if (!Array.isArray(questions) || questions.length === 0) {
+            await t.rollback();
+            return next(new ErrorHandler('At least one question is required', 400));
+        }
+
+        const category = await findOwnedCategory(categoryUuid, req.educator.id);
+        if (!category) {
+            await t.rollback();
+            return next(new ErrorHandler('Category not found or not owned by you', 404));
+        }
+        if (category.node_type === 'container') {
+            await t.rollback();
+            return next(new ErrorHandler('Cannot add questions to a category that contains subcategories', 400));
+        }
+
+        for (const [i, q] of questions.entries()) {
+            if (!q.question_text?.trim()) throw new ErrorHandler(`Question ${i + 1}: question text is required`, 400);
+            if (!q.option_a?.trim() || !q.option_b?.trim() || !q.option_c?.trim() || !q.option_d?.trim()) {
+                throw new ErrorHandler(`Question ${i + 1}: all four options are required`, 400);
+            }
+            if (!['A', 'B', 'C', 'D'].includes(q.correct_answer)) {
+                throw new ErrorHandler(`Question ${i + 1}: correct_answer must be A, B, C or D`, 400);
+            }
+        }
+
+        const qMax = await Question.findOne({
+            attributes: [[sequelize.fn('MAX', sequelize.col('display_order')), 'maxOrder']],
+            where: { category_id: category.id },
+            raw: true,
+            transaction: t
+        });
+        let nextOrder = (qMax?.maxOrder || 0) + 1;
+
+        const rows = questions.map((q) => ({
+            category_id: category.id,
+            question_text: q.question_text.trim(),
+            option_a: q.option_a.trim(),
+            option_b: q.option_b.trim(),
+            option_c: q.option_c.trim(),
+            option_d: q.option_d.trim(),
+            correct_answer: q.correct_answer,
+            explanation: q.explanation?.trim() || null,
+            marks: parseInt(q.marks) || 1,
+            display_order: nextOrder++
+        }));
+
+        const created = await Question.bulkCreate(rows, { transaction: t });
+
+        if (category.node_type === 'unset') {
+            await category.update({ node_type: 'question_holder' }, { transaction: t });
+        }
+
+        await t.commit();
+        res.status(201).json({ success: true, data: { created: created.length, questions: created } });
+    } catch (err) {
+        await t.rollback();
+        if (err instanceof ErrorHandler) return next(err);
+        console.error('Bulk create questions error:', err);
+        return next(new ErrorHandler('Failed to add questions', 500));
+    }
+};
+
 exports.updateQuestion = async (req, res, next) => {
     try {
         const question = await Question.findOne({
