@@ -7,6 +7,8 @@ const { educatorAuth } = require('../../utils/EducatorAuth');
 router.use(educatorAuth);
 
 router.get('/roots', quizHierarchyController.getRootCategories);
+router.get('/questions/import-template', quizHierarchyController.downloadImportTemplate);
+router.post('/questions/parse-import', quizHierarchyController.parseImportUploadMiddleware, quizHierarchyController.parseImportFile);
 router.get('/categories/:categoryUuid', quizHierarchyController.getCategoryContent);
 router.post('/categories', quizHierarchyController.createCategory);
 router.post('/categories/:parentUuid/subcategories', quizHierarchyController.createCategory);

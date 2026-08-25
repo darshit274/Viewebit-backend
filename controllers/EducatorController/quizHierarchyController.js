@@ -11,9 +11,32 @@
  * any Course and never shown to students directly; a category only becomes
  * reachable by students once a Lesson/Assignment points at it.
  */
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const XLSX = require('xlsx');
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { Category, Question, sequelize } = require('../../models');
 const { getOrCreateQuizBank, findOwnedCategory, createChildCategory } = require('../../utils/quizCategoryHelpers');
+const { buildSampleRows, parseAndValidateFile } = require('../../utils/questionImportParser');
+
+const importUploadDir = path.join(__dirname, '../../uploads/tmp_question_imports');
+const importUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => {
+            if (!fs.existsSync(importUploadDir)) fs.mkdirSync(importUploadDir, { recursive: true });
+            cb(null, importUploadDir);
+        },
+        filename: (req, file, cb) => cb(null, `import-${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(file.originalname)}`)
+    }),
+    fileFilter: (req, file, cb) => {
+        const allowed = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/csv'];
+        if (allowed.includes(file.mimetype)) return cb(null, true);
+        cb(new Error('Only Excel (.xlsx, .xls) and CSV files are allowed'));
+    },
+    limits: { fileSize: 10 * 1024 * 1024 }
+});
+exports.parseImportUploadMiddleware = importUpload.single('file');
 
 exports.getRootCategories = async (req, res, next) => {
     try {
@@ -303,5 +326,53 @@ exports.deleteQuestion = async (req, res, next) => {
     } catch (err) {
         console.error('Delete educator quiz question error:', err);
         return next(new ErrorHandler('Failed to delete question', 500));
+    }
+};
+
+// Import (Excel/CSV) ----------------------------------------------------------
+
+exports.downloadImportTemplate = async (req, res, next) => {
+    try {
+        const { format = 'excel' } = req.query;
+        if (!['excel', 'csv'].includes(format)) return next(new ErrorHandler('Invalid format. Use excel or csv', 400));
+
+        const sampleData = buildSampleRows();
+
+        if (format === 'excel') {
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(sampleData);
+            XLSX.utils.book_append_sheet(wb, ws, 'Questions');
+            const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', 'attachment; filename=question_import_template.xlsx');
+            return res.send(buffer);
+        }
+
+        const headers = Object.keys(sampleData[0]);
+        const csvContent = [headers.map((h) => `"${h}"`).join(','), ...sampleData.map((row) => headers.map((h) => `"${row[h]}"`).join(','))].join('\n');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=question_import_template.csv');
+        res.send(csvContent);
+    } catch (err) {
+        console.error('Download educator import template error:', err);
+        return next(new ErrorHandler('Failed to generate template', 500));
+    }
+};
+
+exports.parseImportFile = async (req, res, next) => {
+    if (!req.file) return next(new ErrorHandler('No file uploaded', 400));
+    const filePath = req.file.path;
+    try {
+        const fileType = req.file.mimetype.includes('csv') ? 'csv' : 'excel';
+        const result = await parseAndValidateFile(filePath, fileType);
+        res.status(200).json({
+            success: true,
+            data: { totalRows: result.totalRows, validQuestions: result.validQuestions, errors: result.errors }
+        });
+    } catch (err) {
+        console.error('Parse educator import file error:', err);
+        next(new ErrorHandler('Failed to parse file', 500));
+    } finally {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 };
