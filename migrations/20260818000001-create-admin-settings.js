@@ -14,7 +14,7 @@ module.exports = {
         primaryKey: true
       },
       admin_id: {
-        type: Sequelize.CHAR(36),
+        type: Sequelize.UUID,
         allowNull: false,
         unique: true,
         references: {
