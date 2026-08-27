@@ -3,7 +3,7 @@ const { AssessmentLead, Admin } = require('../models');
 const { Op } = require('sequelize');
 const { SECTIONS, LEAD_FIELDS, toPublicSchema } = require('../data/assessmentQuestions');
 const { computeAssessmentResult, MATURITY_LEVELS } = require('../services/assessmentScoringEngine');
-const { sendMail } = require('../utils/verifyEmail');
+const { sendAssessmentResultEmail } = require('../utils/assessmentMailer');
 const { buildAssessmentResultEmail } = require('../utils/emailTemplates/assessmentResultEmail');
 
 const REQUIRED_LEAD_FIELDS = LEAD_FIELDS.filter((f) => f.required).map((f) => f.id);
@@ -89,7 +89,7 @@ exports.submitAssessment = async (req, res, next) => {
 
     try {
       const { subject, htmlContent } = buildAssessmentResultEmail({ firstName: leadInfo.first_name, result });
-      await sendMail({ receiver: leadInfo.work_email, subject, service: null, host: 'smtp.gmail.com', htmlContent });
+      await sendAssessmentResultEmail({ receiver: leadInfo.work_email, subject, htmlContent });
       await lead.update({ email_sent: true, email_sent_at: new Date() });
     } catch (emailErr) {
       console.error('Assessment result email failed to send:', emailErr);
