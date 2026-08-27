@@ -61,5 +61,6 @@ router.get('/admin/leads', adminAuth, validateQueryParams, handleValidationError
 router.get('/admin/leads/stats', adminAuth, assessmentController.getStats);
 router.get('/admin/leads/:id', adminAuth, assessmentController.getLeadById);
 router.patch('/admin/leads/:id/status', adminAuth, validateStatusUpdate, handleValidationErrors, assessmentController.updateLeadStatus);
+router.delete('/admin/leads/:id', adminAuth, assessmentController.deleteLead);
 
 module.exports = router;

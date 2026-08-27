@@ -233,6 +233,24 @@ exports.updateLeadStatus = async (req, res, next) => {
   }
 };
 
+// DELETE /api/assessment/admin/leads/:id (admin)
+// GDPR erasure: permanently removes a respondent's submitted assessment data.
+exports.deleteLead = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const lead = await AssessmentLead.findByPk(id);
+    if (!lead) return next(new ErrorHandler('Assessment lead not found', 404));
+
+    await lead.destroy();
+
+    res.status(200).json({ success: true, message: 'Assessment lead deleted successfully' });
+  } catch (err) {
+    console.error('Delete assessment lead error:', err);
+    return next(new ErrorHandler('Failed to delete assessment lead', 500));
+  }
+};
+
 // GET /api/assessment/admin/leads/stats (admin)
 exports.getStats = async (req, res, next) => {
   try {
