@@ -26,8 +26,11 @@ app.use(cors({
   credentials: false, // Set to false when using origin: '*'
   optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
-// Trust proxy for devtunnels/ngrok
-app.set('trust proxy', true);
+// Trust exactly one hop (nginx in production, or a single devtunnel/ngrok
+// edge in dev). `true` trusts every hop unconditionally, which lets a
+// client spoof X-Forwarded-For to bypass IP-based rate limiting - express-
+// rate-limit v8 refuses to run under that setting for exactly this reason.
+app.set('trust proxy', 1);
 
 // Handle preflight requests explicitly
 app.use((req, res, next) => {
