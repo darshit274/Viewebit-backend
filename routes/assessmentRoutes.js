@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const assessmentController = require('../controllers/AssessmentController');
 const { adminAuth } = require('../utils/AdminAuth');
+const { requireApiKey } = require('../utils/requireApiKey');
 const { body, query, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 
@@ -62,5 +63,8 @@ router.get('/admin/leads/stats', adminAuth, assessmentController.getStats);
 router.get('/admin/leads/:id', adminAuth, assessmentController.getLeadById);
 router.patch('/admin/leads/:id/status', adminAuth, validateStatusUpdate, handleValidationErrors, assessmentController.updateLeadStatus);
 router.delete('/admin/leads/:id', adminAuth, assessmentController.deleteLead);
+
+// CRM backfill puller (machine-to-machine, not an admin session)
+router.get('/leads/export', requireApiKey('LEADS_PULL_API_KEY'), assessmentController.exportLeads);
 
 module.exports = router;

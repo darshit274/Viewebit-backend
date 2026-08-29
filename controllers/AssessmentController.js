@@ -6,6 +6,7 @@ const { computeAssessmentResult, MATURITY_LEVELS } = require('../services/assess
 const { sendAssessmentResultEmail } = require('../utils/assessmentMailer');
 const { buildAssessmentResultEmail } = require('../utils/emailTemplates/assessmentResultEmail');
 const { verifyTurnstileToken } = require('../utils/verifyTurnstile');
+const { mapLeadToWebhookPayload, sendLeadToWebhook } = require('../utils/leadsWebhook');
 
 const REQUIRED_LEAD_FIELDS = LEAD_FIELDS.filter((f) => f.required).map((f) => f.id);
 
@@ -103,6 +104,13 @@ exports.submitAssessment = async (req, res, next) => {
       await lead.update({ email_sent: true, email_sent_at: new Date() });
     } catch (emailErr) {
       console.error('Assessment result email failed to send:', emailErr);
+    }
+
+    try {
+      await sendLeadToWebhook(lead);
+      await lead.update({ crm_synced: true, crm_synced_at: new Date() });
+    } catch (webhookErr) {
+      console.error('CRM webhook failed to send:', webhookErr);
     }
 
     res.status(201).json({
@@ -258,6 +266,52 @@ exports.deleteLead = async (req, res, next) => {
   } catch (err) {
     console.error('Delete assessment lead error:', err);
     return next(new ErrorHandler('Failed to delete assessment lead', 500));
+  }
+};
+
+// GET /api/assessment/leads/export (CRM backfill puller - X-API-Key auth, not adminAuth)
+// Not actively polled yet per the CRM's initial webhook-only rollout - exists so a
+// manual script can backfill anything the webhook ever misses, without another
+// round of setup. Returns the same payload shape as the webhook so the CRM can
+// reuse its webhook-ingestion logic for pulled records too.
+exports.exportLeads = async (req, res, next) => {
+  try {
+    const { since, page = 1, limit = 100 } = req.query;
+
+    const whereClause = {};
+    if (since) {
+      const sinceDate = new Date(since);
+      if (isNaN(sinceDate.getTime())) {
+        return next(new ErrorHandler('Invalid "since" date', 400));
+      }
+      whereClause.completed_at = { [Op.gte]: sinceDate };
+    }
+
+    const cappedLimit = Math.min(parseInt(limit) || 100, 500);
+    const offset = (parseInt(page) - 1) * cappedLimit;
+
+    const { count, rows: leads } = await AssessmentLead.findAndCountAll({
+      where: whereClause,
+      order: [['completed_at', 'ASC']],
+      limit: cappedLimit,
+      offset
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        leads: leads.map(mapLeadToWebhookPayload),
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(count / cappedLimit),
+          totalItems: count,
+          itemsPerPage: cappedLimit
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Export assessment leads error:', err);
+    return next(new ErrorHandler('Failed to export assessment leads', 500));
   }
 };
 
