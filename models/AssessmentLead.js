@@ -83,6 +83,8 @@ module.exports = (sequelize) => {
     contacted_by: { type: DataTypes.INTEGER, allowNull: true },
     email_sent: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     email_sent_at: { type: DataTypes.DATE, allowNull: true },
+    crm_synced: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    crm_synced_at: { type: DataTypes.DATE, allowNull: true },
     ip_address: { type: DataTypes.STRING(45), allowNull: true },
     user_agent: { type: DataTypes.TEXT, allowNull: true },
     completed_at: { type: DataTypes.DATE, allowNull: false }
