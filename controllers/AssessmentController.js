@@ -5,6 +5,7 @@ const { SECTIONS, LEAD_FIELDS, toPublicSchema } = require('../data/assessmentQue
 const { computeAssessmentResult, MATURITY_LEVELS } = require('../services/assessmentScoringEngine');
 const { sendAssessmentResultEmail } = require('../utils/assessmentMailer');
 const { buildAssessmentResultEmail } = require('../utils/emailTemplates/assessmentResultEmail');
+const { verifyTurnstileToken } = require('../utils/verifyTurnstile');
 
 const REQUIRED_LEAD_FIELDS = LEAD_FIELDS.filter((f) => f.required).map((f) => f.id);
 
@@ -34,10 +35,19 @@ exports.getQuestions = async (req, res, next) => {
 // POST /api/assessment/submit (public)
 exports.submitAssessment = async (req, res, next) => {
   try {
-    const { leadInfo = {}, answers = {} } = req.body;
+    const { leadInfo = {}, answers = {}, turnstileToken } = req.body;
 
     if (req.body.website) {
       return res.status(400).json({ success: false, message: 'Invalid submission' });
+    }
+
+    const turnstileResult = await verifyTurnstileToken(turnstileToken, req.ip);
+    if (!turnstileResult.success) {
+      console.warn('Turnstile verification failed:', turnstileResult.errorCodes);
+      return res.status(400).json({
+        success: false,
+        message: 'Verification failed. Please refresh the page and try again.'
+      });
     }
 
     const missingLeadFields = REQUIRED_LEAD_FIELDS.filter((field) => !leadInfo[field]);
