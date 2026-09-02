@@ -53,11 +53,18 @@ const handleValidationErrors = (req, res, next) => {
   next();
 };
 
+const validateConfigUpdate = [
+  body('intro_video_url').optional({ checkFalsy: true }).trim().isURL().withMessage('Please provide a valid URL')
+];
+
 // Public routes
 router.get('/questions', assessmentController.getQuestions);
+router.get('/config', assessmentController.getConfig);
 router.post('/submit', submitAssessmentLimiter, validateSubmission, handleValidationErrors, assessmentController.submitAssessment);
 
 // Admin routes
+router.get('/admin/config', adminAuth, assessmentController.getAdminConfig);
+router.put('/admin/config', adminAuth, validateConfigUpdate, handleValidationErrors, assessmentController.updateAdminConfig);
 router.get('/admin/leads', adminAuth, validateQueryParams, handleValidationErrors, assessmentController.getAllLeads);
 router.get('/admin/leads/stats', adminAuth, assessmentController.getStats);
 router.get('/admin/leads/:id', adminAuth, assessmentController.getLeadById);

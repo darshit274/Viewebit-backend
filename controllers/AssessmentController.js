@@ -1,5 +1,5 @@
 const ErrorHandler = require('../utils/default/errorHandler');
-const { AssessmentLead, Admin } = require('../models');
+const { AssessmentLead, AssessmentSetting, Admin } = require('../models');
 const { Op } = require('sequelize');
 const { SECTIONS, LEAD_FIELDS, toPublicSchema } = require('../data/assessmentQuestions');
 const { computeAssessmentResult, MATURITY_LEVELS } = require('../services/assessmentScoringEngine');
@@ -7,6 +7,43 @@ const { sendAssessmentResultEmail } = require('../utils/assessmentMailer');
 const { buildAssessmentResultEmail } = require('../utils/emailTemplates/assessmentResultEmail');
 const { verifyTurnstileToken } = require('../utils/verifyTurnstile');
 const { mapLeadToWebhookPayload, sendLeadToWebhook } = require('../utils/leadsWebhook');
+
+// Accepts a youtube.com/watch, youtu.be, or already-embed URL and returns the
+// canonical https://www.youtube.com/embed/<id> form, or null if unparseable.
+function toYoutubeEmbedUrl(rawUrl) {
+  if (!rawUrl) return null;
+  try {
+    const url = new URL(rawUrl.trim());
+    const host = url.hostname.replace(/^www\./, '');
+    let videoId = null;
+
+    if (host === 'youtu.be') {
+      videoId = url.pathname.slice(1);
+    } else if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (url.pathname === '/watch') {
+        videoId = url.searchParams.get('v');
+      } else if (url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/embed/')[1];
+      } else if (url.pathname.startsWith('/shorts/')) {
+        videoId = url.pathname.split('/shorts/')[1];
+      }
+    }
+
+    videoId = videoId ? videoId.split('/')[0].split('?')[0] : null;
+    if (!videoId) return null;
+    return `https://www.youtube.com/embed/${videoId}`;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function findOrCreateAssessmentSetting() {
+  const [settings] = await AssessmentSetting.findOrCreate({
+    where: { id: 1 },
+    defaults: { id: 1 }
+  });
+  return settings;
+}
 
 const REQUIRED_LEAD_FIELDS = LEAD_FIELDS.filter((f) => f.required).map((f) => f.id);
 
@@ -30,6 +67,60 @@ exports.getQuestions = async (req, res, next) => {
   } catch (err) {
     console.error('Get assessment questions error:', err);
     return next(new ErrorHandler('Failed to load assessment questions', 500));
+  }
+};
+
+// GET /api/assessment/config (public)
+exports.getConfig = async (req, res, next) => {
+  try {
+    const settings = await findOrCreateAssessmentSetting();
+    res.status(200).json({
+      success: true,
+      data: { intro_video_url: toYoutubeEmbedUrl(settings.intro_video_url) }
+    });
+  } catch (err) {
+    console.error('Get assessment config error:', err);
+    return next(new ErrorHandler('Failed to load assessment config', 500));
+  }
+};
+
+// GET /api/assessment/admin/config (admin)
+exports.getAdminConfig = async (req, res, next) => {
+  try {
+    const settings = await findOrCreateAssessmentSetting();
+    res.status(200).json({
+      success: true,
+      data: { intro_video_url: settings.intro_video_url || '' }
+    });
+  } catch (err) {
+    console.error('Get admin assessment config error:', err);
+    return next(new ErrorHandler('Failed to load assessment config', 500));
+  }
+};
+
+// PUT /api/assessment/admin/config (admin)
+exports.updateAdminConfig = async (req, res, next) => {
+  try {
+    const rawUrl = (req.body.intro_video_url || '').trim();
+
+    if (rawUrl && !toYoutubeEmbedUrl(rawUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid YouTube video URL'
+      });
+    }
+
+    const settings = await findOrCreateAssessmentSetting();
+    await settings.update({ intro_video_url: rawUrl || null });
+
+    res.status(200).json({
+      success: true,
+      message: 'Assessment settings updated successfully',
+      data: { intro_video_url: settings.intro_video_url || '' }
+    });
+  } catch (err) {
+    console.error('Update assessment config error:', err);
+    return next(new ErrorHandler('Failed to update assessment config', 500));
   }
 };
 
