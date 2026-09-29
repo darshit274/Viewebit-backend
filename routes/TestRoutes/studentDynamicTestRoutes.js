@@ -8,6 +8,7 @@ const {
   UserAnswer,
   User,
   Subscription,
+  Course,
   sequelize,
   Sequelize,
 } = require("../../models");
@@ -15,6 +16,21 @@ const AuthToken = require("../../utils/AuthToken");
 const {
   checkUserTestSeriesAccess,
 } = require("../SubscriptionRoutes/subscriptionAccess");
+
+/** Ids of TestSeries rows that are really just a course's backing series
+ * (Course.test_series_id) or an educator's private quiz-bank container
+ * (TestSeries.is_quiz_bank) — neither should ever show up as its own
+ * browsable/purchasable card here. Courses have their own Enroll flow;
+ * quiz banks are pure internal plumbing. Mirrors the same exclusion in
+ * controllers/TestSeriesController.js (the older, parallel listing). */
+async function getHiddenTestSeriesIds() {
+  const linkedCourses = await Course.findAll({
+    where: { test_series_id: { [Sequelize.Op.ne]: null } },
+    attributes: ["test_series_id"],
+    raw: true,
+  });
+  return linkedCourses.map((c) => c.test_series_id);
+}
 
 // =====================================================
 // HELPER FUNCTIONS FOR RECURSIVE OPERATIONS
@@ -191,7 +207,12 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
     } = req.query;
 
     const offset = (page - 1) * limit;
-    const where = { is_active: true };
+    const hiddenIds = await getHiddenTestSeriesIds();
+    const where = {
+      is_active: true,
+      is_quiz_bank: false,
+      ...(hiddenIds.length > 0 ? { id: { [Sequelize.Op.notIn]: hiddenIds } } : {}),
+    };
 
     if (search) {
       where[Sequelize.Op.or] = [
@@ -325,9 +346,15 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
 router.get("/dynamic/test-series/:uuid", optionalAuth, async (req, res) => {
   try {
     const { uuid } = req.params;
+    const hiddenIds = await getHiddenTestSeriesIds();
 
     const series = await TestSeries.findOne({
-      where: { uuid, is_active: true },
+      where: {
+        uuid,
+        is_active: true,
+        is_quiz_bank: false,
+        ...(hiddenIds.length > 0 ? { id: { [Sequelize.Op.notIn]: hiddenIds } } : {}),
+      },
       attributes: [
         "id",
         "uuid",
