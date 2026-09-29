@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs');
 const NotificationTriggers = require('../../services/NotificationTriggers');
+const { resolvePdfAccess } = require('../../utils/pdfAccess');
 
 // Get all PDFs with pagination and filters
 exports.getPdfs = async (req, res, next) => {
@@ -281,6 +282,11 @@ exports.getPdfDownloadUrl = async (req, res, next) => {
             return next(new ErrorHandler('PDF not found', 404));
         }
 
+        const hasAccess = await resolvePdfAccess(pdf, req.user?.uuid);
+        if (!hasAccess) {
+            return next(new ErrorHandler('You do not have access to this PDF. Please purchase it first.', 403));
+        }
+
         console.log('✅ PDF found:', { title: pdf.title, file_path: pdf.file_path });
 
         // Increment download count
@@ -360,6 +366,11 @@ exports.getPdfBase64 = async (req, res, next) => {
             return next(new ErrorHandler('PDF not found', 404));
         }
 
+        const hasAccess = await resolvePdfAccess(pdf, req.user?.uuid);
+        if (!hasAccess) {
+            return next(new ErrorHandler('You do not have access to this PDF. Please purchase it first.', 403));
+        }
+
         // Increment view count
         await pdf.increment('view_count');
 
@@ -400,6 +411,11 @@ exports.viewPdf = async (req, res, next) => {
         if (!pdf) {
             console.log('❌ PDF not found with ID:', id);
             return next(new ErrorHandler('PDF not found', 404));
+        }
+
+        const hasAccess = await resolvePdfAccess(pdf, req.user?.uuid);
+        if (!hasAccess) {
+            return next(new ErrorHandler('You do not have access to this PDF. Please purchase it first.', 403));
         }
 
         console.log('✅ PDF found:', { title: pdf.title, file_path: pdf.file_path });

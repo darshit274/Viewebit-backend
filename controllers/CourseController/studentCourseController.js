@@ -124,6 +124,7 @@ exports.getPublishedCourses = async (req, res, next) => {
                 educator: course.educator,
                 isPremium: course.testSeries ? course.testSeries.pricing_type === 'paid' : false,
                 price: course.testSeries?.price ?? 0,
+                testSeriesUuid: course.testSeries?.uuid ?? null,
                 hasAccess
             };
         }));

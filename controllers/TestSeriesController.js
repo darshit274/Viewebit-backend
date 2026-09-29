@@ -15,7 +15,7 @@ class TestSeriesController {
       const userId = req.user?.id;
 
       const offset = (page - 1) * limit;
-      const where = { is_active: true };
+      const where = { is_active: true, is_quiz_bank: false };
 
       if (search) {
         where[Op.or] = [
@@ -143,12 +143,13 @@ class TestSeriesController {
       const userId = req.user?.id;
 
       const series = await TestSeries.findOne({
-        where: { 
+        where: {
           [Op.or]: [
             { id: parseInt(id) || 0 },
             { uuid: id }
           ],
-          is_active: true 
+          is_active: true,
+          is_quiz_bank: false
         },
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
@@ -266,7 +267,8 @@ class TestSeriesController {
       const series = await TestSeries.findAll({
         where: {
           is_active: true,
-          is_featured: true
+          is_featured: true,
+          is_quiz_bank: false
         },
         limit: limit,
         order: [['display_order', 'ASC'], ['created_at', 'DESC']],
@@ -330,7 +332,8 @@ class TestSeriesController {
 
       const where = {
         is_active: true,
-        pricing_type: 'free' // Only free tests
+        pricing_type: 'free', // Only free tests
+        is_quiz_bank: false
       };
 
       // Add search filter
