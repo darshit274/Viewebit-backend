@@ -1,5 +1,20 @@
 const { Sequelize, Op } = require('sequelize');
-const { TestSeries, Category, Question, User, Subscription } = require('../models');
+const { TestSeries, Category, Question, User, Subscription, Course } = require('../models');
+
+/** Ids of TestSeries rows that back a Course (Course.test_series_id) —
+ * students buy/browse these exclusively through the Course UI now, so they
+ * must never also appear as a separately-purchasable card in the generic
+ * Test Series listings under the course's own name/price. Applies
+ * regardless of the course's publish status: an unpublished/draft course's
+ * backing series must stay invisible too. */
+async function getCourseLinkedTestSeriesIds() {
+  const linked = await Course.findAll({
+    where: { test_series_id: { [Op.ne]: null } },
+    attributes: ['test_series_id'],
+    raw: true,
+  });
+  return linked.map((c) => c.test_series_id);
+}
 
 class TestSeriesController {
   // Get all test series (for web app tests page)
@@ -15,7 +30,12 @@ class TestSeriesController {
       const userId = req.user?.id;
 
       const offset = (page - 1) * limit;
-      const where = { is_active: true, is_quiz_bank: false };
+      const courseLinkedIds = await getCourseLinkedTestSeriesIds();
+      const where = {
+        is_active: true,
+        is_quiz_bank: false,
+        ...(courseLinkedIds.length > 0 ? { id: { [Op.notIn]: courseLinkedIds } } : {})
+      };
 
       if (search) {
         where[Op.or] = [
@@ -142,6 +162,7 @@ class TestSeriesController {
       const { id } = req.params;
       const userId = req.user?.id;
 
+      const courseLinkedIds = await getCourseLinkedTestSeriesIds();
       const series = await TestSeries.findOne({
         where: {
           [Op.or]: [
@@ -149,7 +170,8 @@ class TestSeriesController {
             { uuid: id }
           ],
           is_active: true,
-          is_quiz_bank: false
+          is_quiz_bank: false,
+          ...(courseLinkedIds.length > 0 ? { id: { [Op.notIn]: courseLinkedIds } } : {})
         },
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
@@ -263,12 +285,14 @@ class TestSeriesController {
   static async getFeaturedTestSeries(req, res) {
     try {
       const limit = parseInt(req.query.limit) || 6;
-      
+      const courseLinkedIds = await getCourseLinkedTestSeriesIds();
+
       const series = await TestSeries.findAll({
         where: {
           is_active: true,
           is_featured: true,
-          is_quiz_bank: false
+          is_quiz_bank: false,
+          ...(courseLinkedIds.length > 0 ? { id: { [Op.notIn]: courseLinkedIds } } : {})
         },
         limit: limit,
         order: [['display_order', 'ASC'], ['created_at', 'DESC']],
@@ -329,11 +353,13 @@ class TestSeriesController {
         limit = 50
       } = req.query;
       const userId = req.user?.id;
+      const courseLinkedIds = await getCourseLinkedTestSeriesIds();
 
       const where = {
         is_active: true,
         pricing_type: 'free', // Only free tests
-        is_quiz_bank: false
+        is_quiz_bank: false,
+        ...(courseLinkedIds.length > 0 ? { id: { [Op.notIn]: courseLinkedIds } } : {})
       };
 
       // Add search filter
