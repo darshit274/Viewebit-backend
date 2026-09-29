@@ -16,7 +16,7 @@
  * - `unset`      = freshly created, will be promoted on first add
  */
 
-const { PdfCategory, Pdfs, sequelize } = require('../../models');
+const { PdfCategory, Pdfs, Course, sequelize } = require('../../models');
 const { Op } = require('sequelize');
 const fs = require('fs');
 const ErrorHandler = require('../../utils/default/errorHandler');
@@ -34,6 +34,20 @@ async function resolveRootCategory(category) {
     node = await PdfCategory.findByPk(node.parent_category_id);
   }
   return node;
+}
+
+/** Ids of PdfCategory roots that are really just a course's auto-created
+ * "{title} — Course PDFs" folder (Course.pdf_category_id) — an
+ * organizational container for lesson uploads, never meant to be browsable
+ * on its own; course access is decided per-lesson instead (see
+ * utils/pdfAccess.js). Mirrors the TestSeries quiz-bank exclusion. */
+async function getCoursePdfRootIds() {
+  const linked = await Course.findAll({
+    where: { pdf_category_id: { [Op.ne]: null } },
+    attributes: ['pdf_category_id'],
+    raw: true,
+  });
+  return linked.map((c) => c.pdf_category_id);
 }
 
 /** Map a root category's pricing onto the per-PDF access fields the apps already understand. */
@@ -666,8 +680,14 @@ exports.detachPdfFromCategory = async (req, res, next) => {
 /** GET /api/pdfs/hierarchy/roots — student browses root PDF categories */
 exports.studentGetRootCategories = async (req, res, next) => {
   try {
+    const coursePdfRootIds = await getCoursePdfRootIds();
     const rootCategories = await PdfCategory.findAll({
-      where: { parent_category_id: null, hierarchy_level: 0, is_active: true },
+      where: {
+        parent_category_id: null,
+        hierarchy_level: 0,
+        is_active: true,
+        ...(coursePdfRootIds.length > 0 ? { id: { [Op.notIn]: coursePdfRootIds } } : {})
+      },
       attributes: [
         'id', 'uuid', 'name', 'name_gujarati', 'description', 'description_gujarati',
         'icon', 'color', 'node_type', 'display_order',
@@ -716,6 +736,14 @@ exports.studentGetCategoryContent = async (req, res, next) => {
 
     // Access for everything in this tree comes from the ROOT category
     const rootCategory = await resolveRootCategory(category);
+
+    // A course's auto-created PDF folder isn't browsable on its own —
+    // students only ever see its PDFs through the course player.
+    const coursePdfRootIds = await getCoursePdfRootIds();
+    if (rootCategory && coursePdfRootIds.includes(rootCategory.id)) {
+      return next(new ErrorHandler('Category not found', 404));
+    }
+
     const inheritedAccess = accessFromRoot(rootCategory);
 
     // Active children

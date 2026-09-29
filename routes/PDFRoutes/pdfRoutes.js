@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pdfController = require('../../controllers/AdminController/pdfController');
 const pdfHierarchyController = require('../../controllers/AdminController/pdfHierarchyController');
-const { authToken } = require('../../utils/AuthToken');
+const { authToken, optionalAuth } = require('../../utils/AuthToken');
 
 // ===== Hierarchy (student-facing tree navigation) =====
 // More specific routes first so they don't get swallowed by /:id below.
@@ -16,11 +16,12 @@ router.get('/filters', pdfController.getPdfFilters);
 router.get('/stats', pdfController.getPdfStats);
 router.get('/:id', pdfController.getPdfById);
 
-// View PDF (accessible without auth for now, can be changed later)
-router.get('/:id/view', pdfController.viewPdf);
+// View PDF — optionalAuth so free PDFs stay publicly viewable while paid
+// ones can resolve the requester's purchases (enforced in the controller).
+router.get('/:id/view', optionalAuth, pdfController.viewPdf);
 
-// Secure PDF viewing - returns base64 (no downloads possible) - temporarily without auth for testing
-router.get('/:id/secure', pdfController.getPdfBase64);
+// Secure PDF viewing - returns base64 (no downloads possible)
+router.get('/:id/secure', optionalAuth, pdfController.getPdfBase64);
 
 // Protected routes (require user authentication)
 router.get('/:id/download', authToken, pdfController.getPdfDownloadUrl);

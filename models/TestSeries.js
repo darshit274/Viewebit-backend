@@ -124,6 +124,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.UUID,
       allowNull: true,
       comment: 'Set when this series was self-created by a private-educator-mode Educator via the Course Builder pricing flow, rather than by an Admin'
+    },
+    is_quiz_bank: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'True for the auto-created private container an educator\'s inline course quizzes live under — never shown in student-facing test series listings'
     }
   }, {
     tableName: 'new_test_series',

@@ -10,7 +10,8 @@ async function getOrCreateQuizBank(educator) {
         name: `${educator.name} — Quiz Bank`,
         description: 'Private container for this educator\'s own quiz categories. Not shown to students directly.',
         is_active: true,
-        pricing_type: 'free'
+        pricing_type: 'free',
+        is_quiz_bank: true
     });
 
     await Educator.update({ quiz_bank_test_series_id: testSeries.id }, { where: { id: educator.id } });
