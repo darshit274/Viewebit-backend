@@ -4,7 +4,7 @@ const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs');
 const NotificationTriggers = require('../../services/NotificationTriggers');
-const { resolvePdfAccess } = require('../../utils/pdfAccess');
+const { resolvePdfAccess, resolveCourseForPdf } = require('../../utils/pdfAccess');
 
 /** Ids of Pdfs rows attached to a course lesson (Lesson.pdf_id) — these are
  * course content, browsable only through the course player, never through
@@ -20,27 +20,40 @@ async function getLessonAttachedPdfIds() {
     return attached.map((l) => l.pdf_id);
 }
 
-/** Ids of PdfCategory roots that are a course's auto-created folder
- * (Course.pdf_category_id) — same exclusion as pdfHierarchyController's
- * getCoursePdfRootIds, duplicated here since these are a separate,
- * unrelated listing endpoint (flat PDF library, not the category tree).
- * Also catches orphans by name/shape: a deleted course's folder is no
- * longer referenced by any Course row, so the live-FK check alone misses
- * it — the same failure mode the quiz-bank exclusion hit earlier. */
-async function getCoursePdfCategoryIds() {
-    const [linked, orphaned] = await Promise.all([
+/** Ids of PdfCategory roots that used to belong to a course but no longer do
+ * — a deleted course's folder is no longer referenced by any Course row, so
+ * it must stay hidden entirely (nothing can ever unlock it). Live
+ * course-linked folders are NOT included here any more: they now surface
+ * in the listing (see getLiveCoursePdfCategoryMap), locked, exactly like
+ * course-linked assignments/live sessions/test series. */
+async function getOrphanedCoursePdfCategoryIds() {
+    const [linkedIds, orphanCandidates] = await Promise.all([
         Course.findAll({
             where: { pdf_category_id: { [Op.ne]: null } },
             attributes: ['pdf_category_id'],
             raw: true,
-        }),
+        }).then((rows) => new Set(rows.map((c) => c.pdf_category_id))),
         PdfCategory.findAll({
             where: { name: { [Op.like]: '%— Course PDFs' }, parent_category_id: null },
             attributes: ['id'],
             raw: true,
         }),
     ]);
-    return [...new Set([...linked.map((c) => c.pdf_category_id), ...orphaned.map((c) => c.id)])];
+    return orphanCandidates.map((c) => c.id).filter((id) => !linkedIds.has(id));
+}
+
+/** Map of live course-linked PdfCategory root id -> {uuid, title} of the
+ * course it belongs to, for tagging listing rows so the frontend can show
+ * them locked with a "Course: X" badge instead of hiding them outright. */
+async function getLiveCoursePdfCategoryMap() {
+    const linked = await Course.findAll({
+        where: { pdf_category_id: { [Op.ne]: null } },
+        attributes: ['pdf_category_id', 'uuid', 'title'],
+        raw: true,
+    });
+    const map = new Map();
+    linked.forEach((c) => map.set(c.pdf_category_id, { uuid: c.uuid, title: c.title }));
+    return map;
 }
 
 // Get all PDFs with pagination and filters
@@ -94,32 +107,30 @@ exports.getPdfs = async (req, res, next) => {
 
         // This route is shared: admin-authenticated callers (GET
         // /admin/pdfs) manage PDFs regardless of status, but the public,
-        // unauthenticated one (GET /pdfs) is the student-facing library and
-        // must default to active-only and hide course content — it's meant
-        // to only ever be reached through the course player.
+        // unauthenticated one (GET /pdfs) is the student-facing library —
+        // it defaults to active-only, hides lesson-embedded PDFs (browsable
+        // only through the course player), and hides orphaned course
+        // folders (their course no longer exists, so nothing can unlock
+        // them). Live course-linked PDFs stay visible, tagged with `course`
+        // so the frontend can show them locked instead.
+        let liveCoursePdfCategoryMap = new Map();
         if (!req.admin) {
             if (is_active === undefined) {
                 whereClause.is_active = true;
             }
-            const [lessonPdfIds, coursePdfCategoryIds] = await Promise.all([
+            const [lessonPdfIds, orphanedIds, liveMap] = await Promise.all([
                 getLessonAttachedPdfIds(),
-                getCoursePdfCategoryIds(),
+                getOrphanedCoursePdfCategoryIds(),
+                getLiveCoursePdfCategoryMap(),
             ]);
+            liveCoursePdfCategoryMap = liveMap;
             if (lessonPdfIds.length > 0) {
                 whereClause.id = { [Op.notIn]: lessonPdfIds };
             }
-            if (category_id && coursePdfCategoryIds.includes(parseInt(category_id))) {
-                // Explicitly requested a course's private folder directly — treat as empty rather than leaking it.
-                whereClause.id = '__none__';
-            } else if (coursePdfCategoryIds.length > 0) {
-                // SQL's NOT IN excludes NULLs too (three-valued logic), which
-                // would wrongly hide every category-less PDF — allow nulls
-                // through explicitly instead of just negating the list. Uses
-                // Op.and (not a second Op.or) so it doesn't clobber the
-                // search filter's own Op.or key on this same where object.
+            if (orphanedIds.length > 0) {
                 whereClause[Op.and] = [
                     ...(whereClause[Op.and] || []),
-                    { [Op.or]: [{ category_id: null }, { category_id: { [Op.notIn]: coursePdfCategoryIds } }] },
+                    { [Op.or]: [{ category_id: null }, { category_id: { [Op.notIn]: orphanedIds } }] },
                 ];
             }
         }
@@ -162,9 +173,16 @@ exports.getPdfs = async (req, res, next) => {
 
         console.log('📊 Query results:', { count, resultsLength: rows.length });
 
+        const data = await Promise.all(rows.map(async (row) => {
+            const course = liveCoursePdfCategoryMap.get(row.category_id) || null;
+            if (!course) return row.toJSON();
+            const hasAccess = await resolvePdfAccess(row, req.user?.uuid);
+            return { ...row.toJSON(), course, hasAccess };
+        }));
+
         res.status(200).json({
             success: true,
-            data: rows,
+            data,
             pagination: {
                 total: count,
                 page,
@@ -189,9 +207,11 @@ exports.getPdfById = async (req, res, next) => {
             return next(new ErrorHandler('PDF not found', 404));
         }
 
+        const course = await resolveCourseForPdf(pdf);
+
         res.status(200).json({
             success: true,
-            data: pdf
+            data: course ? { ...pdf.toJSON(), course: { uuid: course.uuid, title: course.title } } : pdf
         });
     } catch (err) {
         console.error('Get PDF by ID error:', err);
@@ -603,7 +623,11 @@ exports.getPdfStats = async (req, res, next) => {
 // Get PDF categories
 exports.getPdfCategories = async (req, res, next) => {
     try {
-        const coursePdfCategoryIds = await getCoursePdfCategoryIds();
+        // Course PDF folders (live or orphaned) are never a browsable filter
+        // option — they only ever surface as the `course` tag on their own
+        // PDF rows in the main listing.
+        const [orphanedIds, liveMap] = await Promise.all([getOrphanedCoursePdfCategoryIds(), getLiveCoursePdfCategoryMap()]);
+        const coursePdfCategoryIds = [...orphanedIds, ...liveMap.keys()];
         const categories = await PdfCategory.findAll({
             attributes: ['id', 'name', 'slug', 'description', 'icon', 'color', 'sort_order'],
             where: {
@@ -629,7 +653,8 @@ exports.getPdfFilters = async (req, res, next) => {
     try {
         // Get PDF categories
         const { ExamType } = require('../../models');
-        const coursePdfCategoryIds = await getCoursePdfCategoryIds();
+        const [orphanedIds, liveMap] = await Promise.all([getOrphanedCoursePdfCategoryIds(), getLiveCoursePdfCategoryMap()]);
+        const coursePdfCategoryIds = [...orphanedIds, ...liveMap.keys()];
 
         const categories = await PdfCategory.findAll({
             attributes: ['id', 'name', 'description'],

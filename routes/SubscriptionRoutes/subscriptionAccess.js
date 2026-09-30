@@ -3,6 +3,7 @@ const router = express.Router();
 const { authToken } = require('../../utils/AuthToken');
 const { User, TestSeries, Subscription, Pdfs, PdfCategory } = require('../../models');
 const { Op } = require('sequelize');
+const { resolvePdfAccess, resolveCourseForPdf } = require('../../utils/pdfAccess');
 
 /**
  * Subscription.metadata is a JSON column. Depending on how it was written
@@ -332,186 +333,33 @@ router.get('/pdf/:pdfId', authToken, async (req, res) => {
     const { pdfId } = req.params;
     const userId = req.user.uuid;
 
-    console.log('🔍 Checking PDF access:', { userId: userId.substring(0, 8), pdfId });
-
-    // Get PDF details
     const pdf = await Pdfs.findOne({
       where: { id: pdfId },
-      attributes: ['id', 'title', 'access_level', 'file_path', 'category_id']
+      attributes: ['id', 'title', 'access_level', 'file_path', 'category_id', 'is_free', 'test_series_id']
     });
-
     if (!pdf) {
-      return res.status(404).json({
-        success: false,
-        message: 'PDF not found'
-      });
+      return res.status(404).json({ success: false, message: 'PDF not found' });
     }
 
-    // If PDF is free, user has access
-    if (pdf.access_level === 'free') {
-      return res.json({
-        success: true,
-        data: {
-          hasAccess: true,
-          accessType: 'free',
-          canPurchase: false,
-          showEnrollButton: false,
-          pdf: {
-            id: pdf.id,
-            title: pdf.title,
-            access_level: pdf.access_level
-          }
-        }
-      });
-    }
+    // Delegates to the same entitlement logic the content-serving endpoints
+    // enforce (utils/pdfAccess.js) — this used to duplicate that logic with
+    // its own, out-of-date rules that had no idea a PDF could belong to a
+    // course's own PDF folder, so it reported access this endpoint's own
+    // rules didn't actually grant.
+    const course = await resolveCourseForPdf(pdf);
+    const hasAccess = await resolvePdfAccess(pdf, userId);
 
-    // For premium PDFs, check if user has purchased this specific PDF
-    console.log('🔍 Looking for PDF subscription with query:', {
-      user_id: userId,
-      test_series_id: null,
-      status: 'completed',
-      pdf_id_search: pdfId
-    });
-
-    // First, let's see what subscriptions exist for this user
-    const allUserSubscriptions = await Subscription.findAll({
-      where: { user_id: userId },
-      attributes: ['id', 'user_id', 'test_series_id', 'status', 'metadata', 'amount_paid', 'created_at']
-    });
-
-    console.log('📋 All user subscriptions:', allUserSubscriptions.map(sub => ({
-      id: sub.id,
-      test_series_id: sub.test_series_id,
-      status: sub.status,
-      metadata: sub.metadata,
-      amount_paid: sub.amount_paid
-    })));
-
-    // PDF purchases have test_series_id = NULL and metadata.pdf_id = <pdfId>.
-    // We deliberately do NOT filter by `metadata` here because JSON-column
-    // operators (Op.not: null, Op.like) behave inconsistently across MySQL
-    // versions; the JS filter below handles every shape.
-    const allCompletedPDFSubscriptions = await Subscription.findAll({
-      where: {
-        user_id: userId,
-        test_series_id: null,
-        status: 'completed',
-        [Op.or]: [
-          { expiry_date: null },
-          { expiry_date: { [Op.gt]: new Date() } }
-        ]
-      },
-      attributes: ['id', 'purchase_date', 'expiry_date', 'amount_paid', 'metadata']
-    });
-
-    console.log('🔍 Candidate PDF subscriptions:', allCompletedPDFSubscriptions.length);
-    // Dump exact shape of metadata for every candidate so we can see what we got
-    allCompletedPDFSubscriptions.forEach((sub) => {
-      console.log(`  sub ${sub.id}: metadata typeof=${typeof sub.metadata}`,
-        typeof sub.metadata === 'string'
-          ? `value="${sub.metadata.substring(0, 200)}${sub.metadata.length > 200 ? '...' : ''}"`
-          : `value=${JSON.stringify(sub.metadata)}`);
-    });
-
-    const pdfSubscription = allCompletedPDFSubscriptions.find((sub) => {
-      const metadata = parseSubscriptionMetadata(sub.metadata);
-      const storedPdfId = metadata && metadata.pdf_id;
-      const matches = storedPdfId === pdfId;
-      console.log(`  → sub ${sub.id}: parsed pdf_id=${storedPdfId}, target=${pdfId}, match=${matches}`);
-      return matches;
-    });
-
-    console.log('🎯 PDF subscription query result:', pdfSubscription ? {
-      id: pdfSubscription.id,
-      metadata: pdfSubscription.metadata,
-      amount_paid: pdfSubscription.amount_paid
-    } : 'NOT FOUND');
-
-    if (pdfSubscription) {
-      console.log('✅ User has purchased this PDF:', pdfSubscription.id);
-      return res.json({
-        success: true,
-        data: {
-          hasAccess: true,
-          accessType: 'purchased',
-          canPurchase: false,
-          showEnrollButton: false,
-          subscription: {
-            id: pdfSubscription.id,
-            purchaseDate: pdfSubscription.purchase_date,
-            expiryDate: pdfSubscription.expiry_date,
-            amountPaid: pdfSubscription.amount_paid
-          },
-          pdf: {
-            id: pdf.id,
-            title: pdf.title,
-            access_level: pdf.access_level
-          }
-        }
-      });
-    }
-
-    // No individual purchase — check whether the user bought the whole
-    // category this PDF lives in (category-level pricing flow).
-    if (pdf.category_id) {
-      const pdfCategory = await PdfCategory.findByPk(pdf.category_id, {
-        attributes: ['id', 'uuid', 'name', 'parent_category_id', 'pricing_type', 'price', 'discount_percentage'],
-      });
-      if (pdfCategory) {
-        const root = await resolveRootPdfCategory(pdfCategory);
-        if (root) {
-          if (root.pricing_type === 'free') {
-            return res.json({
-              success: true,
-              data: {
-                hasAccess: true,
-                accessType: 'free',
-                canPurchase: false,
-                showEnrollButton: false,
-                pdf: { id: pdf.id, title: pdf.title, access_level: pdf.access_level }
-              }
-            });
-          }
-          const categoryPurchase = await findCategoryPurchase(userId, root.uuid);
-          if (categoryPurchase) {
-            console.log('✅ User has purchased the parent PDF category:', root.uuid);
-            return res.json({
-              success: true,
-              data: {
-                hasAccess: true,
-                accessType: 'purchased',
-                canPurchase: false,
-                showEnrollButton: false,
-                subscription: {
-                  id: categoryPurchase.id,
-                  purchaseDate: categoryPurchase.purchase_date,
-                  expiryDate: categoryPurchase.expiry_date,
-                  amountPaid: categoryPurchase.amount_paid,
-                },
-                pdf: { id: pdf.id, title: pdf.title, access_level: pdf.access_level }
-              }
-            });
-          }
-        }
-      }
-    }
-
-    console.log('🚫 User has not purchased this PDF');
     return res.json({
       success: true,
       data: {
-        hasAccess: false,
-        accessType: 'none',
-        canPurchase: true,
-        showEnrollButton: true,
-        pdf: {
-          id: pdf.id,
-          title: pdf.title,
-          access_level: pdf.access_level
-        }
+        hasAccess,
+        accessType: hasAccess ? (course ? 'course' : 'free_or_purchased') : 'none',
+        canPurchase: !hasAccess && !course,
+        showEnrollButton: !hasAccess && !!course,
+        course: course ? { uuid: course.uuid, title: course.title } : null,
+        pdf: { id: pdf.id, title: pdf.title, access_level: pdf.access_level }
       }
     });
-
   } catch (error) {
     console.error('❌ Error checking PDF access:', error);
     res.status(500).json({

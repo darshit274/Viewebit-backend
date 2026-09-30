@@ -9,12 +9,14 @@ const { authToken, optionalAuth } = require('../../utils/AuthToken');
 router.get('/hierarchy/roots', pdfHierarchyController.studentGetRootCategories);
 router.get('/hierarchy/categories/:categoryUuid', pdfHierarchyController.studentGetCategoryContent);
 
-// Public routes (no auth required)
-router.get('/', pdfController.getPdfs);
+// Public routes — optionalAuth so a logged-in student's purchases can be
+// resolved for course-linked PDFs (shown locked otherwise), while anonymous
+// browsing still works.
+router.get('/', optionalAuth, pdfController.getPdfs);
 router.get('/categories', pdfController.getPdfCategories);
 router.get('/filters', pdfController.getPdfFilters);
 router.get('/stats', pdfController.getPdfStats);
-router.get('/:id', pdfController.getPdfById);
+router.get('/:id', optionalAuth, pdfController.getPdfById);
 
 // View PDF — optionalAuth so free PDFs stay publicly viewable while paid
 // ones can resolve the requester's purchases (enforced in the controller).

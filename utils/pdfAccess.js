@@ -29,13 +29,30 @@ async function hasCompletedSubscription(where) {
     return !!subscription;
 }
 
-async function resolvePdfAccess(pdf, userId) {
-    if (pdf.access_level === 'free' || pdf.is_free) return true;
+/** Finds the live Course that owns a PDF's root category, if any — a
+ * course's auto-created PDF folder (Course.pdf_category_id) is pure
+ * organizational plumbing with no pricing intent of its own (it's created
+ * with the pricing_type default, 'free'), so its real gate must be the
+ * course's own purchase state, never the folder's own (meaningless)
+ * pricing_type or the PDF's own (also-defaulted) access_level. */
+async function resolveCourseForPdf(pdf) {
+    if (!pdf.category_id) return null;
+    const root = await resolveRootPdfCategory(pdf.category_id);
+    if (!root) return null;
+    return Course.findOne({ where: { pdf_category_id: root.id }, include: [{ model: TestSeries, as: 'testSeries' }] });
+}
 
+async function resolveCourseAccess(course, userId) {
+    if (!course.testSeries || course.testSeries.pricing_type === 'free') return true;
+    if (!userId) return false;
+    return hasCompletedSubscription({ user_id: userId, test_series_id: course.testSeries.id });
+}
+
+async function resolvePdfAccess(pdf, userId) {
     // Course-attached PDF (uploaded inline as a lesson's document): the
     // lesson's own free-preview flag, or its course's purchase state, is
-    // the sole authority — never fall through to this PDF's own category
-    // pricing, which for a course upload is just an organizational folder.
+    // the sole authority — checked before any access_level/is_free shortcut,
+    // since those are meaningless defaults for a course upload.
     const lesson = await Lesson.findOne({
         where: { pdf_id: pdf.id },
         include: [{
@@ -47,10 +64,29 @@ async function resolvePdfAccess(pdf, userId) {
     if (lesson) {
         if (lesson.is_free_preview) return true;
         const course = lesson.module?.course;
-        if (course) {
-            if (!course.testSeries || course.testSeries.pricing_type === 'free') return true;
+        if (course) return resolveCourseAccess(course, userId);
+    }
+
+    // PDF uploaded inline into a course's own PDF folder (PDF Library tab,
+    // not a lesson) — same authority as above, checked before the generic
+    // category-pricing fallback below.
+    const course = await resolveCourseForPdf(pdf);
+    if (course) return resolveCourseAccess(course, userId);
+
+    if (pdf.access_level === 'free' || pdf.is_free) return true;
+
+    // Whole-category purchase (planType 'pdf_category') — pricing and the
+    // purchase itself both key off the ROOT category, never a sub-category.
+    if (pdf.category_id) {
+        const root = await resolveRootPdfCategory(pdf.category_id);
+        if (root) {
+            if (root.pricing_type === 'free') return true;
             if (!userId) return false;
-            return hasCompletedSubscription({ user_id: userId, test_series_id: course.testSeries.id });
+            const categoryPurchase = await hasCompletedSubscription({
+                user_id: userId,
+                [Op.and]: [sequelize.json('metadata.pdf_category_id', root.id)]
+            });
+            if (categoryPurchase) return true;
         }
     }
 
@@ -63,20 +99,6 @@ async function resolvePdfAccess(pdf, userId) {
     });
     if (directPurchase) return true;
 
-    // Whole-category purchase (planType 'pdf_category') — pricing and the
-    // purchase itself both key off the ROOT category, never a sub-category.
-    if (pdf.category_id) {
-        const root = await resolveRootPdfCategory(pdf.category_id);
-        if (root) {
-            if (root.pricing_type === 'free') return true;
-            const categoryPurchase = await hasCompletedSubscription({
-                user_id: userId,
-                [Op.and]: [sequelize.json('metadata.pdf_category_id', root.id)]
-            });
-            if (categoryPurchase) return true;
-        }
-    }
-
     // PDF directly linked to a TestSeries (Pdfs.test_series_id)
     if (pdf.test_series_id) {
         const seriesPurchase = await hasCompletedSubscription({ user_id: userId, test_series_id: pdf.test_series_id });
@@ -86,4 +108,4 @@ async function resolvePdfAccess(pdf, userId) {
     return false;
 }
 
-module.exports = { resolvePdfAccess };
+module.exports = { resolvePdfAccess, resolveCourseForPdf, resolveRootPdfCategory };
