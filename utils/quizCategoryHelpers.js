@@ -1,5 +1,25 @@
 const { Category, TestSeries, Educator, sequelize } = require('../models');
 
+// Ensures a course has its own backing TestSeries, creating a free one
+// lazily if the course has never been priced. Filing course quizzes under
+// this series (instead of the educator's private quiz bank) means they
+// inherit exactly the same purchase gate as the course itself — no separate
+// access-control logic needed.
+async function findOrCreateCourseTestSeries(course, educator) {
+    if (course.test_series_id) return course.test_series_id;
+
+    const testSeries = await TestSeries.create({
+        name: course.title,
+        pricing_type: 'free',
+        price: 0,
+        currency: 'INR',
+        institution_id: educator.institution_id || null,
+        educator_id: educator.id
+    });
+    await course.update({ test_series_id: testSeries.id });
+    return testSeries.id;
+}
+
 async function getOrCreateQuizBank(educator) {
     if (educator.quiz_bank_test_series_id) {
         const existing = await TestSeries.findByPk(educator.quiz_bank_test_series_id);
@@ -51,4 +71,4 @@ async function createChildCategory({ parentCategory, testSeriesId, hierarchyLeve
     return category;
 }
 
-module.exports = { getOrCreateQuizBank, findOwnedCategory, createChildCategory };
+module.exports = { getOrCreateQuizBank, findOwnedCategory, createChildCategory, findOrCreateCourseTestSeries };

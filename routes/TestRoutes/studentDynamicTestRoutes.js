@@ -17,19 +17,21 @@ const {
   checkUserTestSeriesAccess,
 } = require("../SubscriptionRoutes/subscriptionAccess");
 
-/** Ids of TestSeries rows that are really just a course's backing series
- * (Course.test_series_id) or an educator's private quiz-bank container
- * (TestSeries.is_quiz_bank) — neither should ever show up as its own
- * browsable/purchasable card here. Courses have their own Enroll flow;
- * quiz banks are pure internal plumbing. Mirrors the same exclusion in
+/** Map of TestSeries id -> {uuid, title} for every series backing a Course
+ * (Course.test_series_id). These still appear on the Tests page (so a
+ * course-embedded quiz is discoverable there), but they're never
+ * purchasable directly here — the frontend renders them locked, with the
+ * "Enroll" action pointing at the Course page instead. Mirrors
  * controllers/TestSeriesController.js (the older, parallel listing). */
-async function getHiddenTestSeriesIds() {
+async function getCourseLinkedTestSeriesMap() {
   const linkedCourses = await Course.findAll({
     where: { test_series_id: { [Sequelize.Op.ne]: null } },
-    attributes: ["test_series_id"],
+    attributes: ["test_series_id", "uuid", "title"],
     raw: true,
   });
-  return linkedCourses.map((c) => c.test_series_id);
+  const map = new Map();
+  linkedCourses.forEach((c) => map.set(c.test_series_id, { uuid: c.uuid, title: c.title }));
+  return map;
 }
 
 // =====================================================
@@ -207,11 +209,10 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
     } = req.query;
 
     const offset = (page - 1) * limit;
-    const hiddenIds = await getHiddenTestSeriesIds();
+    const courseLinkedMap = await getCourseLinkedTestSeriesMap();
     const where = {
       is_active: true,
       is_quiz_bank: false,
-      ...(hiddenIds.length > 0 ? { id: { [Sequelize.Op.notIn]: hiddenIds } } : {}),
     };
 
     if (search) {
@@ -316,6 +317,7 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
           // Backwards compatibility fields
           tests_count: total_questions > 0 ? 1 : 0, // Simplified for backwards compatibility
           title: series.name, // Map name to title for app compatibility
+          course: courseLinkedMap.get(series.id) || null,
         };
       })
     );
@@ -346,14 +348,13 @@ router.get("/dynamic/test-series", optionalAuth, async (req, res) => {
 router.get("/dynamic/test-series/:uuid", optionalAuth, async (req, res) => {
   try {
     const { uuid } = req.params;
-    const hiddenIds = await getHiddenTestSeriesIds();
+    const courseLinkedMap = await getCourseLinkedTestSeriesMap();
 
     const series = await TestSeries.findOne({
       where: {
         uuid,
         is_active: true,
         is_quiz_bank: false,
-        ...(hiddenIds.length > 0 ? { id: { [Sequelize.Op.notIn]: hiddenIds } } : {}),
       },
       attributes: [
         "id",
@@ -466,6 +467,7 @@ router.get("/dynamic/test-series/:uuid", optionalAuth, async (req, res) => {
         is_subscribed,
         title: series.name, // Backwards compatibility
         content_type: "categories",
+        course: courseLinkedMap.get(series.id) || null,
       },
     });
   } catch (error) {
