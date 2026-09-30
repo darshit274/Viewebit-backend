@@ -4,6 +4,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { Assignment, AssignmentSubmission, Course, Category, TestSession } = require('../../models');
+const { resolveCourseAccessById } = require('../../utils/courseAccess');
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -27,14 +28,14 @@ const upload = multer({
 
 exports.uploadMiddleware = upload.single('file');
 
-// List assignments across the courses the student has access to.
+// List assignments across the courses the student has access to. Paid
+// courses the student hasn't purchased still show up (so they know it
+// exists and is due) but flagged `locked` — the detail endpoint hides the
+// actual content until purchased, matching how locked lessons behave.
 exports.listMyAssignments = async (req, res, next) => {
     try {
         const userId = req.user.uuid;
 
-        // Only surface assignments belonging to published courses — course-level
-        // access gating (free vs paid) is enforced at submission time, not listing time,
-        // so students can at least see what's due.
         const assignments = await Assignment.findAll({
             where: { is_active: true },
             include: [{ model: Course, as: 'course', where: { status: 'published' }, attributes: ['id', 'uuid', 'title'] }],
@@ -43,6 +44,7 @@ exports.listMyAssignments = async (req, res, next) => {
 
         const data = await Promise.all(assignments.map(async (assignment) => {
             const existing = await AssignmentSubmission.findOne({ where: { assignment_id: assignment.id, user_id: userId } });
+            const hasAccess = await resolveCourseAccessById(assignment.course_id, userId);
             return {
                 uuid: assignment.uuid,
                 title: assignment.title,
@@ -50,6 +52,7 @@ exports.listMyAssignments = async (req, res, next) => {
                 due_date: assignment.due_date,
                 max_points: assignment.max_points,
                 course: assignment.course,
+                locked: !hasAccess,
                 submissionStatus: existing ? existing.status : 'not_started',
                 grade: existing?.grade ?? null
             };
@@ -73,6 +76,14 @@ exports.getAssignmentDetail = async (req, res, next) => {
             ]
         });
         if (!assignment) return next(new ErrorHandler('Assignment not found', 404));
+
+        const hasAccess = await resolveCourseAccessById(assignment.course_id, userId);
+        if (!hasAccess) {
+            return res.status(200).json({
+                success: true,
+                data: { uuid: assignment.uuid, title: assignment.title, course: assignment.course, locked: true }
+            });
+        }
 
         const submission = await AssignmentSubmission.findOne({ where: { assignment_id: assignment.id, user_id: userId } });
 
@@ -100,6 +111,11 @@ exports.submitAssignment = async (req, res, next) => {
         const userId = req.user.uuid;
         const assignment = await Assignment.findOne({ where: { uuid: req.params.uuid } });
         if (!assignment) return next(new ErrorHandler('Assignment not found', 404));
+
+        const hasAccess = await resolveCourseAccessById(assignment.course_id, userId);
+        if (!hasAccess) {
+            return next(new ErrorHandler('Enroll in this course to submit this assignment', 403));
+        }
 
         if (assignment.submission_type === 'quiz') {
             return next(new ErrorHandler('Quiz assignments are completed via the test-taking flow, not file/text submission', 400));

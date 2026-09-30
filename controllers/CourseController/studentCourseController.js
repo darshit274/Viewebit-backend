@@ -1,30 +1,7 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { Course, CourseModule, Lesson, TestSeries, Category, Pdfs, Subscription, LessonProgress, Educator, Certificate, Assignment, AssignmentSubmission } = require('../../models');
 const { Op } = require('sequelize');
-
-// Determines whether the logged-in student can access a course's paid content.
-// Reuses the exact TestSeries/Subscription check already used by
-// TestSeriesController.js — a course is free if it has no linked TestSeries or
-// that TestSeries is free; otherwise it requires a completed, unexpired
-// Subscription for that test_series_id.
-const resolveCourseAccess = async (course, userId) => {
-    if (!course.testSeries) return true;
-    if (course.testSeries.pricing_type === 'free') return true;
-    if (!userId) return false;
-
-    const subscription = await Subscription.findOne({
-        where: {
-            user_id: userId,
-            test_series_id: course.testSeries.id,
-            status: 'completed',
-            [Op.or]: [
-                { expiry_date: null },
-                { expiry_date: { [Op.gt]: new Date() } }
-            ]
-        }
-    });
-    return !!subscription;
-};
+const { resolveCourseAccess } = require('../../utils/courseAccess');
 
 // Whether a student has ever actually engaged with a course — used to decide
 // grandfathered access to an unpublished free course, where there's no
@@ -180,6 +157,27 @@ exports.getCourseDetail = async (req, res, next) => {
         }
 
         const courseJson = course.toJSON();
+
+        // Attach this student's own progress per lesson so the player can
+        // show completed/in-progress state and the "Mark as Complete"
+        // button can reflect reality instead of always looking un-clicked.
+        if (userId) {
+            const lessonIds = courseJson.modules.flatMap((m) => m.lessons.map((l) => l.id));
+            if (lessonIds.length > 0) {
+                const progressRows = await LessonProgress.findAll({
+                    where: { user_id: userId, lesson_id: lessonIds },
+                    attributes: ['lesson_id', 'status']
+                });
+                const progressByLessonId = new Map(progressRows.map((p) => [p.lesson_id, p.status]));
+                courseJson.modules = courseJson.modules.map((module) => ({
+                    ...module,
+                    lessons: module.lessons.map((lesson) => ({
+                        ...lesson,
+                        progress_status: progressByLessonId.get(lesson.id) || 'not_started'
+                    }))
+                }));
+            }
+        }
 
         // Lock lesson content details for paid courses the student hasn't
         // purchased — free-preview lessons stay fully visible either way.

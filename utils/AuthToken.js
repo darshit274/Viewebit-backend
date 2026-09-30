@@ -97,7 +97,13 @@ exports.optionalAuth = async (req, res, next) => {
       if (token) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const { User } = require('../models');
-        const user = await User.findOne({ where: { uuid: decoded.id } });
+        // Student tokens are signed with { uuid, email, sessionId } - no
+        // `id` field. authToken (above) already checks uuid first with an
+        // id fallback; this optionalAuth checked id only, so every logged-in
+        // student was silently treated as anonymous on every route using
+        // it (course/PDF/test-series access checks all rely on this).
+        const userUuid = decoded.uuid || decoded.id;
+        const user = await User.findOne({ where: { uuid: userUuid } });
         
         if (user) {
           req.user = {

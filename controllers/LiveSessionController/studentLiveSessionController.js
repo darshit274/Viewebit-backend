@@ -1,9 +1,11 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { LiveSession, LiveSessionAttendance, Course, Educator } = require('../../models');
 const { Op } = require('sequelize');
+const { resolveCourseAccessById } = require('../../utils/courseAccess');
 
 exports.listUpcoming = async (req, res, next) => {
     try {
+        const userId = req.user?.uuid;
         const sessions = await LiveSession.findAll({
             where: {
                 status: { [Op.in]: ['scheduled', 'live'] },
@@ -16,7 +18,25 @@ exports.listUpcoming = async (req, res, next) => {
             order: [['scheduled_start', 'ASC']]
         });
 
-        res.status(200).json({ success: true, data: sessions });
+        const data = await Promise.all(sessions.map(async (session) => {
+            const hasAccess = await resolveCourseAccessById(session.course_id, userId);
+            if (!hasAccess) {
+                // Never hand back meeting_url in the list either.
+                return {
+                    uuid: session.uuid,
+                    title: session.title,
+                    scheduled_start: session.scheduled_start,
+                    scheduled_end: session.scheduled_end,
+                    status: session.status,
+                    course: session.course,
+                    educator: session.educator,
+                    locked: true
+                };
+            }
+            return { ...session.toJSON(), locked: false };
+        }));
+
+        res.status(200).json({ success: true, data });
     } catch (err) {
         console.error('List upcoming live sessions error:', err);
         return next(new ErrorHandler('Failed to fetch live sessions', 500));
@@ -25,6 +45,7 @@ exports.listUpcoming = async (req, res, next) => {
 
 exports.getSessionDetail = async (req, res, next) => {
     try {
+        const userId = req.user?.uuid;
         const session = await LiveSession.findOne({
             where: { uuid: req.params.uuid },
             include: [
@@ -34,7 +55,24 @@ exports.getSessionDetail = async (req, res, next) => {
         });
         if (!session) return next(new ErrorHandler('Live session not found', 404));
 
-        res.status(200).json({ success: true, data: session });
+        const hasAccess = await resolveCourseAccessById(session.course_id, userId);
+        if (!hasAccess) {
+            // Never hand back meeting_url (or anything else) for a session the
+            // student hasn't purchased access to.
+            return res.status(200).json({
+                success: true,
+                data: {
+                    uuid: session.uuid,
+                    title: session.title,
+                    scheduled_start: session.scheduled_start,
+                    course: session.course,
+                    educator: session.educator,
+                    locked: true
+                }
+            });
+        }
+
+        res.status(200).json({ success: true, data: { ...session.toJSON(), locked: false } });
     } catch (err) {
         console.error('Get live session detail error:', err);
         return next(new ErrorHandler('Failed to fetch live session', 500));
@@ -46,6 +84,11 @@ exports.joinSession = async (req, res, next) => {
         const userId = req.user.uuid;
         const session = await LiveSession.findOne({ where: { uuid: req.params.uuid } });
         if (!session) return next(new ErrorHandler('Live session not found', 404));
+
+        const hasAccess = await resolveCourseAccessById(session.course_id, userId);
+        if (!hasAccess) {
+            return next(new ErrorHandler('Enroll in this course to join this live session', 403));
+        }
 
         const [attendance] = await LiveSessionAttendance.findOrCreate({
             where: { live_session_id: session.id, user_id: userId },
