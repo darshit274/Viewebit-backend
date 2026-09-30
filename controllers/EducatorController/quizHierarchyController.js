@@ -5,18 +5,21 @@
  * quizzes, NOT the separate DynamicCategory/hierarchy_categories system.
  *
  * Every Category/Question created here is scoped to req.educator.id so an
- * educator only ever sees and edits their own quiz bank. Categories are
- * rooted under a private "quiz bank" TestSeries auto-created per educator
- * (Educator.quiz_bank_test_series_id) — that TestSeries is never linked to
- * any Course and never shown to students directly; a category only becomes
- * reachable by students once a Lesson/Assignment points at it.
+ * educator only ever sees and edits their own content. By default, root
+ * categories are filed under a private "quiz bank" TestSeries auto-created
+ * per educator (Educator.quiz_bank_test_series_id) — never shown to students
+ * directly; a category there only becomes reachable once a Lesson/Assignment
+ * points at it. Passing a `test_series_id` (uuid) instead files the root
+ * category under one of the educator's own standalone, student-visible test
+ * series (see testSeriesController.js) — those show up directly on the
+ * student Test Series page once priced/published.
  */
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const XLSX = require('xlsx');
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Category, Question, sequelize } = require('../../models');
+const { Category, Question, TestSeries, sequelize } = require('../../models');
 const { getOrCreateQuizBank, findOwnedCategory, createChildCategory } = require('../../utils/quizCategoryHelpers');
 const { buildSampleRows, parseAndValidateFile } = require('../../utils/questionImportParser');
 
@@ -38,10 +41,25 @@ const importUpload = multer({
 });
 exports.parseImportUploadMiddleware = importUpload.single('file');
 
+// Resolves which TestSeries a root-level category belongs to: either the
+// educator's own standalone, student-visible series (identified by uuid, an
+// educator can create these now — see testSeriesController.js), or, when
+// none is specified, their private quiz bank (unchanged default behavior).
+// Returns null if a testSeriesUuid was given but isn't owned by this educator.
+async function resolveRootTestSeries(educator, testSeriesUuid) {
+    if (!testSeriesUuid) return getOrCreateQuizBank(educator);
+    return TestSeries.findOne({
+        where: { uuid: testSeriesUuid, educator_id: educator.id, is_quiz_bank: false }
+    });
+}
+
 exports.getRootCategories = async (req, res, next) => {
     try {
+        const testSeries = await resolveRootTestSeries(req.educator, req.query.test_series_id);
+        if (!testSeries) return next(new ErrorHandler('Test series not found or not owned by you', 404));
+
         const categories = await Category.findAll({
-            where: { educator_id: req.educator.id, parent_category_id: null },
+            where: { educator_id: req.educator.id, parent_category_id: null, test_series_id: testSeries.id },
             order: [['display_order', 'ASC'], ['created_at', 'ASC']]
         });
         res.status(200).json({ success: true, data: categories });
@@ -81,7 +99,7 @@ exports.getCategoryContent = async (req, res, next) => {
 exports.createCategory = async (req, res, next) => {
     try {
         const { parentUuid } = req.params;
-        const { name, description, test_duration_minutes, negative_marking_enabled, negative_marks_per_wrong } = req.body;
+        const { name, description, test_duration_minutes, negative_marking_enabled, negative_marks_per_wrong, test_series_id: testSeriesUuid } = req.body;
 
         if (!name || !name.trim()) return next(new ErrorHandler('Category name is required', 400));
 
@@ -98,8 +116,9 @@ exports.createCategory = async (req, res, next) => {
             testSeriesId = parentCategory.test_series_id;
             hierarchyLevel = parentCategory.hierarchy_level + 1;
         } else {
-            const quizBank = await getOrCreateQuizBank(req.educator);
-            testSeriesId = quizBank.id;
+            const testSeries = await resolveRootTestSeries(req.educator, testSeriesUuid);
+            if (!testSeries) return next(new ErrorHandler('Test series not found or not owned by you', 404));
+            testSeriesId = testSeries.id;
         }
 
         const category = await createChildCategory({
