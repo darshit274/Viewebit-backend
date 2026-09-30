@@ -7,7 +7,7 @@ const fs = require('fs').promises;
 // `fs` above is the promises API (used by the existing thumbnail-upload code below);
 // the course-PDF handler needs the sync API (existsSync/unlinkSync) for cleanup-on-failure paths.
 const fsSync = require('fs');
-const { getOrCreateQuizBank, createChildCategory } = require('../../utils/quizCategoryHelpers');
+const { createChildCategory, findOrCreateCourseTestSeries } = require('../../utils/quizCategoryHelpers');
 const { validatePDFFile } = require('../../utils/pdfUpload');
 const { VIDEO_UPLOAD_MAX_SIZE_BYTES, AUDIO_UPLOAD_MAX_SIZE_BYTES } = require('../../utils/lessonMediaUpload');
 
@@ -65,17 +65,20 @@ async function resolveOwnedCategoryIds(educatorId, categoryIds) {
 
 // Lazily creates (once per course, cached on courses.quiz_category_id) a
 // "container" quiz category scoped to this course, living under the
-// educator's own quiz bank, that inline-created quiz categories nest under.
+// course's own TestSeries, that inline-created quiz categories nest under.
 async function findOrCreateCourseQuizRoot(course, educator) {
     if (course.quiz_category_id) {
         const existing = await Category.findByPk(course.quiz_category_id);
         if (existing) return existing;
     }
 
-    const quizBank = await getOrCreateQuizBank(educator);
+    // Filed under the course's own TestSeries (not the private quiz bank) so
+    // it inherits the same purchase gate as the course and can surface,
+    // locked, on the student Tests page — see utils/courseAccess.js.
+    const testSeriesId = await findOrCreateCourseTestSeries(course, educator);
     const root = await createChildCategory({
         parentCategory: null,
-        testSeriesId: quizBank.id,
+        testSeriesId,
         hierarchyLevel: 0,
         educatorId: educator.id,
         name: `${course.title} — Course Quizzes`,

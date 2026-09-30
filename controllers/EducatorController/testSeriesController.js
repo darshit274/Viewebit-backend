@@ -11,7 +11,7 @@
  */
 const ErrorHandler = require('../../utils/default/errorHandler');
 const { TestSeries, Category, Question, Course, Subscription, Institution } = require('../../models');
-const { Op } = require('sequelize');
+const { findOrCreateCourseTestSeries } = require('../../utils/quizCategoryHelpers');
 
 async function requirePrivateEducatorMode(educator) {
     const institution = educator.institution_id
@@ -20,25 +20,18 @@ async function requirePrivateEducatorMode(educator) {
     return (institution?.pricing_mode || 'coaching_center') === 'private_educator';
 }
 
-async function getCourseLinkedTestSeriesIds() {
-    const linked = await Course.findAll({
-        where: { test_series_id: { [Op.ne]: null } },
-        attributes: ['test_series_id'],
-        raw: true,
-    });
-    return linked.map((c) => c.test_series_id);
-}
-
-// GET /educator/test-series — list my own standalone series (excludes my quiz bank and any course-backing series)
+// GET /educator/test-series — every standalone series this educator manages,
+// including ones backing one of their own courses (tagged with `course` so
+// the UI can show "Course: X" instead of a price badge for those). Only the
+// private, always-hidden quiz bank is excluded.
 exports.listMyTestSeries = async (req, res, next) => {
     try {
-        const courseLinkedIds = await getCourseLinkedTestSeriesIds();
         const series = await TestSeries.findAll({
             where: {
                 educator_id: req.educator.id,
                 is_quiz_bank: false,
-                ...(courseLinkedIds.length > 0 ? { id: { [Op.notIn]: courseLinkedIds } } : {}),
             },
+            include: [{ model: Course, as: 'course', attributes: ['uuid', 'title'], required: false }],
             order: [['created_at', 'DESC']],
         });
 
@@ -46,7 +39,12 @@ exports.listMyTestSeries = async (req, res, next) => {
             const categoriesCount = await Category.count({
                 where: { test_series_id: s.id, is_active: true, parent_category_id: null },
             });
-            return { ...s.toJSON(), categoriesCount };
+            const json = s.toJSON();
+            return {
+                ...json,
+                categoriesCount,
+                course: json.course ? { uuid: json.course.uuid, title: json.course.title } : null,
+            };
         }));
 
         res.status(200).json({ success: true, data: withCounts });
@@ -57,8 +55,24 @@ exports.listMyTestSeries = async (req, res, next) => {
 };
 
 // POST /educator/test-series
+// Two shapes: {title, description, price} creates a standalone, independently
+// priced series (private-educator institutions only). {course_uuid} instead
+// resolves/creates that course's own backing series so a quiz filed under it
+// inherits the course's purchase gate — open to any educator for their own
+// course, matching the existing inline course-builder quiz creation.
 exports.createTestSeries = async (req, res, next) => {
     try {
+        const { course_uuid } = req.body;
+
+        if (course_uuid) {
+            const course = await Course.findOne({ where: { uuid: course_uuid, educator_id: req.educator.id } });
+            if (!course) return next(new ErrorHandler('Course not found or not owned by you', 404));
+
+            const testSeriesId = await findOrCreateCourseTestSeries(course, req.educator);
+            const testSeries = await TestSeries.findByPk(testSeriesId);
+            return res.status(201).json({ success: true, message: 'Course test series ready', data: testSeries });
+        }
+
         if (!(await requirePrivateEducatorMode(req.educator))) {
             return next(new ErrorHandler('Only private-educator institutions can create their own test series', 400));
         }

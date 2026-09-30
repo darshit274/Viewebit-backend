@@ -1,19 +1,21 @@
 const { Sequelize, Op } = require('sequelize');
 const { TestSeries, Category, Question, User, Subscription, Course } = require('../models');
 
-/** Ids of TestSeries rows that back a Course (Course.test_series_id) —
- * students buy/browse these exclusively through the Course UI now, so they
- * must never also appear as a separately-purchasable card in the generic
- * Test Series listings under the course's own name/price. Applies
- * regardless of the course's publish status: an unpublished/draft course's
- * backing series must stay invisible too. */
-async function getCourseLinkedTestSeriesIds() {
+/** Map of TestSeries id -> {uuid, title} for every series backing a Course
+ * (Course.test_series_id). These still appear on the Tests page (so students
+ * know a course-embedded quiz exists), but purchasing happens exclusively
+ * through the Course page, never a direct "Enroll" button here — the
+ * frontend uses this map to render a locked, course-badged card instead of
+ * a normal purchasable one. */
+async function getCourseLinkedTestSeriesMap() {
   const linked = await Course.findAll({
     where: { test_series_id: { [Op.ne]: null } },
-    attributes: ['test_series_id'],
+    attributes: ['test_series_id', 'uuid', 'title'],
     raw: true,
   });
-  return linked.map((c) => c.test_series_id);
+  const map = new Map();
+  linked.forEach((c) => map.set(c.test_series_id, { uuid: c.uuid, title: c.title }));
+  return map;
 }
 
 class TestSeriesController {
@@ -30,11 +32,10 @@ class TestSeriesController {
       const userId = req.user?.id;
 
       const offset = (page - 1) * limit;
-      const courseLinkedIds = await getCourseLinkedTestSeriesIds();
+      const courseLinkedMap = await getCourseLinkedTestSeriesMap();
       const where = {
         is_active: true,
-        is_quiz_bank: false,
-        ...(courseLinkedIds.length > 0 ? { id: { [Op.notIn]: courseLinkedIds } } : {})
+        is_quiz_bank: false
       };
 
       if (search) {
@@ -130,7 +131,8 @@ class TestSeriesController {
             price: series.price,
             currency: series.currency,
             isFeatured: series.is_featured,
-            uuid: series.uuid
+            uuid: series.uuid,
+            course: courseLinkedMap.get(series.id) || null
           };
         })
       );
@@ -162,7 +164,7 @@ class TestSeriesController {
       const { id } = req.params;
       const userId = req.user?.id;
 
-      const courseLinkedIds = await getCourseLinkedTestSeriesIds();
+      const courseLinkedMap = await getCourseLinkedTestSeriesMap();
       const series = await TestSeries.findOne({
         where: {
           [Op.or]: [
@@ -170,8 +172,7 @@ class TestSeriesController {
             { uuid: id }
           ],
           is_active: true,
-          is_quiz_bank: false,
-          ...(courseLinkedIds.length > 0 ? { id: { [Op.notIn]: courseLinkedIds } } : {})
+          is_quiz_bank: false
         },
         attributes: [
           'id', 'uuid', 'name', 'description', 'name_gujarati', 'description_gujarati',
@@ -263,7 +264,8 @@ class TestSeriesController {
         totalTests: categoriesWithMeta.length,
         categories: categoriesWithMeta,
         // Backwards compatibility
-        tests: categoriesWithMeta
+        tests: categoriesWithMeta,
+        course: courseLinkedMap.get(series.id) || null
       };
 
       res.json({
