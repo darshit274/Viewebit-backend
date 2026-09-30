@@ -46,7 +46,12 @@ exports.getCategoryContent = async (req, res, next) => {
         const categoryJson = category.toJSON();
         categoryJson.pdfs = (categoryJson.pdfs || []).map((pdf) => ({
             ...pdf,
-            file_url: `${req.protocol}://${req.get('host')}/uploads/pdfs/${path.basename(pdf.file_path)}`
+            // Relative path, not an absolute URL — behind a reverse proxy
+            // that only forwards a path-prefixed route (e.g. /backend/*) to
+            // this server, guessing req.get('host') alone drops that prefix
+            // and 404s. The frontend resolves this against its own known
+            // API origin instead (see services/api.ts's API_ORIGIN).
+            file_url: `/uploads/pdfs/${path.basename(pdf.file_path)}`
         }));
 
         res.status(200).json({
