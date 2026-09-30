@@ -40,14 +40,23 @@ async function resolveRootCategory(category) {
  * "{title} — Course PDFs" folder (Course.pdf_category_id) — an
  * organizational container for lesson uploads, never meant to be browsable
  * on its own; course access is decided per-lesson instead (see
- * utils/pdfAccess.js). Mirrors the TestSeries quiz-bank exclusion. */
+ * utils/pdfAccess.js). Mirrors the TestSeries quiz-bank exclusion. Also
+ * catches orphans by name/shape: once a course is deleted the live-FK
+ * check alone misses its folder (no Course row references it any more). */
 async function getCoursePdfRootIds() {
-  const linked = await Course.findAll({
-    where: { pdf_category_id: { [Op.ne]: null } },
-    attributes: ['pdf_category_id'],
-    raw: true,
-  });
-  return linked.map((c) => c.pdf_category_id);
+  const [linked, orphaned] = await Promise.all([
+    Course.findAll({
+      where: { pdf_category_id: { [Op.ne]: null } },
+      attributes: ['pdf_category_id'],
+      raw: true,
+    }),
+    PdfCategory.findAll({
+      where: { name: { [Op.like]: '%— Course PDFs' }, parent_category_id: null },
+      attributes: ['id'],
+      raw: true,
+    }),
+  ]);
+  return [...new Set([...linked.map((c) => c.pdf_category_id), ...orphaned.map((c) => c.id)])];
 }
 
 /** Map a root category's pricing onto the per-PDF access fields the apps already understand. */
