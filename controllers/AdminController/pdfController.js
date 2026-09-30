@@ -1,10 +1,47 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Pdfs, User } = require('../../models');
+const { Pdfs, User, Lesson, Course, PdfCategory } = require('../../models');
 const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs');
 const NotificationTriggers = require('../../services/NotificationTriggers');
 const { resolvePdfAccess } = require('../../utils/pdfAccess');
+
+/** Ids of Pdfs rows attached to a course lesson (Lesson.pdf_id) — these are
+ * course content, browsable only through the course player, never through
+ * the general public PDF library. Shared by getPdfs/getPdfCategories/
+ * getPdfFilters, which are the actual public-facing endpoints (unlike the
+ * admin-only pdfHierarchyController routes, these have no auth at all). */
+async function getLessonAttachedPdfIds() {
+    const attached = await Lesson.findAll({
+        where: { pdf_id: { [Op.ne]: null } },
+        attributes: ['pdf_id'],
+        raw: true,
+    });
+    return attached.map((l) => l.pdf_id);
+}
+
+/** Ids of PdfCategory roots that are a course's auto-created folder
+ * (Course.pdf_category_id) — same exclusion as pdfHierarchyController's
+ * getCoursePdfRootIds, duplicated here since these are a separate,
+ * unrelated listing endpoint (flat PDF library, not the category tree).
+ * Also catches orphans by name/shape: a deleted course's folder is no
+ * longer referenced by any Course row, so the live-FK check alone misses
+ * it — the same failure mode the quiz-bank exclusion hit earlier. */
+async function getCoursePdfCategoryIds() {
+    const [linked, orphaned] = await Promise.all([
+        Course.findAll({
+            where: { pdf_category_id: { [Op.ne]: null } },
+            attributes: ['pdf_category_id'],
+            raw: true,
+        }),
+        PdfCategory.findAll({
+            where: { name: { [Op.like]: '%— Course PDFs' }, parent_category_id: null },
+            attributes: ['id'],
+            raw: true,
+        }),
+    ]);
+    return [...new Set([...linked.map((c) => c.pdf_category_id), ...orphaned.map((c) => c.id)])];
+}
 
 // Get all PDFs with pagination and filters
 exports.getPdfs = async (req, res, next) => {
@@ -53,6 +90,38 @@ exports.getPdfs = async (req, res, next) => {
         }
         if (is_featured !== undefined) {
             whereClause.is_featured = is_featured === 'true';
+        }
+
+        // This route is shared: admin-authenticated callers (GET
+        // /admin/pdfs) manage PDFs regardless of status, but the public,
+        // unauthenticated one (GET /pdfs) is the student-facing library and
+        // must default to active-only and hide course content — it's meant
+        // to only ever be reached through the course player.
+        if (!req.admin) {
+            if (is_active === undefined) {
+                whereClause.is_active = true;
+            }
+            const [lessonPdfIds, coursePdfCategoryIds] = await Promise.all([
+                getLessonAttachedPdfIds(),
+                getCoursePdfCategoryIds(),
+            ]);
+            if (lessonPdfIds.length > 0) {
+                whereClause.id = { [Op.notIn]: lessonPdfIds };
+            }
+            if (category_id && coursePdfCategoryIds.includes(parseInt(category_id))) {
+                // Explicitly requested a course's private folder directly — treat as empty rather than leaking it.
+                whereClause.id = '__none__';
+            } else if (coursePdfCategoryIds.length > 0) {
+                // SQL's NOT IN excludes NULLs too (three-valued logic), which
+                // would wrongly hide every category-less PDF — allow nulls
+                // through explicitly instead of just negating the list. Uses
+                // Op.and (not a second Op.or) so it doesn't clobber the
+                // search filter's own Op.or key on this same where object.
+                whereClause[Op.and] = [
+                    ...(whereClause[Op.and] || []),
+                    { [Op.or]: [{ category_id: null }, { category_id: { [Op.notIn]: coursePdfCategoryIds } }] },
+                ];
+            }
         }
 
         console.log('🔍 Query filters:', whereClause);
@@ -534,11 +603,13 @@ exports.getPdfStats = async (req, res, next) => {
 // Get PDF categories
 exports.getPdfCategories = async (req, res, next) => {
     try {
-        const { PdfCategory } = require('../../models');
-        
+        const coursePdfCategoryIds = await getCoursePdfCategoryIds();
         const categories = await PdfCategory.findAll({
             attributes: ['id', 'name', 'slug', 'description', 'icon', 'color', 'sort_order'],
-            where: { is_active: true },
+            where: {
+                is_active: true,
+                ...(coursePdfCategoryIds.length > 0 ? { id: { [Op.notIn]: coursePdfCategoryIds } } : {}),
+            },
             order: [['sort_order', 'ASC'], ['name', 'ASC']]
         });
 
@@ -557,11 +628,15 @@ exports.getPdfCategories = async (req, res, next) => {
 exports.getPdfFilters = async (req, res, next) => {
     try {
         // Get PDF categories
-        const { PdfCategory, ExamType } = require('../../models');
-        
+        const { ExamType } = require('../../models');
+        const coursePdfCategoryIds = await getCoursePdfCategoryIds();
+
         const categories = await PdfCategory.findAll({
             attributes: ['id', 'name', 'description'],
-            where: { is_active: true },
+            where: {
+                is_active: true,
+                ...(coursePdfCategoryIds.length > 0 ? { id: { [Op.notIn]: coursePdfCategoryIds } } : {}),
+            },
             order: [['name', 'ASC']]
         });
 

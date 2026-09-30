@@ -19,9 +19,13 @@ exports.educatorAuth = async (req, res, next) => {
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Find educator (fetch current_session_id for single-device enforcement)
+        // Find educator (fetch current_session_id for single-device enforcement).
+        // quiz_bank_test_series_id must be included: getOrCreateQuizBank reads
+        // it straight off req.educator, and its absence here silently spawned
+        // a brand new quiz-bank TestSeries on every request that needed one,
+        // orphaning the previous one each time.
         const educator = await Educator.findByPk(decoded.id, {
-            attributes: ['id', 'name', 'email', 'institution_id', 'branch_id', 'department_id', 'isActive', 'current_session_id']
+            attributes: ['id', 'name', 'email', 'institution_id', 'branch_id', 'department_id', 'isActive', 'current_session_id', 'quiz_bank_test_series_id']
         });
 
         if (!educator) {

@@ -1,5 +1,5 @@
 const ErrorHandler = require('../../utils/default/errorHandler');
-const { Course, CourseModule, Lesson, TestSeries, Category, CourseCategory, Pdfs, PdfCategory, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, LiveSession, Institution, sequelize } = require('../../models');
+const { Course, CourseModule, Lesson, TestSeries, Category, CourseCategory, Pdfs, PdfCategory, Question, Subscription, Certificate, Assignment, AssignmentSubmission, LessonProgress, LiveSession, Institution, sequelize } = require('../../models');
 const { Op } = require('sequelize');
 const multer = require('multer');
 const path = require('path');
@@ -411,7 +411,38 @@ exports.deleteCourse = async (req, res, next) => {
             }
         }
 
+        // Deletion is only reachable once we know nothing real is attached
+        // (checks above), so it's safe to also remove the infrastructure this
+        // course auto-created for itself — otherwise it's orphaned: no
+        // Course row points at it any more, so it drops out of every
+        // "hide course-linked X" exclusion and reappears as a ghost entry in
+        // the student-facing Test Series / PDF library listings.
+        const { test_series_id, pdf_category_id, quiz_category_id } = course;
+
         await course.destroy();
+
+        if (test_series_id) {
+            await TestSeries.destroy({ where: { id: test_series_id } });
+        }
+
+        if (pdf_category_id) {
+            const orphanedPdfs = await Pdfs.findAll({ where: { category_id: pdf_category_id } });
+            for (const orphanedPdf of orphanedPdfs) {
+                const filePath = orphanedPdf.file_path;
+                await orphanedPdf.destroy();
+                if (filePath) {
+                    try { if (fsSync.existsSync(filePath)) fsSync.unlinkSync(filePath); }
+                    catch (e) { console.warn('Could not delete orphaned course PDF file:', filePath, e.message); }
+                }
+            }
+            await PdfCategory.destroy({ where: { id: pdf_category_id } });
+        }
+
+        if (quiz_category_id) {
+            await Question.destroy({ where: { category_id: quiz_category_id } });
+            await Category.destroy({ where: { id: quiz_category_id } });
+        }
+
         res.status(200).json({ success: true, message: 'Course deleted successfully' });
     } catch (err) {
         console.error('Delete course error:', err);

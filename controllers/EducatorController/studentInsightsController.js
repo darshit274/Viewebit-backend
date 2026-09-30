@@ -5,6 +5,23 @@ const { Course, CourseModule, Lesson, LessonProgress, Subscription, TestSession,
 const { Op } = require('sequelize');
 const { getEducatorCourses, getEducatorCategoryIds } = require('../../utils/educatorScope');
 
+// TestSession.session_data is declared DataTypes.JSON in the model, but the
+// actual column is LONGTEXT (a migration/model mismatch) — Sequelize
+// doesn't auto-parse it for this column, so every read comes back as a raw
+// JSON string. Every consumer here needs `.category_uuid` off of it, so
+// parse defensively rather than fix the column type (out of scope for this
+// bug — TestSession.js documents it, and fixing it means a migration).
+function getSessionCategoryUuid(session) {
+    try {
+        const data = typeof session.session_data === 'string'
+            ? JSON.parse(session.session_data)
+            : session.session_data;
+        return data?.category_uuid;
+    } catch {
+        return undefined;
+    }
+}
+
 exports.listStudents = async (req, res, next) => {
     try {
         const { search = '', access_type = 'all', page = 1, limit = 20 } = req.query;
@@ -79,7 +96,7 @@ exports.listStudents = async (req, res, next) => {
         // Path 3: quiz-only attempts — completed TestSessions matching this educator's category tree
         if (categoryUuids.length > 0) {
             const completedSessions = await TestSession.findAll({ where: { status: 'completed' } });
-            const scoped = completedSessions.filter((s) => categoryUuids.includes(s.session_data?.category_uuid));
+            const scoped = completedSessions.filter((s) => categoryUuids.includes(getSessionCategoryUuid(s)));
             const userIds = [...new Set(scoped.map((s) => s.user_id))];
             if (userIds.length > 0) {
                 const users = await User.findAll({ where: { uuid: userIds }, attributes: ['uuid', 'username', 'email'] });
@@ -145,7 +162,7 @@ exports.listTestAttempts = async (req, res, next) => {
         }
 
         const sessions = await TestSession.findAll({ where: { status: 'completed' }, order: [['created_at', 'DESC']] });
-        const scoped = sessions.filter((s) => categoryUuids.includes(s.session_data?.category_uuid));
+        const scoped = sessions.filter((s) => categoryUuids.includes(getSessionCategoryUuid(s)));
 
         const grouped = new Map();
         scoped.forEach((s) => {
@@ -205,7 +222,7 @@ exports.getStudentTestAttempts = async (req, res, next) => {
         const { uuids: categoryUuids } = await getEducatorCategoryIds(req.educator.id);
 
         const sessions = await TestSession.findAll({ where: { user_id: studentUuid, status: 'completed' }, order: [['created_at', 'DESC']] });
-        const scoped = sessions.filter((s) => categoryUuids.includes(s.session_data?.category_uuid));
+        const scoped = sessions.filter((s) => categoryUuids.includes(getSessionCategoryUuid(s)));
 
         if (scoped.length === 0) return next(new ErrorHandler('Student not found', 404));
 
