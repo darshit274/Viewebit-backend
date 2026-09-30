@@ -137,7 +137,8 @@ exports.getCourseDetail = async (req, res, next) => {
                         order: [['display_order', 'ASC']],
                         include: [
                             { model: Category, as: 'quizCategory', attributes: ['id', 'uuid', 'name'] },
-                            { model: Pdfs, as: 'pdf', attributes: ['id', 'title'] }
+                            { model: Pdfs, as: 'pdf', attributes: ['id', 'title'] },
+                            { model: Assignment, as: 'assignment', attributes: ['id', 'uuid', 'title'] }
                         ]
                     }]
                 }
