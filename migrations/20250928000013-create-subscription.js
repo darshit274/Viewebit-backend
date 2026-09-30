@@ -34,20 +34,23 @@ module.exports = {
         });
       }
 
+      // TestSeries' actual table is 'new_test_series' (see models/TestSeries.js
+      // tableName) - 'test_series' is the legacy, pre-reset table. Point the FK
+      // at the table Subscription.test_series_id values are really drawn from.
       const [existingFk] = await queryInterface.sequelize.query(`
         SELECT CONSTRAINT_NAME
         FROM information_schema.KEY_COLUMN_USAGE
         WHERE TABLE_SCHEMA = DATABASE()
           AND TABLE_NAME = 'subscription'
           AND COLUMN_NAME = 'test_series_id'
-          AND REFERENCED_TABLE_NAME = 'test_series'
+          AND REFERENCED_TABLE_NAME = 'new_test_series'
       `);
       if (existingFk.length === 0) {
         await queryInterface.addConstraint('subscription', {
           fields: ['test_series_id'],
           type: 'foreign key',
           name: 'subscription_test_series_id_fkey',
-          references: { table: 'test_series', field: 'id' },
+          references: { table: 'new_test_series', field: 'id' },
           onDelete: 'SET NULL',
           onUpdate: 'CASCADE'
         });
