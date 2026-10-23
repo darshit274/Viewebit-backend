@@ -777,8 +777,16 @@ exports.getAvailableAssignments = async (req, res, next) => {
 exports.createCourseQuizCategory = async (req, res, next) => {
     try {
         const { courseUuid } = req.params;
-        const { name } = req.body;
+        const { name, test_duration_minutes } = req.body;
         if (!name || !name.trim()) return next(new ErrorHandler('Quiz name is required', 400));
+
+        let testDurationMinutes;
+        if (test_duration_minutes !== undefined && test_duration_minutes !== null && test_duration_minutes !== '') {
+            testDurationMinutes = parseInt(test_duration_minutes, 10);
+            if (isNaN(testDurationMinutes) || testDurationMinutes < 1) {
+                return next(new ErrorHandler('Duration must be a positive number of minutes', 400));
+            }
+        }
 
         const course = await Course.findOne({ where: { uuid: courseUuid, educator_id: req.educator.id } });
         if (!course) return next(new ErrorHandler('Course not found or not owned by you', 404));
@@ -790,12 +798,13 @@ exports.createCourseQuizCategory = async (req, res, next) => {
             hierarchyLevel: root.hierarchy_level + 1,
             educatorId: req.educator.id,
             name,
-            description: null
+            description: null,
+            testDurationMinutes
         });
 
         res.status(201).json({
             success: true,
-            data: { id: category.id, uuid: category.uuid, name: category.name, node_type: category.node_type }
+            data: { id: category.id, uuid: category.uuid, name: category.name, node_type: category.node_type, test_duration_minutes: category.test_duration_minutes }
         });
     } catch (err) {
         console.error('Create course quiz category error:', err);
