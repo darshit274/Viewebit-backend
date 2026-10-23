@@ -42,10 +42,14 @@ exports.uploadThumbnail = multer({
 
 const COURSE_CATEGORY_INCLUDE = { model: CourseCategory, as: 'categories', attributes: ['id', 'uuid', 'name'], through: { attributes: [] } };
 
+// Deliberately returns the relative path as-is rather than guessing a full
+// URL from req.protocol/req.get('host') — behind the production reverse
+// proxy that guess comes out as https://edu.viewebit.com/uploads/... with
+// no /backend prefix, which nginx routes to the web app's SPA instead of
+// proxying to this server (see pdfHierarchyController's file_url fix for
+// the same bug). Clients already know their own correctly-configured API
+// origin and prefix this relative path with it themselves.
 function toFullUploadUrl(req, relativePath) {
-    if (relativePath && relativePath.startsWith('/uploads/')) {
-        return `${req.protocol}://${req.get('host')}${relativePath}`;
-    }
     return relativePath || null;
 }
 
