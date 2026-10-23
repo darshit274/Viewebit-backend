@@ -42,7 +42,7 @@ const findOwnedCategory = async (categoryUuid, educatorId) => {
     return Category.findOne({ where: { uuid: categoryUuid, educator_id: educatorId } });
 };
 
-async function createChildCategory({ parentCategory, testSeriesId, hierarchyLevel, educatorId, name, description, nodeType }) {
+async function createChildCategory({ parentCategory, testSeriesId, hierarchyLevel, educatorId, name, description, nodeType, testDurationMinutes }) {
     const siblingMax = await Category.findOne({
         attributes: [[sequelize.fn('MAX', sequelize.col('display_order')), 'maxOrder']],
         where: { test_series_id: testSeriesId, parent_category_id: parentCategory ? parentCategory.id : null },
@@ -61,7 +61,7 @@ async function createChildCategory({ parentCategory, testSeriesId, hierarchyLeve
         display_order: nextDisplayOrder,
         negative_marking_enabled: false,
         negative_marks_per_wrong: 0.25,
-        test_duration_minutes: 60
+        test_duration_minutes: testDurationMinutes || 60
     });
 
     if (parentCategory && parentCategory.node_type === 'unset') {

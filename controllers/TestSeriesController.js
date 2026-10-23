@@ -18,6 +18,13 @@ async function getCourseLinkedTestSeriesMap() {
   return map;
 }
 
+/** Ids of every TestSeries backing a Course, for listings (featured, free)
+ * that exclude course-embedded series entirely rather than badging them. */
+async function getCourseLinkedTestSeriesIds() {
+  const map = await getCourseLinkedTestSeriesMap();
+  return Array.from(map.keys());
+}
+
 class TestSeriesController {
   // Get all test series (for web app tests page)
   static async getTestSeries(req, res) {
