@@ -259,14 +259,14 @@ class NotificationTriggers {
   async getNotificationEligibleUsers(filters = {}) {
     try {
       const whereClause = {
-        is_active: true,
-        email_verified: true,
+        isActive: true,
+        isEmailVerified: true,
         ...filters
       };
 
       const users = await User.findAll({
         where: whereClause,
-        attributes: ['uuid', 'email', 'name'],
+        attributes: ['uuid', 'email', 'username'],
         raw: true
       });
 

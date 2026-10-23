@@ -319,7 +319,7 @@ exports.getNotificationHistory = async (req, res, next) => {
                 {
                     model: User,
                     as: 'user',
-                    attributes: ['uuid', 'email', 'name'],
+                    attributes: ['uuid', 'email', 'username'],
                     required: false
                 }
             ],
@@ -367,11 +367,11 @@ exports.sendTestNotification = async (req, res, next) => {
         // Send to a limited number of users (latest 5 active users)
         const testUsers = await User.findAll({
             where: {
-                is_active: true,
-                email_verified: true
+                isActive: true,
+                isEmailVerified: true
             },
             attributes: ['uuid'],
-            order: [['last_login', 'DESC']],
+            order: [['lastLogin', 'DESC']],
             limit: 5
         });
 
