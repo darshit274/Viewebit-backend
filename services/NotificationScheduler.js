@@ -57,13 +57,13 @@ class NotificationScheduler {
       // Get users who were active in the last 7 days
       const activeUsers = await User.findAll({
         where: {
-          is_active: true,
-          email_verified: true,
-          last_login: {
+          isActive: true,
+          isEmailVerified: true,
+          lastLogin: {
             [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
           }
         },
-        attributes: ['uuid', 'email', 'name'],
+        attributes: ['uuid', 'email', 'username'],
         limit: 100 // Limit to prevent overwhelming
       });
 
@@ -129,14 +129,14 @@ class NotificationScheduler {
       // Get users who haven't taken a test in the last week
       const inactiveUsers = await User.findAll({
         where: {
-          is_active: true,
-          email_verified: true,
+          isActive: true,
+          isEmailVerified: true,
           // This would need proper implementation with user activity tracking
-          last_login: {
+          lastLogin: {
             [Op.lt]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
           }
         },
-        attributes: ['uuid', 'email', 'name'],
+        attributes: ['uuid', 'email', 'username'],
         limit: 50
       });
 
@@ -173,14 +173,14 @@ class NotificationScheduler {
       // Get users inactive for 3+ days
       const inactiveUsers = await User.findAll({
         where: {
-          is_active: true,
-          email_verified: true,
-          last_login: {
+          isActive: true,
+          isEmailVerified: true,
+          lastLogin: {
             [Op.lt]: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
             [Op.gt]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // But not too old
           }
         },
-        attributes: ['uuid', 'email', 'name'],
+        attributes: ['uuid', 'email', 'username'],
         limit: 30
       });
 
@@ -222,9 +222,9 @@ class NotificationScheduler {
       if ([9, 14, 19].includes(hour)) {
         const recentlyActiveUsers = await User.findAll({
           where: {
-            is_active: true,
-            email_verified: true,
-            last_login: {
+            isActive: true,
+            isEmailVerified: true,
+            lastLogin: {
               [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
             }
           },
