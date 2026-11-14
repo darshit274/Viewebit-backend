@@ -15,8 +15,7 @@ function buildAnswers({ scale, aiApproach, scenarios, useCases }) {
     scn_screening: scenarios.scn_screening, scn_outreach: scenarios.scn_outreach,
     scn_verify: scenarios.scn_verify, scn_client: scenarios.scn_client,
     scn_confidential: scenarios.scn_confidential,
-    ready_leadership: scale, ready_process: scale, ready_skills: scale,
-    ready_governance: scale, ready_measurement: scale, ready_adoption: scale
+    ready_skills: scale, ready_governance: scale, ready_adoption: scale
   };
 }
 
