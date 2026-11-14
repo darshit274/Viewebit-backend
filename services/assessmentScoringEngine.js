@@ -19,7 +19,7 @@ const MATURITY_LEVELS = {
     label: 'Developing',
     minScore: 41,
     maxScore: 60,
-    description: 'The agency has meaningful AI usage but has clear skills, process or governance gaps.'
+    description: 'The organisation has meaningful AI usage but has clear skills, process or governance gaps.'
   },
   ai_ready: {
     label: 'AI Ready',
@@ -37,20 +37,20 @@ const MATURITY_LEVELS = {
 
 const OPPORTUNITY_TEMPLATES = {
   sourcing: {
-    title: 'Candidate Sourcing',
-    explanation: 'Your team spends meaningful time sourcing candidates. Structured AI workflows could help surface strong profiles faster while recruiters stay responsible for outreach and judgement calls.'
+    title: 'New Business & Lead Sourcing',
+    explanation: 'Your team spends meaningful time sourcing new clients or leads. Structured AI workflows could help surface strong opportunities faster while your team stays responsible for outreach and judgement calls.'
   },
   screening: {
-    title: 'Candidate Screening',
-    explanation: 'CV screening looks like a significant time draw for your team. AI-assisted shortlisting, with a recruiter validating every match, could free up hours without losing quality control.'
+    title: 'Document & File Review',
+    explanation: 'Reviewing files, applications, or case documents looks like a significant time draw for your team. AI-assisted triage, with a team member validating every result, could free up hours without losing quality control.'
   },
   outreach: {
-    title: 'Candidate Outreach',
-    explanation: 'Personalised outreach takes real time to do well. AI-drafted, recruiter-reviewed messaging could help your team reach more candidates without it feeling generic.'
+    title: 'Client Outreach',
+    explanation: 'Personalised outreach takes real time to do well. AI-drafted, team-reviewed messaging could help you reach more clients or contacts without it feeling generic.'
   },
   reporting: {
-    title: 'Recruitment Reporting & Admin',
-    explanation: 'Reporting and administrative work take up real capacity. AI support here could return hours to your desk-facing recruiters each week.'
+    title: 'Reporting & Admin',
+    explanation: 'Reporting and administrative work take up real capacity. AI support here could return hours to your client-facing team each week.'
   }
 };
 
@@ -63,15 +63,15 @@ const GAP_TEMPLATES = {
   },
   workflowApplication: {
     title: 'Workflow Integration',
-    explanation: 'Your team may know how to use AI tools but may not yet have repeatable workflows that embed AI into daily recruitment processes.'
+    explanation: 'Your team may know how to use AI tools but may not yet have repeatable workflows that embed AI into daily processes.'
   },
   aiFluency: {
     title: 'AI Fluency & Practical Skills',
-    explanation: 'Your recruiters may benefit from more hands-on practice using AI day-to-day, so confidence grows from real use rather than occasional experimentation.'
+    explanation: 'Your team may benefit from more hands-on practice using AI day-to-day, so confidence grows from real use rather than occasional experimentation.'
   },
   responsibleAI_verification: {
     title: 'AI Verification',
-    explanation: 'Your team may need stronger processes for checking AI-generated information before it influences candidate or client decisions.'
+    explanation: 'Your team may need stronger processes for checking AI-generated information before it influences a client or case decision.'
   },
   responsibleAI_governance: {
     title: 'AI Governance',
