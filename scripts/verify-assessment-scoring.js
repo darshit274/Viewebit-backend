@@ -3,7 +3,7 @@ const { computeAssessmentResult } = require('../services/assessmentScoringEngine
 
 function buildAnswers({ scale, aiApproach, scenarios, useCases }) {
   return {
-    agency_type: 'generalist',
+    agency_type: 'recruitment',
     team_size: '6-15',
     ai_approach: aiApproach,
     conf_prompting: scale, conf_research: scale, conf_jd: scale,

@@ -3,27 +3,23 @@
 const SECTIONS = [
   {
     id: 'about_agency',
-    title: 'About Your Agency',
+    title: 'About Your Organisation',
     questions: [
       {
         id: 'agency_type',
         type: 'single-select',
-        prompt: 'What type of recruitment business are you?',
+        prompt: 'What type of organisation are you?',
         options: [
-          { value: 'generalist', label: 'Generalist recruitment' },
-          { value: 'specialist', label: 'Specialist recruitment' },
-          { value: 'executive_search', label: 'Executive search' },
-          { value: 'it_tech', label: 'IT / Technology recruitment' },
-          { value: 'healthcare', label: 'Healthcare recruitment' },
-          { value: 'engineering', label: 'Engineering recruitment' },
-          { value: 'finance', label: 'Finance / Accounting recruitment' },
-          { value: 'other', label: 'Other' }
+          { value: 'recruitment', label: 'Recruitment agency' },
+          { value: 'insurance', label: 'Insurance agency / brokerage' },
+          { value: 'law', label: 'Law firm' },
+          { value: 'other', label: 'Other professional / client services firm' }
         ]
       },
       {
         id: 'team_size',
         type: 'single-select',
-        prompt: 'Approximately how large is your recruitment team?',
+        prompt: 'Approximately how large is your team?',
         options: [
           { value: '1-5', label: '1–5' },
           { value: '6-15', label: '6–15' },
@@ -55,26 +51,26 @@ const SECTIONS = [
     scaleType: 'confidence-1-5',
     rows: [
       { id: 'conf_prompting', label: 'Writing effective AI prompts', dimensions: [{ key: 'prompting', weight: 1 }] },
-      { id: 'conf_research', label: 'Using AI to research candidates', dimensions: [{ key: 'workflowApplication', weight: 1 }] },
-      { id: 'conf_jd', label: 'Using AI to improve job descriptions', dimensions: [{ key: 'prompting', weight: 1 }] },
-      { id: 'conf_personalise', label: 'Using AI to personalise candidate communication', dimensions: [{ key: 'prompting', weight: 1 }] },
-      { id: 'conf_summarise', label: 'Using AI to summarise CVs or profiles', dimensions: [{ key: 'workflowApplication', weight: 1 }] },
-      { id: 'conf_interview', label: 'Using AI to prepare interview questions', dimensions: [{ key: 'workflowApplication', weight: 1 }] },
-      { id: 'conf_analyse', label: 'Using AI to analyse recruitment data', dimensions: [{ key: 'aiFluency', weight: 1 }] },
+      { id: 'conf_research', label: 'Using AI to research clients or cases', dimensions: [{ key: 'workflowApplication', weight: 1 }] },
+      { id: 'conf_jd', label: 'Using AI to improve client-facing documents', dimensions: [{ key: 'prompting', weight: 1 }] },
+      { id: 'conf_personalise', label: 'Using AI to personalise client communication', dimensions: [{ key: 'prompting', weight: 1 }] },
+      { id: 'conf_summarise', label: 'Using AI to summarise files, profiles, or case information', dimensions: [{ key: 'workflowApplication', weight: 1 }] },
+      { id: 'conf_interview', label: 'Using AI to prepare for client meetings or consultations', dimensions: [{ key: 'workflowApplication', weight: 1 }] },
+      { id: 'conf_analyse', label: 'Using AI to analyse client or business data', dimensions: [{ key: 'aiFluency', weight: 1 }] },
       { id: 'conf_verify', label: 'Checking AI-generated information', dimensions: [{ key: 'responsibleAI', weight: 1, subscore: 'verification' }] },
-      { id: 'conf_confidentiality', label: 'Protecting confidential candidate/client information when using AI', dimensions: [{ key: 'responsibleAI', weight: 1, subscore: 'governance' }] },
+      { id: 'conf_confidentiality', label: 'Protecting confidential client information when using AI', dimensions: [{ key: 'responsibleAI', weight: 1, subscore: 'governance' }] },
       { id: 'conf_when_not', label: 'Identifying when AI should NOT be used', dimensions: [{ key: 'responsibleAI', weight: 1, subscore: 'verification' }] }
     ]
   },
   {
     id: 'workflow_frequency',
-    title: 'Recruitment Workflow',
+    title: 'Core Workflow',
     matrix: true,
     scaleType: 'frequency-5',
     rows: [
-      { id: 'freq_sourcing', label: 'Candidate sourcing', opportunityTask: 'sourcing' },
-      { id: 'freq_screening', label: 'CV screening', opportunityTask: 'screening' },
-      { id: 'freq_outreach', label: 'Candidate outreach', opportunityTask: 'outreach' },
+      { id: 'freq_sourcing', label: 'New client / lead sourcing', opportunityTask: 'sourcing' },
+      { id: 'freq_screening', label: 'File or document review', opportunityTask: 'screening' },
+      { id: 'freq_outreach', label: 'Client outreach & communication', opportunityTask: 'outreach' },
       { id: 'freq_reporting', label: 'Reporting & administration', opportunityTask: 'reporting' }
     ]
   },
@@ -85,14 +81,14 @@ const SECTIONS = [
       {
         id: 'use_cases',
         type: 'multi-select',
-        prompt: 'Which of these are your recruiters currently using AI for?',
+        prompt: 'Which of these is your team currently using AI for?',
         options: [
           { value: 'writing_emails', label: 'Writing emails', opportunityTasks: ['outreach'] },
-          { value: 'writing_jds', label: 'Writing job descriptions', opportunityTasks: [] },
-          { value: 'candidate_research', label: 'Candidate research', opportunityTasks: ['sourcing'] },
-          { value: 'cv_summarisation', label: 'CV summarisation', opportunityTasks: ['screening'] },
-          { value: 'candidate_matching', label: 'Candidate matching', opportunityTasks: ['sourcing', 'screening'] },
-          { value: 'interview_prep', label: 'Interview preparation', opportunityTasks: [] },
+          { value: 'writing_jds', label: 'Drafting documents (job specs, policy documents, contracts, etc.)', opportunityTasks: [] },
+          { value: 'candidate_research', label: 'Client or case research', opportunityTasks: ['sourcing'] },
+          { value: 'cv_summarisation', label: 'Summarising files or records', opportunityTasks: ['screening'] },
+          { value: 'candidate_matching', label: 'Matching clients to the right role, policy, or service', opportunityTasks: ['sourcing', 'screening'] },
+          { value: 'interview_prep', label: 'Meeting or consultation preparation', opportunityTasks: [] },
           { value: 'market_research', label: 'Market research', opportunityTasks: [] },
           { value: 'data_analysis', label: 'Data analysis', opportunityTasks: ['reporting'] },
           { value: 'crm_admin', label: 'CRM/admin support', opportunityTasks: ['reporting'] },
@@ -116,11 +112,11 @@ const SECTIONS = [
       {
         id: 'scn_screening',
         type: 'single-select',
-        prompt: 'A recruiter receives 80 CVs for a difficult-to-fill role. What would your team most likely do?',
+        prompt: 'Your team receives a large batch of files to review for a time-sensitive matter (CVs, claims, or case intake). What would your team most likely do?',
         options: [
-          { value: 'A', label: 'Manually review every CV', points: 45 },
-          { value: 'B', label: 'Use AI to help identify relevant profiles, then have a recruiter validate them', points: 100 },
-          { value: 'C', label: 'Ask AI to automatically select the successful candidates', points: 20 },
+          { value: 'A', label: 'Manually review every file one by one', points: 45 },
+          { value: 'B', label: 'Use AI to help identify the most relevant or urgent files, then have a team member validate them', points: 100 },
+          { value: 'C', label: 'Ask AI to automatically decide the outcome without review', points: 20 },
           { value: 'D', label: "We don't currently have a process for this", points: 10 }
         ],
         dimensions: [{ key: 'workflowApplication', weight: 0.7 }, { key: 'responsibleAI', weight: 0.3 }]
@@ -128,11 +124,11 @@ const SECTIONS = [
       {
         id: 'scn_outreach',
         type: 'single-select',
-        prompt: 'A recruiter needs to send personalised outreach to 30 potential candidates. What is the best use of AI?',
+        prompt: 'Your team needs to send personalised outreach to 30 potential clients or contacts. What is the best use of AI?',
         options: [
           { value: 'A', label: 'Send the same AI-written message to everyone', points: 35 },
-          { value: 'B', label: 'Use AI to create personalised drafts based on candidate context, then review before sending', points: 100 },
-          { value: 'C', label: 'Let AI contact candidates without human review', points: 15 },
+          { value: 'B', label: 'Use AI to create personalised drafts based on each contact’s context, then review before sending', points: 100 },
+          { value: 'C', label: 'Let AI contact people without human review', points: 15 },
           { value: 'D', label: 'Write every message entirely manually', points: 50 }
         ],
         dimensions: [{ key: 'prompting', weight: 0.6 }, { key: 'workflowApplication', weight: 0.4 }]
@@ -140,10 +136,10 @@ const SECTIONS = [
       {
         id: 'scn_verify',
         type: 'single-select',
-        prompt: 'Your team uses AI to summarise candidate information. What is the most important control?',
+        prompt: 'Your team uses AI to summarise client or case information. What is the most important control?',
         options: [
           { value: 'A', label: 'Trust the summary if it sounds professional', points: 15 },
-          { value: 'B', label: 'Have a recruiter verify important facts before using the information', points: 100 },
+          { value: 'B', label: 'Have a team member verify important facts before using the information', points: 100 },
           { value: 'C', label: 'Avoid AI completely', points: 40 },
           { value: 'D', label: 'Ask AI whether its own answer is correct', points: 25 }
         ],
@@ -152,10 +148,10 @@ const SECTIONS = [
       {
         id: 'scn_client',
         type: 'single-select',
-        prompt: 'A client wants a same-day shortlist update. What is the best use of AI here?',
+        prompt: 'A client wants a same-day status update on their case, claim, or search. What is the best use of AI here?',
         options: [
           { value: 'A', label: 'Send the AI-drafted update to the client as-is', points: 30 },
-          { value: 'B', label: 'Use AI to draft the update from real data, then have a recruiter check accuracy and tone before sending', points: 100 },
+          { value: 'B', label: 'Use AI to draft the update from real data, then have a team member check accuracy and tone before sending', points: 100 },
           { value: 'C', label: 'Write the update entirely from memory, without AI', points: 45 },
           { value: 'D', label: "We don't have a standard way of doing this", points: 10 }
         ],
@@ -164,9 +160,9 @@ const SECTIONS = [
       {
         id: 'scn_confidential',
         type: 'single-select',
-        prompt: "A recruiter wants to paste a client's confidential job specification into a public AI tool to speed up drafting. What should happen?",
+        prompt: "A team member wants to paste a client's confidential document (a job spec, policy detail, or case file) into a public AI tool to speed up drafting. What should happen?",
         options: [
-          { value: 'A', label: "Paste it in — it's just a job spec", points: 10 },
+          { value: 'A', label: "Paste it in — it's just a routine document", points: 10 },
           { value: 'B', label: 'Use an approved, secure AI tool per policy, or remove identifying details first', points: 100 },
           { value: 'C', label: 'Never use AI anywhere near client data', points: 40 },
           { value: 'D', label: 'No policy exists either way', points: 20 }
@@ -182,10 +178,10 @@ const SECTIONS = [
     scaleType: 'confidence-1-5',
     rows: [
       { id: 'ready_leadership', label: 'Does leadership actively encourage responsible AI experimentation?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
-      { id: 'ready_process', label: 'Are recruitment workflows documented well enough to identify where AI could help?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
-      { id: 'ready_skills', label: 'Do recruiters know how to use AI effectively?', dimensions: [{ key: 'aiFluency', weight: 1 }] },
-      { id: 'ready_governance', label: 'Does the agency have guidelines for responsible AI use?', dimensions: [{ key: 'responsibleAI', weight: 1, subscore: 'governance' }] },
-      { id: 'ready_measurement', label: 'Does the agency measure whether AI actually saves time or improves outcomes?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
+      { id: 'ready_process', label: 'Are your workflows documented well enough to identify where AI could help?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
+      { id: 'ready_skills', label: 'Does your team know how to use AI effectively?', dimensions: [{ key: 'aiFluency', weight: 1 }] },
+      { id: 'ready_governance', label: 'Does the organisation have guidelines for responsible AI use?', dimensions: [{ key: 'responsibleAI', weight: 1, subscore: 'governance' }] },
+      { id: 'ready_measurement', label: 'Does the organisation measure whether AI actually saves time or improves outcomes?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
       { id: 'ready_adoption', label: 'Is AI use consistent across the team, or dependent on a few individuals?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] }
     ]
   }
@@ -195,7 +191,7 @@ const LEAD_FIELDS = [
   { id: 'first_name', label: 'First name', type: 'text', required: true },
   { id: 'last_name', label: 'Last name', type: 'text', required: true },
   { id: 'work_email', label: 'Work email', type: 'email', required: true },
-  { id: 'agency_name', label: 'Agency name', type: 'text', required: true },
+  { id: 'agency_name', label: 'Company / firm name', type: 'text', required: true },
   { id: 'job_title', label: 'Job title', type: 'text', required: true },
   {
     id: 'employee_count_band',

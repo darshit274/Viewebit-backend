@@ -38,8 +38,8 @@ function buildAssessmentResultEmail({ firstName, result }) {
       <ul style="padding-left: 20px;">${gapsHtml}</ul>
 
       <p style="margin-top: 24px;">Want to turn this diagnosis into an action plan? Viewebit can help recruitment
-      agencies move from AI experimentation to practical workforce capability — starting with the skills your
-      team actually needs.</p>
+      agencies, insurance agencies, and law firms move from AI experimentation to practical workforce capability —
+      starting with the skills your team actually needs.</p>
 
       <p style="text-align: center; margin: 24px 0;">
         <a href="https://edu.viewebit.com/contact" style="background: #4f46e5; color: #ffffff; padding: 12px 24px;
