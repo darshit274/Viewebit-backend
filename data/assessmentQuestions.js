@@ -177,11 +177,8 @@ const SECTIONS = [
     matrix: true,
     scaleType: 'confidence-1-5',
     rows: [
-      { id: 'ready_leadership', label: 'Does leadership actively encourage responsible AI experimentation?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
-      { id: 'ready_process', label: 'Are your workflows documented well enough to identify where AI could help?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
       { id: 'ready_skills', label: 'Does your team know how to use AI effectively?', dimensions: [{ key: 'aiFluency', weight: 1 }] },
       { id: 'ready_governance', label: 'Does the organisation have guidelines for responsible AI use?', dimensions: [{ key: 'responsibleAI', weight: 1, subscore: 'governance' }] },
-      { id: 'ready_measurement', label: 'Does the organisation measure whether AI actually saves time or improves outcomes?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] },
       { id: 'ready_adoption', label: 'Is AI use consistent across the team, or dependent on a few individuals?', dimensions: [{ key: 'organisationalReadiness', weight: 1 }] }
     ]
   }
